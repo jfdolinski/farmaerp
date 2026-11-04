@@ -1,6 +1,8 @@
 # Publicação no EasyPanel
 
-Guia para publicar a homologação e, depois do login, a produção. Os nomes dos botões do EasyPanel podem mudar entre versões. Nos exemplos, troque `exemplo.com.br` pelo domínio de vocês.
+Guia para publicar a homologação e, depois do login, a produção. Os nomes dos botões do EasyPanel podem mudar entre versões. Este guia foi conferido na publicação real da homologação, no EasyPanel 2.37.
+
+**Homologação atual:** API em `https://farmaerp-hom-api.b6nhiy.easypanel.host` e retaguarda em `https://farmaerp-hom-web.b6nhiy.easypanel.host`.
 
 ## Os ambientes
 
@@ -16,20 +18,19 @@ Guia para publicar a homologação e, depois do login, a produção. Os nomes do
 
 ## Publicar a homologação
 
-### 1. Subdomínios
+### 1. Antes de começar
 
-No site onde o domínio foi registrado, crie dois registros do tipo **A** apontando para o IP da VPS:
-
-| Nome | Uso |
-|---|---|
-| `hom` | Retaguarda |
-| `hom-api` | API |
+- **Limite de projetos:** a licença gratuita permite 3 projetos por servidor.
+- **Painel em HTTPS:** acesse o painel pelo endereço com HTTPS mostrado em **Configurações > Geral**, nunca pelo IP. Veja [Segurança do painel](#segurança-do-painel).
+- **Token do GitHub:** o repositório é privado. Crie um [token granular](https://github.com/settings/personal-access-tokens/new) só para o repositório `farmaerp`, com **Contents** em **Read-only** e expiração de 90 dias. Cole em **Configurações > Github**.
+- **Endereços:** cada serviço recebe um endereço gratuito com HTTPS no formato `<projeto>-<serviço>.<servidor>.easypanel.host`. Para usar um domínio próprio, crie um registro **A** apontando para o IP da VPS e adicione o domínio ao serviço.
 
 ### 2. Projeto e banco
 
 1. Crie um projeto chamado `farmaerp-hom`.
-2. Crie um serviço **PostgreSQL** chamado `postgres`, com a imagem `postgres:18.6`, banco `farmaerp` e usuário `postgres`.
-3. **Não** exponha a porta do banco. Anote o endereço interno e a senha mostrados nas credenciais do serviço.
+2. Crie um serviço **Postgres** chamado `postgres`, com banco `farmaerp`, usuário `postgres` e imagem `postgres:18.6`.
+3. Deixe a senha em branco, para o painel gerar uma aleatória. Ela fica em **Credenciais**.
+4. **Não** exponha a porta do banco. O endereço interno é `farmaerp-hom_postgres`.
 
 ### 3. Segredos
 
@@ -45,17 +46,16 @@ Guarde os valores só no EasyPanel. Nunca os coloque no repositório nem os reut
 
 Crie um serviço **App** chamado `api`:
 
-- **Origem:** GitHub, repositório `jfdolinski/farmaerp`, branch `main`, com o deploy automático do EasyPanel **desligado**.
-- **Pasta de build:** `/`
-- **Dockerfile:** `apps/api/Dockerfile`
-- **Domínio:** `hom-api.exemplo.com.br`, com HTTPS e porta `3001`.
+- **Origem:** GitHub, repositório `jfdolinski/farmaerp`, branch `main`, **Caminho de Build** `/`.
+- **Build:** **Dockerfile**, com o arquivo `apps/api/Dockerfile`.
+- **Domínio:** o endereço gratuito já vem criado, mas aponta para a porta `80`. Edite e troque a porta para `3001`.
 
 Variáveis:
 
 | Nome | Valor |
 |---|---|
 | `APP_ENV` | `homologation` |
-| `DB_HOST` | Endereço interno do banco (passo 2) |
+| `DB_HOST` | `farmaerp-hom_postgres` |
 | `DB_PORT` | `5432` |
 | `DB_NAME` | `farmaerp` |
 | `TRUST_PROXY` | `true` |
@@ -65,46 +65,48 @@ Variáveis:
 | `ADMIN_INTERNAL_SECRET` | Segredo gerado |
 | `POSTGRES_ADMIN_PASSWORD` | Senha do banco (passo 2). **Só no primeiro deploy** |
 
-Publique o serviço e confira os logs. O primeiro deploy deve mostrar `Papéis do banco conferidos` e `Migrations aplicadas`.
+Clique em **Implantar** e confira `/health` no endereço da API.
 
-Depois disso, **apague `POSTGRES_ADMIN_PASSWORD`** e publique de novo. Os logs devem mostrar `Nenhuma migration pendente`.
+Depois disso, **apague a linha `POSTGRES_ADMIN_PASSWORD`**, salve e clique em **Implantar** de novo. A API deve subir normalmente sem ela.
 
 ### 5. Serviço da retaguarda
 
 Crie um serviço **App** chamado `web`, com a mesma origem:
 
-- **Pasta de build:** `/`
-- **Dockerfile:** `apps/web/Dockerfile`
-- **Domínio:** `hom.exemplo.com.br`, com HTTPS e porta `3000`.
-- **Aba Security:** crie um usuário e uma senha de acesso. Sem isso, qualquer pessoa com o endereço entra como administrador.
+- **Caminho de Build:** `/`
+- **Build:** **Dockerfile**, com o arquivo `apps/web/Dockerfile`.
+- **Domínio:** edite o endereço gratuito e troque a porta `80` por `3000`.
+- **Aba Segurança:** crie um usuário e uma senha de acesso **antes de publicar**. Sem isso, qualquer pessoa com o endereço entra como administrador.
 
 Variáveis:
 
 | Nome | Valor |
 |---|---|
 | `APP_ENV` | `homologation` |
-| `API_URL` | `https://hom-api.exemplo.com.br` |
+| `API_URL` | `http://farmaerp-hom_api:3001` (endereço interno) |
 | `ADMIN_INTERNAL_SECRET` | O mesmo valor usado na API |
 
-### 6. Publicação automática
+Clique em **Implantar**. O build roda na própria VPS, então publique um serviço de cada vez.
 
-Na aba de deployments de cada serviço, copie a URL de deploy. Ela contém um token, então trate-a como senha. Rode cada comando abaixo e cole a URL quando ele pedir:
+### 6. Publicação
 
-```bash
-gh secret set EASYPANEL_DEPLOY_HOM_API --repo jfdolinski/farmaerp
-```
+**Hoje a publicação é manual:** clique em **Implantar** em cada serviço, primeiro na API e depois na retaguarda.
 
-```bash
-gh secret set EASYPANEL_DEPLOY_HOM_WEB --repo jfdolinski/farmaerp
-```
+O CI já sabe publicar depois do `ci-ok`, mas continua desligado enquanto estes segredos não existirem:
+- `EASYPANEL_DEPLOY_HOM_API`
+- `EASYPANEL_DEPLOY_HOM_WEB`
 
-A partir daí, cada merge na `main` publica a homologação, mas só se o CI passar. Sem esses segredos, o job de publicação apenas avisa e não faz nada.
+Antes de ligar, resolva dois pontos:
+- **Endereço da URL:** o painel mostra a URL de deploy com o IP e a porta `3000`, sem criptografia. Confirme se a mesma rota funciona pelo endereço HTTPS do painel.
+- **Método HTTP:** a documentação do EasyPanel não informa qual usar. O CI usa POST, o que ainda não foi testado.
+
+A URL contém um token, então trate-a como senha.
 
 ### 7. Conferência
 
-- [ ] `https://hom-api.exemplo.com.br/health` responde `{"status":"ok","database":"up"}`.
-- [ ] `https://hom-api.exemplo.com.br/admin/terminals` responde com erro `FA002`.
-- [ ] `https://hom.exemplo.com.br` pede usuário e senha.
+- [ ] `https://farmaerp-hom-api.b6nhiy.easypanel.host/health` responde `{"status":"ok","database":"up"}`.
+- [ ] `https://farmaerp-hom-api.b6nhiy.easypanel.host/admin/terminals` responde com erro `FA002`.
+- [ ] `https://farmaerp-hom-web.b6nhiy.easypanel.host` pede usuário e senha.
 - [ ] A retaguarda mostra a faixa de homologação e o terminal `1 · Caixa 1`.
 - [ ] O banco não responde de fora: a porta `5432` da VPS está fechada.
 - [ ] `POSTGRES_ADMIN_PASSWORD` não está mais nas variáveis da API.
@@ -114,10 +116,18 @@ A partir daí, cada merge na `main` publica a homologação, mas só se o CI pas
 Em `apps/pdv`:
 
 ```bash
-flutter run -d windows --dart-define=APP_ENV=homologation --dart-define=API_URL=https://hom-api.exemplo.com.br
+flutter run -d windows --dart-define=APP_ENV=homologation --dart-define=API_URL=https://farmaerp-hom-api.b6nhiy.easypanel.host
 ```
 
 Fora de desenvolvimento, o PDV recusa um endereço que não seja HTTPS.
+
+**Atenção:** a chave do terminal fica em `%APPDATA%\br.com.farmaerp\farmaerp_pdv`, a mesma pasta em qualquer ambiente. Ao alternar entre desenvolvimento e homologação na mesma máquina, o PDV tenta usar o terminal do outro ambiente. Para recomeçar, feche o PDV e apague essa pasta.
+
+## Segurança do painel
+
+- **Use só o endereço com HTTPS.** Ele fica em **Configurações > Geral**, na seção **Domínio do Painel**.
+- **Feche a porta `3000`.** Desmarcar **Servir no endereço IP** não basta: o painel continua abrindo em `http://<ip>:3000`. Bloqueie essa porta no firewall da Hostinger e mantenha abertas a `22`, a `80` e a `443`.
+- **Troque as credenciais usadas pelo IP.** Senha do painel, token do GitHub e senhas coladas passaram sem criptografia enquanto o acesso era por `http://`.
 
 ## Antes de publicar a produção
 
@@ -133,6 +143,7 @@ A produção usa os mesmos passos, em um projeto próprio e com segredos própri
 
 - **Senhas no contêiner:** o `docker-entrypoint.sh` remove a senha de dono antes de iniciar a API, então o processo não a recebe. Quem tem acesso ao painel ou ao console do contêiner ainda consegue vê-la.
 - **Variáveis no build:** o EasyPanel repassa as variáveis como argumentos de build. Os Dockerfiles não as declaram, para que não fiquem gravadas na imagem. Não acrescente `ARG` com segredos.
+- **Capacidade:** a VPS atual tem 1 núcleo e 3,8 GB de memória e é compartilhada com o `etiquetas-saas`. Serve para homologação, mas a produção da rede deve ter uma VPS própria.
 - **Uma instância:** o limite de tentativas fica em memória, então a API deve rodar com uma única réplica por enquanto.
 
 ## Problemas comuns
@@ -145,6 +156,8 @@ A produção usa os mesmos passos, em um projeto próprio e com segredos própri
 | `Falha ao preparar o banco` | Confira `DB_HOST` e os logs do banco. A versão anterior deve ser mantida |
 | Retaguarda mostra `FA002` | `ADMIN_INTERNAL_SECRET` diferente entre `api` e `web` |
 | Retaguarda mostra `FA001` | Confira `API_URL` e se a API está no ar |
+| `Cannot find public repository and your Github token is missing` | Configure o token em **Configurações > Github** |
+| Endereço responde `Bad Gateway` | Confira se o domínio aponta para a porta do serviço (`3001` na API, `3000` na retaguarda) |
 
 Para testar as imagens localmente, sem o EasyPanel:
 
