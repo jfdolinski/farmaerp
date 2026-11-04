@@ -1,0 +1,14 @@
+# O contexto de build é a raiz do repositório: nada de segredos nem de arquivos locais.
+.git
+.github
+.env
+.env.*
+!.env.example
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/*.tsbuildinfo
+apps/pdv
+docs
+*.md

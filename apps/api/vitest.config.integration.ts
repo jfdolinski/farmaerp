@@ -11,6 +11,7 @@ export default defineConfig({
     testTimeout: 20000,
     hookTimeout: 60000,
     env: {
+      APP_ENV: 'development',
       DB_NAME: 'farmaerp_integration',
       TERMINAL_TOKEN_SECRET: 'segredo-de-teste-com-mais-de-32-caracteres',
     },

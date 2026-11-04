@@ -1,0 +1,50 @@
+# Simula um ambiente publicado para testar as imagens: npm run test:images.
+# O Postgres sobe limpo, como no EasyPanel, sem os scripts locais de inicialização.
+name: farmaerp-images
+
+services:
+  postgres:
+    image: postgres:18.6
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin_de_teste
+      POSTGRES_DB: farmaerp
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d farmaerp"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_ENV: ${SMOKE_APP_ENV:-homologation}
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: farmaerp
+      POSTGRES_ADMIN_PASSWORD: ${SMOKE_ADMIN_PASSWORD-admin_de_teste}
+      FARMAERP_MIGRATOR_PASSWORD: migrator_de_teste
+      FARMAERP_APP_PASSWORD: app_de_teste
+      TERMINAL_TOKEN_SECRET: token_de_teste_com_mais_de_32_caracteres
+      ADMIN_INTERNAL_SECRET: interno_de_teste_com_mais_de_32_caracteres
+      TRUST_PROXY: "true"
+    ports:
+      - "127.0.0.1:3101:3001"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    depends_on:
+      - api
+    environment:
+      APP_ENV: homologation
+      API_URL: http://api:3001
+      ADMIN_INTERNAL_SECRET: interno_de_teste_com_mais_de_32_caracteres
+    ports:
+      - "127.0.0.1:3100:3000"

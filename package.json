@@ -19,6 +19,7 @@
     "test:db": "npm test -w db",
     "test:api": "npm test -w apps/api && npm run test:e2e -w apps/api",
     "test:outage": "npm run test:outage -w apps/api",
+    "test:images": "node scripts/smoke-images.mjs",
     "test:integration": "npm run test:integration -w apps/api",
     "test:catalog": "npm test -w packages/error-catalog",
     "catalog:generate": "npm run generate -w packages/error-catalog",

@@ -84,6 +84,14 @@
     "retryable": true,
     "dbConstraints": []
   },
+  "FA010": {
+    "message": "Este aplicativo foi instalado com uma configuração inválida.",
+    "action": "Instale a versão correta do aplicativo ou fale com o suporte.",
+    "httpStatus": 500,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": []
+  },
   "FA101": {
     "message": "Este registro não pode ter o identificador alterado.",
     "action": "Cancele a alteração e informe o suporte.",
