@@ -1,19 +1,17 @@
 import { appEnvironment, assertEnvironment } from './environment.js';
 
-const SECRET_A = 'a'.repeat(32);
-const SECRET_B = 'b'.repeat(32);
+const SECRET = 'a'.repeat(32);
 
 const development = {
   APP_ENV: 'development',
   FARMAERP_APP_PASSWORD: 'senha',
-  TERMINAL_TOKEN_SECRET: SECRET_A,
+  TERMINAL_TOKEN_SECRET: SECRET,
 };
-const homologation = {
+const published = {
   ...development,
-  APP_ENV: 'homologation',
+  APP_ENV: 'production',
   DB_HOST: 'banco',
   DB_NAME: 'farmaerp',
-  ADMIN_INTERNAL_SECRET: SECRET_B,
 };
 
 describe('appEnvironment', () => {
@@ -27,23 +25,21 @@ describe('appEnvironment', () => {
 });
 
 describe('assertEnvironment', () => {
-  it('aceita desenvolvimento e homologação completos', () => {
+  it('aceita desenvolvimento completo', () => {
     expect(() => assertEnvironment(development)).not.toThrow();
-    expect(() => assertEnvironment(homologation)).not.toThrow();
   });
 
-  it('a produção não inicia, mesmo com tudo preenchido', () => {
+  it.each(['homologation', 'production'])('aceita %s completo', (environment) => {
     expect(() =>
-      assertEnvironment({ ...homologation, APP_ENV: 'production' }),
-    ).toThrow(/exige o login/);
+      assertEnvironment({ ...published, APP_ENV: environment }),
+    ).not.toThrow();
   });
 
   it.each([
-    ['FARMAERP_APP_PASSWORD', homologation],
-    ['DB_HOST', homologation],
-    ['DB_NAME', homologation],
-    ['TERMINAL_TOKEN_SECRET', homologation],
-    ['ADMIN_INTERNAL_SECRET', homologation],
+    ['FARMAERP_APP_PASSWORD', published],
+    ['DB_HOST', published],
+    ['DB_NAME', published],
+    ['TERMINAL_TOKEN_SECRET', published],
     ['FARMAERP_APP_PASSWORD', development],
     ['TERMINAL_TOKEN_SECRET', development],
   ])('informa a falta de %s', (name, base) => {
@@ -56,25 +52,14 @@ describe('assertEnvironment', () => {
     expect(() => assertEnvironment(development)).not.toThrow();
   });
 
-  it('recusa segredo curto', () => {
-    expect(() =>
-      assertEnvironment({ ...homologation, ADMIN_INTERNAL_SECRET: 'curto' }),
-    ).toThrow(/ADMIN_INTERNAL_SECRET precisa ter/);
-  });
-
-  it('recusa o mesmo valor nos dois segredos', () => {
-    expect(() =>
-      assertEnvironment({ ...homologation, ADMIN_INTERNAL_SECRET: SECRET_A }),
-    ).toThrow(/precisa ser diferente/);
-  });
-
-  it('a mensagem não revela o valor dos segredos', () => {
+  it('recusa segredo curto, sem revelar o valor', () => {
     let message = '';
     try {
-      assertEnvironment({ ...homologation, ADMIN_INTERNAL_SECRET: 'vazou' });
+      assertEnvironment({ ...published, TERMINAL_TOKEN_SECRET: 'vazou' });
     } catch (error) {
       message = (error as Error).message;
     }
+    expect(message).toMatch(/TERMINAL_TOKEN_SECRET precisa ter/);
     expect(message).not.toContain('vazou');
   });
 });

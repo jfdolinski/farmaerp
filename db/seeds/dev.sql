@@ -30,10 +30,14 @@ INSERT INTO terminal (id, branch_id, name, profile, status, public_key) VALUES
    'Caixa 1', 'cashier', 'active', 'chave-publica-de-desenvolvimento')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO user_account (id, economic_group_id, name, is_group_admin) VALUES
-  ('019a0000-0000-7000-8000-000000000008', '019a0000-0000-7000-8000-000000000001', 'Administrador', true),
-  ('019a0000-0000-7000-8000-000000000009', '019a0000-0000-7000-8000-000000000001', 'Operador Centro', false)
-ON CONFLICT (id) DO NOTHING;
+-- Confere antes de incluir: com ON CONFLICT, o trigger consumiria um código a cada execução.
+INSERT INTO user_account (id, economic_group_id, name, is_group_admin, email)
+SELECT seed.id, seed.economic_group_id, seed.name, seed.is_group_admin, seed.email
+  FROM (VALUES
+    ('019a0000-0000-7000-8000-000000000008'::uuid, '019a0000-0000-7000-8000-000000000001'::uuid, 'Administrador', true, 'admin@farmaerp.test'),
+    ('019a0000-0000-7000-8000-000000000009'::uuid, '019a0000-0000-7000-8000-000000000001'::uuid, 'Operador Centro', false, 'operador@farmaerp.test')
+  ) AS seed (id, economic_group_id, name, is_group_admin, email)
+ WHERE NOT EXISTS (SELECT 1 FROM user_account u WHERE u.id = seed.id);
 
 INSERT INTO user_branch (id, user_id, branch_id) VALUES
   ('019a0000-0000-7000-8000-00000000000a', '019a0000-0000-7000-8000-000000000009',

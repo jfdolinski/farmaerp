@@ -3,14 +3,15 @@ const MAX_DEPTH = 8;
 
 // Dados que nunca podem ir para o log (LGPD e segurança).
 const SENSITIVE_KEY =
-  /^(cpf|cnh|rg|senha|password|passwd|pass|pin|token|access_?token|refresh_?token|secret|authorization|cookie|set-cookie|api_?key|private_?key|cert|certificate|certificado|csc|biometric|biometria|face|face_?code|fingerprint|digital|card|cartao|cvv|body)$/i;
+  /^(cpf|cnh|rg|senha|password|passwd|pass|pin|token|access_?token|refresh_?token|secret|authorization|cookie|set-cookie|api_?key|private_?key|cert|certificate|certificado|csc|biometric|biometria|face|face_?code|fingerprint|digital|card|cartao|cvv|body|email|e_?mail|temporary_?password|current_?password|new_?password|password_?hash)$/i;
 
 const CPF_IN_TEXT = /\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g;
+const EMAIL_IN_TEXT = /[^\s@"'<>]+@[^\s@"'<>]+\.[^\s@"'<>]+/g;
 
 /** Copia um valor mascarando campos sensíveis e CPFs dentro de textos. */
 export function sanitize(value: unknown, depth = 0): unknown {
   if (typeof value === 'string') {
-    return value.replace(CPF_IN_TEXT, MASK);
+    return value.replace(CPF_IN_TEXT, MASK).replace(EMAIL_IN_TEXT, MASK);
   }
   if (value === null || typeof value !== 'object') {
     return value;

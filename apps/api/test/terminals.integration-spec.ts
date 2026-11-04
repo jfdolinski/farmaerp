@@ -17,7 +17,9 @@ import {
 } from './../src/terminals/terminal-crypto.js';
 
 const ADMIN = '019a0000-0000-7000-8000-000000000008';
-const OPERATOR = '019a0000-0000-7000-8000-000000000009';
+const ADMIN_EMAIL = 'admin@farmaerp.test';
+const OPERATOR_EMAIL = 'operador@farmaerp.test';
+const DEV_PASSWORD = 'farmaerp-dev-123';
 const BRANCH = '019a0000-0000-7000-8000-000000000005';
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -32,18 +34,19 @@ type Device = ReturnType<typeof newDevice>;
 
 describe('terminais contra o banco real', () => {
   let app: INestApplication<App>;
-  let logs: string[];
+  let logs: string[] = [];
   let ip: string;
   let nameCounter = 0;
+  const sessions = new Map<string, string>();
 
   // Cada teste usa outro IP, para o limite de tentativas não misturar os testes.
   const post = (path: string) =>
     request(app.getHttpServer()).post(path).set('X-Forwarded-For', ip);
-  const admin = (method: 'get' | 'post', path: string, user = ADMIN) =>
+  const admin = (method: 'get' | 'post', path: string, email = ADMIN_EMAIL) =>
     request(app.getHttpServer())
       [method](`/admin${path}`)
       .set('X-Forwarded-For', ip)
-      .set('X-Dev-User-Id', user);
+      .set('Authorization', `Bearer ${sessions.get(email)}`);
 
   const pairingBody = (device: Device) => ({
     publicKey: device.publicKey,
@@ -114,6 +117,15 @@ describe('terminais contra o banco real', () => {
     app = moduleFixture.createNestApplication();
     app.getHttpAdapter().getInstance().set('trust proxy', 1);
     await app.init();
+
+    for (const email of [ADMIN_EMAIL, OPERATOR_EMAIL]) {
+      const response = await request(app.getHttpServer())
+        .post('/auth/login')
+        .set('X-Forwarded-For', '10.255.255.254')
+        .send({ email, password: DEV_PASSWORD })
+        .expect(200);
+      sessions.set(email, (response.body as Json).token as string);
+    }
   });
 
   beforeEach(() => {
@@ -395,21 +407,21 @@ describe('terminais contra o banco real', () => {
   });
 
   describe('administração', () => {
-    it('sem identidade é recusado', async () => {
+    it('sem sessão é recusado', async () => {
       const response = await request(app.getHttpServer())
         .get('/admin/terminals')
         .set('X-Forwarded-For', ip)
-        .expect(403);
-      expectCode(response, 'FA002');
+        .expect(401);
+      expectCode(response, 'FA402');
     });
 
     it('o banco barra o usuário sem permissão', async () => {
       const { code } = await pair(newDevice());
-      expectCode(await admin('get', `/pairing/${code}`, OPERATOR).expect(403), 'FA002');
+      expectCode(await admin('get', `/pairing/${code}`, OPERATOR_EMAIL).expect(403), 'FA002');
     });
 
     it('o operador só vê os terminais da própria filial', async () => {
-      const response = await admin('get', '/terminals', OPERATOR).expect(200);
+      const response = await admin('get', '/terminals', OPERATOR_EMAIL).expect(200);
       const branches = new Set((response.body as Json[]).map((t) => t.branch_id));
       expect([...branches]).toEqual([BRANCH]);
     });

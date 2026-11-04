@@ -1,12 +1,14 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { AuthController } from './auth/auth.controller.js';
+import { SessionGuard } from './auth/session.guard.js';
+import { UsersController } from './auth/users.controller.js';
 import { DatabaseService } from './database.service.js';
 import { HealthController } from './health.controller.js';
 import { AllExceptionsFilter } from './observability/all-exceptions.filter.js';
 import { AppLogger, createPinoLogger } from './observability/app-logger.js';
 import { TraceMiddleware } from './observability/trace.middleware.js';
-import { DevUserGuard } from './terminals/dev-user.guard.js';
 import { TerminalAdminController } from './terminals/terminal-admin.controller.js';
 import { TerminalDeviceController } from './terminals/terminal-device.controller.js';
 import { TerminalGuard } from './terminals/terminal.guard.js';
@@ -18,12 +20,14 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
   ],
   controllers: [
     HealthController,
+    AuthController,
+    UsersController,
     TerminalDeviceController,
     TerminalAdminController,
   ],
   providers: [
     DatabaseService,
-    DevUserGuard,
+    SessionGuard,
     TerminalGuard,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     {

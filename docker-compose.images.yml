@@ -31,7 +31,9 @@ services:
       FARMAERP_MIGRATOR_PASSWORD: migrator_de_teste
       FARMAERP_APP_PASSWORD: app_de_teste
       TERMINAL_TOKEN_SECRET: token_de_teste_com_mais_de_32_caracteres
-      ADMIN_INTERNAL_SECRET: interno_de_teste_com_mais_de_32_caracteres
+      BOOTSTRAP_ADMIN_EMAIL: ${SMOKE_BOOTSTRAP_EMAIL-dono@exemplo.com.br}
+      BOOTSTRAP_ADMIN_PASSWORD: senha-inicial-de-teste
+      BOOTSTRAP_GROUP_NAME: Rede de Teste
       TRUST_PROXY: "true"
     ports:
       - "127.0.0.1:3101:3001"
@@ -45,6 +47,5 @@ services:
     environment:
       APP_ENV: homologation
       API_URL: http://api:3001
-      ADMIN_INTERNAL_SECRET: interno_de_teste_com_mais_de_32_caracteres
     ports:
       - "127.0.0.1:3100:3000"

@@ -1,6 +1,8 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { bootstrapRoles, runMigrations, runSeed, waitForDatabase, withClient } from '../scripts/lib.mjs';
+import {
+  bootstrapAdmin, bootstrapRoles, runMigrations, runSeed, waitForDatabase, withClient,
+} from '../scripts/lib.mjs';
 import { connectionConfig } from './helpers.mjs';
 
 const DATABASE = 'farmaerp_bootstrap_test';
@@ -94,6 +96,15 @@ describe('seed por ambiente', () => {
     );
     expect(rows[0].total).toBe(1);
   });
+
+  it('rodar de novo não consome códigos de usuário', async () => {
+    const counter = () =>
+      withClient(migrator(), async (client) =>
+        (await client.query(`SELECT last_value FROM code_counter WHERE entity = 'user'`)).rows[0].last_value);
+    const before = await counter();
+    await runSeed(migrator(), 'homologation');
+    expect(await counter()).toBe(before);
+  });
 });
 
 describe('espera pelo banco', () => {
@@ -114,5 +125,65 @@ describe('espera pelo banco', () => {
       waitForDatabase({ ...migrator(), password: 'errada' }, { timeoutMs: 30_000 }),
     ).rejects.toBeInstanceOf(pg.DatabaseError);
     expect(Date.now() - started).toBeLessThan(5_000);
+  });
+});
+
+describe('primeiro administrador', () => {
+  const DB2 = 'farmaerp_first_admin_test';
+  const owner = () => connectionConfig('farmaerp_migrator', process.env.FARMAERP_MIGRATOR_PASSWORD, DB2);
+  const values = { email: 'Dono@Exemplo.com.br', password: 'senha-inicial-de-teste', groupName: 'Rede Teste' };
+
+  beforeAll(async () => {
+    await withClient(admin('postgres'), async (client) => {
+      await client.query(`DROP DATABASE IF EXISTS ${DB2} WITH (FORCE)`);
+      await client.query(`CREATE DATABASE ${DB2}`);
+    });
+    await bootstrapRoles(admin(DB2), passwords());
+    await runMigrations(owner());
+  });
+  afterAll(() =>
+    withClient(admin('postgres'), (client) => client.query(`DROP DATABASE IF EXISTS ${DB2} WITH (FORCE)`)),
+  );
+
+  const state = () =>
+    withClient(owner(), async (client) => ({
+      groups: (await client.query('SELECT name FROM economic_group')).rows,
+      users: (await client.query(
+        `SELECT u.email, u.is_group_admin, c.must_change_password, c.password_hash
+           FROM user_account u JOIN user_credential c ON c.user_id = u.id`,
+      )).rows,
+    }));
+
+  it('exige o nome do grupo quando ainda não existe nenhum', async () => {
+    await expect(bootstrapAdmin(owner(), { ...values, groupName: undefined })).rejects.toThrow(/BOOTSTRAP_GROUP_NAME/);
+  });
+
+  it('recusa senha curta', async () => {
+    await expect(bootstrapAdmin(owner(), { ...values, password: 'curta' })).rejects.toThrow(/10 caracteres/);
+  });
+
+  it('cria o grupo e o admin, com troca obrigatória de senha', async () => {
+    expect(await bootstrapAdmin(owner(), values)).toBe('created');
+    const { groups, users } = await state();
+    expect(groups).toEqual([{ name: 'Rede Teste' }]);
+    expect(users).toHaveLength(1);
+    expect(users[0]).toMatchObject({
+      email: 'dono@exemplo.com.br', is_group_admin: true, must_change_password: true,
+    });
+    expect(users[0].password_hash).toMatch(/^\$argon2id\$/);
+    expect(users[0].password_hash).not.toContain(values.password);
+  });
+
+  it('rodar de novo não muda nada, nem a senha', async () => {
+    const before = await state();
+    expect(await bootstrapAdmin(owner(), { ...values, password: 'outra-senha-de-teste' })).toBe('skipped');
+    expect(await state()).toEqual(before);
+  });
+
+  it('com o grupo já criado, acrescenta o admin nele', async () => {
+    expect(await bootstrapAdmin(owner(), { email: 'outro@exemplo.com.br', password: 'senha-inicial-de-teste' })).toBe('created');
+    const { groups, users } = await state();
+    expect(groups).toHaveLength(1);
+    expect(users).toHaveLength(2);
   });
 });

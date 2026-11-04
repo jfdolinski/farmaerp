@@ -5,9 +5,9 @@ import { asOwner, closePools, connectionConfig, ownerPool } from './helpers.mjs'
 afterAll(closePools);
 
 const EXPECTED_TABLES = [
-  'branch', 'branch_group', 'code_counter', 'company', 'economic_group',
+  'auth_event', 'branch', 'branch_group', 'code_counter', 'company', 'economic_group',
   'region', 'terminal', 'terminal_event', 'terminal_pairing_request',
-  'terminal_status', 'user_account', 'user_branch',
+  'terminal_status', 'user_account', 'user_branch', 'user_credential', 'user_session',
 ];
 
 async function publicTables() {
@@ -38,6 +38,7 @@ describe('migrations', () => {
       '0005_error_codes_and_trace',
       '0006_terminal_pairing',
       '0007_human_codes',
+      '0008_authentication',
     ]);
   });
 });

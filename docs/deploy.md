@@ -11,10 +11,10 @@ Guia para publicar a homologação e, depois do login, a produção. Os nomes do
 | `APP_ENV` | `development` | `homologation` | `production` |
 | Onde | Docker Compose local | Projeto próprio no EasyPanel | Projeto próprio no EasyPanel |
 | Dados | Seed | Seed, nunca dados reais | Reais |
-| Identidade | Seletor de usuário | Seletor protegido | Só com login |
+| Primeiro acesso | Seed, com senha de exemplo | Variáveis `BOOTSTRAP_` | Variáveis `BOOTSTRAP_` |
 | Publicação | Manual | Automática após o CI na `main` | Manual |
 
-**Hoje a API não inicia com `APP_ENV=production`.** A retaguarda ainda não tem login, então esse bloqueio impede que a identidade provisória seja publicada por engano.
+**A produção ainda não deve ser publicada.** Veja [Antes de publicar a produção](#antes-de-publicar-a-produção).
 
 ## Publicar a homologação
 
@@ -62,12 +62,16 @@ Variáveis:
 | `FARMAERP_MIGRATOR_PASSWORD` | Segredo gerado |
 | `FARMAERP_APP_PASSWORD` | Segredo gerado |
 | `TERMINAL_TOKEN_SECRET` | Segredo gerado |
-| `ADMIN_INTERNAL_SECRET` | Segredo gerado |
 | `POSTGRES_ADMIN_PASSWORD` | Senha do banco (passo 2). **Só no primeiro deploy** |
+| `BOOTSTRAP_ADMIN_EMAIL` | E-mail do primeiro administrador. **Só no primeiro deploy** |
+| `BOOTSTRAP_ADMIN_PASSWORD` | Senha inicial, com ao menos 10 caracteres. **Só no primeiro deploy** |
+| `BOOTSTRAP_GROUP_NAME` | Nome do grupo econômico, se ainda não existir nenhum. **Só no primeiro deploy** |
 
 Clique em **Implantar** e confira `/health` no endereço da API.
 
-Depois disso, **apague a linha `POSTGRES_ADMIN_PASSWORD`**, salve e clique em **Implantar** de novo. A API deve subir normalmente sem ela.
+Entre na retaguarda com o e-mail e a senha inicial, e defina a senha definitiva.
+
+Depois disso, **apague `POSTGRES_ADMIN_PASSWORD` e as variáveis `BOOTSTRAP_`**, salve e clique em **Implantar** de novo. A API deve subir normalmente sem elas.
 
 ### 5. Serviço da retaguarda
 
@@ -76,7 +80,7 @@ Crie um serviço **App** chamado `web`, com a mesma origem:
 - **Caminho de Build:** `/`
 - **Build:** **Dockerfile**, com o arquivo `apps/web/Dockerfile`.
 - **Domínio:** edite o endereço gratuito e troque a porta `80` por `3000`.
-- **Aba Segurança:** crie um usuário e uma senha de acesso **antes de publicar**. Sem isso, qualquer pessoa com o endereço entra como administrador.
+- **Aba Segurança (só na homologação):** crie um usuário e uma senha de acesso **antes de publicar**. Essa camada a mais mantém a homologação fora do alcance de visitantes. A produção usa só o login do sistema.
 
 Variáveis:
 
@@ -84,7 +88,6 @@ Variáveis:
 |---|---|
 | `APP_ENV` | `homologation` |
 | `API_URL` | `http://farmaerp-hom_api:3001` (endereço interno) |
-| `ADMIN_INTERNAL_SECRET` | O mesmo valor usado na API |
 
 Clique em **Implantar**. O build roda na própria VPS, então publique um serviço de cada vez.
 
@@ -105,11 +108,12 @@ A URL contém um token, então trate-a como senha.
 ### 7. Conferência
 
 - [ ] `https://farmaerp-hom-api.b6nhiy.easypanel.host/health` responde `{"status":"ok","database":"up"}`.
-- [ ] `https://farmaerp-hom-api.b6nhiy.easypanel.host/admin/terminals` responde com erro `FA002`.
+- [ ] `https://farmaerp-hom-api.b6nhiy.easypanel.host/admin/terminals` responde com erro `FA402`.
 - [ ] `https://farmaerp-hom-web.b6nhiy.easypanel.host` pede usuário e senha.
-- [ ] A retaguarda mostra a faixa de homologação e o terminal `1 · Caixa 1`.
+- [ ] Depois da senha de acesso, a retaguarda pede o login e mostra a faixa de homologação.
+- [ ] Depois do login, aparece o terminal `1 · Caixa 1`.
 - [ ] O banco não responde de fora: a porta `5432` da VPS está fechada.
-- [ ] `POSTGRES_ADMIN_PASSWORD` não está mais nas variáveis da API.
+- [ ] `POSTGRES_ADMIN_PASSWORD` e as variáveis `BOOTSTRAP_` não estão mais na API.
 
 ### 8. PDV apontando para a homologação
 
@@ -129,21 +133,35 @@ Fora de desenvolvimento, o PDV recusa um endereço que não seja HTTPS.
 - **Feche a porta `3000`.** Desmarcar **Servir no endereço IP** não basta: o painel continua abrindo em `http://<ip>:3000`. Bloqueie essa porta no firewall da Hostinger e mantenha abertas a `22`, a `80` e a `443`.
 - **Troque as credenciais usadas pelo IP.** Senha do painel, token do GitHub e senhas coladas passaram sem criptografia enquanto o acesso era por `http://`.
 
+## Atualizar uma homologação publicada antes do login
+
+1. Em **api > Ambiente**, apague `ADMIN_INTERNAL_SECRET` e acrescente `BOOTSTRAP_ADMIN_EMAIL` e `BOOTSTRAP_ADMIN_PASSWORD`.
+2. Em **web > Ambiente**, apague `ADMIN_INTERNAL_SECRET`.
+3. Clique em **Implantar** na API e, depois, na retaguarda.
+4. Entre na retaguarda com o novo e-mail e defina a senha definitiva.
+5. Apague as variáveis `BOOTSTRAP_` da API e clique em **Implantar** de novo.
+
+Os terminais já aprovados continuam funcionando.
+
 ## Antes de publicar a produção
 
 A produção usa os mesmos passos, em um projeto próprio e com segredos próprios, mas depende destes itens:
 
-- [ ] Login implementado, substituindo `DevUserGuard` e o seletor de usuário.
+- [ ] Perfis e permissões granulares implementados, no lugar do `is_group_admin`.
+- [ ] VPS própria, sem dividir recursos com outros sistemas.
 - [ ] Decisão sobre como publicar: manualmente pelo painel, sem o job automático.
 - [ ] [Backup diário do banco](https://easypanel.io/docs/backups/database), com destino fora da VPS.
 - [ ] Restauração testada: recupere um backup em um banco separado e confira os dados. Backup sem restauração testada não é garantia.
-- [ ] Sem `ADMIN_INTERNAL_SECRET` nem seed: o seed se recusa a rodar em produção.
+- [ ] Prazo de retenção do IP nos logins (90 dias hoje) confirmado com o jurídico ou a contabilidade.
+
+O seed se recusa a rodar em produção, e a senha de exemplo existe só em desenvolvimento.
 
 ## Variáveis e segurança
 
 - **Senhas no contêiner:** o `docker-entrypoint.sh` remove a senha de dono antes de iniciar a API, então o processo não a recebe. Quem tem acesso ao painel ou ao console do contêiner ainda consegue vê-la.
 - **Variáveis no build:** o EasyPanel repassa as variáveis como argumentos de build. Os Dockerfiles não as declaram, para que não fiquem gravadas na imagem. Não acrescente `ARG` com segredos.
 - **Capacidade:** a VPS atual tem 1 núcleo e 3,8 GB de memória e é compartilhada com o `etiquetas-saas`. Serve para homologação, mas a produção da rede deve ter uma VPS própria.
+- **Credenciais iniciais:** `BOOTSTRAP_ADMIN_PASSWORD` só serve para o primeiro acesso, porque a troca é obrigatória. Se o e-mail já tiver acesso, a variável é ignorada e nunca sobrescreve a senha.
 - **Uma instância:** o limite de tentativas fica em memória, então a API deve rodar com uma única réplica por enquanto.
 
 ## Problemas comuns
@@ -154,7 +172,7 @@ A produção usa os mesmos passos, em um projeto próprio e com segredos própri
 | `Configuração inválida: ...` | A mensagem lista as variáveis faltando ou curtas |
 | `O banco recusou o acesso` | No primeiro deploy, defina `POSTGRES_ADMIN_PASSWORD`. Depois, confira `FARMAERP_MIGRATOR_PASSWORD` |
 | `Falha ao preparar o banco` | Confira `DB_HOST` e os logs do banco. A versão anterior deve ser mantida |
-| Retaguarda mostra `FA002` | `ADMIN_INTERNAL_SECRET` diferente entre `api` e `web` |
+| Retaguarda volta sempre ao login | Em ambiente publicado, o cookie exige HTTPS: confira se o endereço usa `https://` |
 | Retaguarda mostra `FA001` | Confira `API_URL` e se a API está no ar |
 | `Cannot find public repository and your Github token is missing` | Configure o token em **Configurações > Github** |
 | Endereço responde `Bad Gateway` | Confira se o domínio aponta para a porta do serviço (`3001` na API, `3000` na retaguarda) |

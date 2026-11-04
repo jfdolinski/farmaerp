@@ -36,27 +36,9 @@ export function assertEnvironment(env: Env = process.env): void {
     if (!env[name]) problems.push(`${name} não está definida`);
   }
 
-  const secrets = ['TERMINAL_TOKEN_SECRET'];
-  if (environment === 'homologation') {
-    secrets.push('ADMIN_INTERNAL_SECRET');
-  }
-  for (const name of secrets) {
-    if ((env[name]?.length ?? 0) < MIN_SECRET_LENGTH) {
-      problems.push(`${name} precisa ter ao menos ${MIN_SECRET_LENGTH} caracteres`);
-    }
-  }
-  if (
-    environment === 'homologation' &&
-    env.ADMIN_INTERNAL_SECRET === env.TERMINAL_TOKEN_SECRET
-  ) {
+  if ((env.TERMINAL_TOKEN_SECRET?.length ?? 0) < MIN_SECRET_LENGTH) {
     problems.push(
-      'ADMIN_INTERNAL_SECRET precisa ser diferente de TERMINAL_TOKEN_SECRET',
-    );
-  }
-
-  if (environment === 'production') {
-    problems.push(
-      'a produção exige o login da Etapa 2, que ainda não existe: a identidade de desenvolvimento não pode ser publicada',
+      `TERMINAL_TOKEN_SECRET precisa ter ao menos ${MIN_SECRET_LENGTH} caracteres`,
     );
   }
 
