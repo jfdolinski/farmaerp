@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module.js';
+import { assertEnvironment } from './config/environment.js';
 import { AppLogger } from './observability/app-logger.js';
 
 async function bootstrap() {
@@ -9,6 +10,8 @@ async function bootstrap() {
   } catch {
     // Sem arquivo .env, valem as variáveis do ambiente.
   }
+
+  assertEnvironment();
 
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   app.useLogger(app.get(AppLogger));

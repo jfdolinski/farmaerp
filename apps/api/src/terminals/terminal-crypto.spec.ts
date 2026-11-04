@@ -1,5 +1,4 @@
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { DevUserGuard } from './dev-user.guard.js';
 import {
   assertTokenSecretConfigured,
   challengeMessage,
@@ -124,11 +123,9 @@ describe('desafios e tokens', () => {
 
 describe('configuração', () => {
   const original = process.env.TERMINAL_TOKEN_SECRET;
-  const originalEnv = process.env.NODE_ENV;
 
   afterEach(() => {
     process.env.TERMINAL_TOKEN_SECRET = original;
-    process.env.NODE_ENV = originalEnv;
   });
 
   it.each([undefined, '', 'curto'])(
@@ -140,15 +137,6 @@ describe('configuração', () => {
     },
   );
 
-  it('a identidade de desenvolvimento impede a inicialização em produção', () => {
-    process.env.NODE_ENV = 'production';
-    expect(() => new DevUserGuard()).toThrow(/não pode rodar em produção/);
-  });
-
-  it('a identidade de desenvolvimento funciona fora de produção', () => {
-    process.env.NODE_ENV = 'development';
-    expect(() => new DevUserGuard()).not.toThrow();
-  });
 });
 
 const DART_SIGNATURE = 'ns1zZWcdS4PAAice6923Vixl18j7ZsHMVMMM_ke9q0jpurM8deQSs1XJd-AGLi7752Jks95zW04JeScuqMFJCg';

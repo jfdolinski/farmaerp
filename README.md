@@ -13,6 +13,8 @@ A referência do projeto é o [docs/base.md](docs/base.md).
 | `db` | Migrations, triggers, funções, views, seed e testes do banco |
 | `packages/error-catalog` | Catálogo de erros usado pelo banco, pela API e pelo PDV |
 
+Para publicar, siga o guia em [docs/deploy.md](docs/deploy.md).
+
 ## Primeiros passos (Windows, PowerShell)
 
 Requisitos: Docker Desktop, Node 24 ou superior e Flutter.
@@ -38,6 +40,7 @@ npm run db:seed
 | `npm run test:integration` | Testa a API contra o banco real, em um banco próprio recriado a cada execução |
 | `npm run test:catalog` | Testa o catálogo de erros |
 | `npm run catalog:generate` | Gera o catálogo em Dart para o PDV depois de alterar o JSON |
+| `npm run test:images` | Constrói as imagens Docker e testa um ambiente publicado de ponta a ponta |
 | `npm run test:outage` | Derruba o PostgreSQL local e confere se a API sobrevive (requer o build da API) |
 | `npm run dev:api` | Sobe a API em http://localhost:3001 (`GET /health`) |
 | `npm run dev:web` | Sobe a retaguarda em http://localhost:3000 |
@@ -104,9 +107,9 @@ A API responde sempre no formato `{ code, message, action, retryable, traceId }`
 3. Em `apps/pdv`, rode `flutter run -d windows`. O endereço da API muda com `--dart-define=API_URL=...`.
 4. Digite na retaguarda o código mostrado no PDV, escolha a filial e aprove o terminal.
 
-**Identidade de desenvolvimento**
+**Identidade provisória**
 
-Enquanto o login não existir, a retaguarda usa um seletor com os usuários do seed, e a API confia no cabeçalho `X-Dev-User-Id`. Por segurança, **a API não inicia com `NODE_ENV=production`** até esse modo ser substituído pelo login.
+Enquanto o login não existir, a retaguarda usa um seletor com os usuários do seed, e a API confia no cabeçalho `X-Dev-User-Id`. Na homologação, a API também exige um segredo que só a retaguarda conhece. Por segurança, **a API não inicia com `APP_ENV=production`** até esse modo ser substituído pelo login.
 
 **Autenticação do terminal**
 

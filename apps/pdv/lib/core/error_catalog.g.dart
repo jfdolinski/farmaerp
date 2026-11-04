@@ -76,6 +76,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Aguarde um minuto e tente novamente.',
     retryable: true,
   ),
+  'FA010': ErrorCatalogEntry(
+    code: 'FA010',
+    message: 'Este aplicativo foi instalado com uma configuração inválida.',
+    action: 'Instale a versão correta do aplicativo ou fale com o suporte.',
+    retryable: false,
+  ),
   'FA101': ErrorCatalogEntry(
     code: 'FA101',
     message: 'Este registro não pode ter o identificador alterado.',

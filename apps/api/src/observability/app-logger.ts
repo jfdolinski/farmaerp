@@ -10,7 +10,7 @@ export function createPinoLogger(destination?: DestinationStream): Logger {
       base: {
         service: 'api',
         version: process.env.APP_VERSION ?? 'dev',
-        env: process.env.NODE_ENV ?? 'development',
+        env: process.env.APP_ENV ?? 'desconhecido',
       },
       timestamp: pino.stdTimeFunctions.isoTime,
       formatters: {

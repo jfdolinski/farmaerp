@@ -2,8 +2,6 @@ import { getError } from "@farmaerp/error-catalog";
 import { cookies } from "next/headers";
 import { DEV_USER_COOKIE, DEV_USERS } from "./dev-users";
 
-const API_URL = process.env.API_URL ?? "http://127.0.0.1:3001";
-
 export interface ApiError {
   code: string;
   message: string;
@@ -37,13 +35,16 @@ export async function apiFetch<T>(
 ): Promise<ApiResult<T>> {
   let response: Response;
   try {
-    response = await fetch(`${API_URL}${path}`, {
+    const apiUrl = process.env.API_URL ?? "http://127.0.0.1:3001";
+    const internalToken = process.env.ADMIN_INTERNAL_SECRET;
+    response = await fetch(`${apiUrl}${path}`, {
       method: options.method ?? "GET",
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
       headers: {
         "Content-Type": "application/json",
         "X-Dev-User-Id": await currentDevUserId(),
+        ...(internalToken ? { "X-Internal-Token": internalToken } : {}),
       },
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
     });
