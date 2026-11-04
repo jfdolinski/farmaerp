@@ -1,8 +1,7 @@
 // Recria o banco de integração com migrations e seed. O banco de desenvolvimento não é tocado.
-import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import pg from 'pg';
-import { runMigrations, seedFile } from '../../../db/scripts/lib.mjs';
+import { runMigrations, runSeed } from '../../../db/scripts/lib.mjs';
 
 const DATABASE = 'farmaerp_integration';
 
@@ -48,7 +47,5 @@ export default async function setup() {
   });
 
   await runMigrations(migrator);
-  await withClient(migrator, async (client) => {
-    await client.query(await readFile(seedFile, 'utf8'));
-  });
+  await runSeed(migrator, 'development');
 }

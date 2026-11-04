@@ -9,13 +9,13 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { SessionGuard } from '../auth/session.guard.js';
 import { asBody, optionalText, requireUuid } from '../common/parse.js';
 import { DatabaseService } from '../database.service.js';
-import { DevUserGuard } from './dev-user.guard.js';
 
 /** Rotas da retaguarda. As permissões são decididas pelo banco. */
 @Controller('admin')
-@UseGuards(DevUserGuard)
+@UseGuards(SessionGuard)
 export class TerminalAdminController {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,

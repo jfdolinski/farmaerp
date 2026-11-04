@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import argon2 from 'argon2';
 import { runner } from 'node-pg-migrate';
 import pg from 'pg';
 
@@ -9,6 +10,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 export const migrationsDir = join(here, '..', 'migrations');
 export const seedFile = join(here, '..', 'seeds', 'dev.sql');
 export const rolesFile = join(here, '..', 'bootstrap', 'sql', 'roles.sql');
+export const devCredentialsFile = join(here, '..', 'seeds', 'dev-credentials.sql');
 
 /** Lê uma variável obrigatória, com mensagem clara quando ela não existe. */
 export function requireEnv(name) {
@@ -78,6 +80,60 @@ export async function runSeed(config = migratorConfig(), environment = process.e
   }
   await withClient(config, async (client) => {
     await client.query(await readFile(seedFile, 'utf8'));
+    // A senha de exemplo é pública no repositório: nunca em ambiente publicado.
+    if (environment === 'development') {
+      await client.query(await readFile(devCredentialsFile, 'utf8'));
+    }
+  });
+}
+
+/**
+ * Cria o primeiro administrador, com troca obrigatória de senha.
+ * Se o e-mail já tiver acesso, não faz nada: a senha nunca é sobrescrita.
+ */
+export async function bootstrapAdmin(config, { email, password, groupName }) {
+  if ((password?.length ?? 0) < 10) {
+    throw new Error('BOOTSTRAP_ADMIN_PASSWORD precisa ter ao menos 10 caracteres.');
+  }
+  const normalized = email.trim().toLowerCase();
+
+  return withClient(config, async (client) => {
+    const existing = await client.query(
+      `SELECT 1 FROM user_account u JOIN user_credential c ON c.user_id = u.id AND c.deleted_at IS NULL
+        WHERE u.email = $1 AND u.deleted_at IS NULL`,
+      [normalized],
+    );
+    if (existing.rowCount > 0) {
+      return 'skipped';
+    }
+
+    const hash = await argon2.hash(password, { type: argon2.argon2id });
+    await client.query('BEGIN');
+    try {
+      let group = (await client.query('SELECT id FROM economic_group WHERE deleted_at IS NULL ORDER BY created_at LIMIT 1')).rows[0];
+      if (!group) {
+        if (!groupName) {
+          throw new Error('Defina BOOTSTRAP_GROUP_NAME: ainda não existe nenhum grupo econômico.');
+        }
+        group = (await client.query('INSERT INTO economic_group (name) VALUES ($1) RETURNING id', [groupName])).rows[0];
+      }
+      const user = (await client.query(
+        `INSERT INTO user_account (economic_group_id, name, email, is_group_admin)
+         VALUES ($1, 'Administrador', $2, true)
+         ON CONFLICT (email) WHERE deleted_at IS NULL AND email IS NOT NULL DO UPDATE SET is_group_admin = true
+         RETURNING id`,
+        [group.id, normalized],
+      )).rows[0];
+      await client.query(
+        'INSERT INTO user_credential (user_id, password_hash, must_change_password) VALUES ($1, $2, true)',
+        [user.id, hash],
+      );
+      await client.query('COMMIT');
+      return 'created';
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
   });
 }
 

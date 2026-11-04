@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { apiFetch, currentDevUserId } from "@/lib/api";
-import { DEV_USERS } from "@/lib/dev-users";
-import { selectDevUser } from "./actions";
+import { apiFetch, redirectIfNeeded, requireUser } from "@/lib/api";
+import { AppHeader } from "../app-header";
+import { ErrorNotice } from "../error-notice";
 import {
   AddTerminal,
   ApproveForm,
   AutoRefresh,
-  ErrorNotice,
   ReasonAction,
   UnblockButton,
 } from "./ui";
@@ -59,7 +58,6 @@ export default function TerminalsPage() {
   return (
     <main className={styles.page}>
       <AutoRefresh />
-      <h1>Terminais</h1>
       <Suspense fallback={<p className={styles.hint}>Carregando terminais...</p>}>
         <TerminalsContent />
       </Suspense>
@@ -68,29 +66,18 @@ export default function TerminalsPage() {
 }
 
 async function TerminalsContent() {
-  const [terminals, branches, userId] = await Promise.all([
+  const user = await requireUser("/terminais");
+  const [terminals, branches] = await Promise.all([
     apiFetch<MonitorRow[]>("/admin/terminals"),
     apiFetch<{ id: string; name: string }[]>("/admin/branches"),
-    currentDevUserId(),
   ]);
+
+  if (!terminals.ok) redirectIfNeeded(terminals.error, "/terminais");
 
   return (
     <>
-      <header className={styles.header}>
-        <form action={selectDevUser} className={styles.devUser}>
-          <label>
-            Usuário (modo de desenvolvimento)
-            <select name="userId" defaultValue={userId} key={userId}>
-              {DEV_USERS.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="submit">Trocar</button>
-        </form>
-      </header>
+      <AppHeader user={user} />
+      <h1>Terminais</h1>
 
       <AddTerminal branches={branches.ok ? branches.data : []} />
 

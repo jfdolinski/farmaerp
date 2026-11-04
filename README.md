@@ -105,11 +105,7 @@ A API responde sempre no formato `{ code, message, action, retryable, traceId }`
 1. Suba o banco e a API: `npm run db:up`, `npm run db:migrate`, `npm run db:seed` e `npm run dev:api`.
 2. Suba a retaguarda: `npm run dev:web`, e abra http://localhost:3000/terminais.
 3. Em `apps/pdv`, rode `flutter run -d windows`. O endereço da API muda com `--dart-define=API_URL=...`.
-4. Digite na retaguarda o código mostrado no PDV, escolha a filial e aprove o terminal.
-
-**Identidade provisória**
-
-Enquanto o login não existir, a retaguarda usa um seletor com os usuários do seed, e a API confia no cabeçalho `X-Dev-User-Id`. Na homologação, a API também exige um segredo que só a retaguarda conhece. Por segurança, **a API não inicia com `APP_ENV=production`** até esse modo ser substituído pelo login.
+4. Entre na retaguarda com `admin@farmaerp.test` e a senha `farmaerp-dev-123`, que só existe em desenvolvimento, e digite o código mostrado no PDV, escolha a filial e aprove o terminal.
 
 **Autenticação do terminal**
 
@@ -140,3 +136,12 @@ O UUID é a identidade do registro. O código humano serve para tela, cupom e at
 - Só a migração de dados, conectada como `farmaerp_migrator`, grava códigos antigos, e o contador avança para não repeti-los.
 - O número do terminal é atribuído na aprovação, é único na filial e nunca é reaproveitado, com limite de 999.
 - Inclusões com `ON CONFLICT DO NOTHING` consomem um número. Na sincronização, confira antes se o UUID já existe.
+
+## Login e usuários
+
+- **Quem entra:** usuários com e-mail e acesso liberado. Operadores de caixa podem existir sem e-mail: o `code` deles será usado no PDV na Etapa 5.
+- **Senha:** Argon2id, calculado na API, com no mínimo 10 caracteres. Esqueceu? O administrador gera uma senha temporária, com troca obrigatória.
+- **Tentativas:** 10 por minuto por IP, e bloqueio da conta por 15 minutos depois de 5 falhas.
+- **Sessão:** 8 horas sem uso, e no máximo 12 horas. A API confere no banco a cada requisição, então desativar um usuário vale na hora.
+- **Histórico:** `auth_event` é imutável. O IP é apagado depois de 90 dias, na rotina que roda a cada login.
+- **Administrador:** `is_group_admin` é provisório, até as permissões granulares. O grupo nunca fica sem um administrador ativo.

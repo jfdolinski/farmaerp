@@ -11,7 +11,8 @@
   "dependencies": {
     "node-pg-migrate": "^9.0.0",
     "pg": "^8.23.1",
-    "@farmaerp/error-catalog": "*"
+    "@farmaerp/error-catalog": "*",
+    "argon2": "^0.45.2"
   },
   "devDependencies": {
     "vitest": "^5.1.0"

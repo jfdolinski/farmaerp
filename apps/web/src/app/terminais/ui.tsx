@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { ApiError } from "@/lib/api";
+import { ErrorNotice } from "../error-notice";
 import {
   ActionState,
   approveTerminal,
@@ -19,21 +19,6 @@ const PLATFORM_LABELS: Record<string, string> = {
   linux: "Linux",
   android: "Android",
 };
-
-export function formatReference(code: string, traceId: string | null): string {
-  return traceId ? `Código ${code} · Ref. ${traceId.slice(-8)}` : `Código ${code}`;
-}
-
-export function ErrorNotice({ error }: { error?: ApiError }) {
-  if (!error) return null;
-  return (
-    <div className={styles.error} role="alert">
-      <strong>{error.message}</strong>
-      <span>{error.action}</span>
-      <small>{formatReference(error.code, error.traceId)}</small>
-    </div>
-  );
-}
 
 /** Mantém o painel atualizado sem recarregar a página. */
 export function AutoRefresh() {

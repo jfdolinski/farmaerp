@@ -1,9 +1,8 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
-import { DEV_USER_COOKIE, DEV_USERS } from "@/lib/dev-users";
 
 export interface ActionState {
   error?: ApiError;
@@ -26,10 +25,16 @@ export interface LookupState extends ActionState {
 const text = (form: FormData, field: string) =>
   String(form.get(field) ?? "").trim();
 
+function failure(error: ApiError): { error: ApiError } {
+  if (error.code === "FA402") redirect("/login?next=/terminais&expired=1");
+  if (error.code === "FA403") redirect("/trocar-senha");
+  return { error };
+}
+
 async function post(path: string, body: unknown): Promise<ActionState> {
   const result = await apiFetch(path, { method: "POST", body });
   if (!result.ok) {
-    return { error: result.error };
+    return failure(result.error);
   }
   refresh();
   return { done: true };
@@ -45,7 +50,7 @@ export async function lookupPairing(
   );
   return result.ok
     ? { code, device: result.data }
-    : { code, error: result.error };
+    : { code, ...failure(result.error) };
 }
 
 export async function claimPairing(
@@ -78,16 +83,4 @@ export async function changeTerminalStatus(
   return post(`/admin/terminals/${text(form, "id")}/${action}`, {
     reason: text(form, "reason"),
   });
-}
-
-export async function selectDevUser(form: FormData): Promise<void> {
-  const id = text(form, "userId");
-  if (DEV_USERS.some((user) => user.id === id)) {
-    (await cookies()).set(DEV_USER_COOKIE, id, { httpOnly: true, sameSite: "lax" });
-    refresh();
-  }
-}
-
-export async function refreshPanel(): Promise<void> {
-  refresh();
 }

@@ -1,4 +1,4 @@
-// Constrói as imagens e testa um ambiente publicado de ponta a ponta, em banco vazio.
+// Constrói as imagens e testa ambientes publicados de ponta a ponta, em banco vazio.
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -7,8 +7,8 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const API = 'http://127.0.0.1:3101';
 const WEB = 'http://127.0.0.1:3100';
-const INTERNAL = 'interno_de_teste_com_mais_de_32_caracteres';
-const ADMIN_USER = '019a0000-0000-7000-8000-000000000008';
+const OWNER = { email: 'dono@exemplo.com.br', password: 'senha-inicial-de-teste' };
+const NEW_PASSWORD = 'senha-definitiva-de-teste';
 
 function compose(args, { env = {}, allowFailure = false, quiet = false } = {}) {
   const result = spawnSync('docker', ['compose', '-f', 'docker-compose.images.yml', ...args], {
@@ -28,8 +28,8 @@ async function waitFor(url, timeoutMs = 120_000) {
   let last = 'sem resposta';
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
-      if (response.ok) return response;
+      const response = await fetch(url, { signal: AbortSignal.timeout(5000), redirect: 'manual' });
+      if (response.ok || response.status === 307) return response;
       last = `status ${response.status}`;
     } catch (error) {
       last = error.message;
@@ -48,17 +48,24 @@ function check(label, condition, detail = '') {
 
 const logsOf = (service) => compose(['logs', '--no-color', service], { quiet: true }).stdout;
 const execApi = (command) => compose(['exec', '-T', 'api', 'sh', '-c', command], { quiet: true, allowFailure: true });
+const api = (path, { token, ...options } = {}) =>
+  fetch(`${API}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+const post = (path, body, token) => api(path, { method: 'POST', body: JSON.stringify(body), token });
 
-let failed = false;
-try {
-  compose(['down', '-v', '--remove-orphans'], { allowFailure: true, quiet: true });
-  compose(['build']);
+async function ownerSession(password) {
+  const response = await post('/auth/login', { email: OWNER.email, password });
+  return { status: response.status, ...(await response.json()) };
+}
+
+async function homologation() {
+  console.log('\n--- Homologação');
   compose(['up', '-d', '--wait', 'postgres']);
-
-  // A produção ainda não pode iniciar, e não deve chegar a tocar no banco.
-  const production = compose(['run', '--rm', '--no-deps', '-e', 'APP_ENV=production', 'api'], { quiet: true, allowFailure: true });
-  check('produção não inicia', production.status !== 0);
-  check('produção explica o motivo', /exige o login/.test(production.stderr + production.stdout));
 
   const invalid = compose(['run', '--rm', '--no-deps', '-e', 'APP_ENV=qualquer', 'api'], { quiet: true, allowFailure: true });
   check('ambiente desconhecido não inicia', invalid.status !== 0);
@@ -67,7 +74,6 @@ try {
   check('sem papéis e sem senha de administrador, não inicia', noRoles.status !== 0);
   check('sem papéis, explica o que fazer', /POSTGRES_ADMIN_PASSWORD/.test(noRoles.stderr + noRoles.stdout));
 
-  // Primeiro deploy: cria papéis, aplica migrations e o seed de demonstração.
   compose(['up', '-d', 'api', 'web']);
   const health = await (await waitFor(`${API}/health`)).json();
   check('API responde com o banco no ar', health.status === 'ok' && health.database === 'up');
@@ -75,52 +81,102 @@ try {
   const logs = logsOf('api');
   check('primeiro deploy cria os papéis', /Papéis do banco conferidos/.test(logs));
   check('primeiro deploy aplica as migrations', /Migrations aplicadas: 0001/.test(logs));
+  check('primeiro deploy cria o administrador', /Primeiro administrador criado/.test(logs));
+  check('o log não mostra a senha inicial', !logs.includes(OWNER.password));
 
   check('API roda sem privilégios', execApi('id -u').stdout.trim() !== '0');
   const environ = execApi(`tr '\\0' '\\n' < /proc/1/environ`).stdout;
   check('o processo da API tem a própria senha', environ.includes('FARMAERP_APP_PASSWORD='));
-  check('o processo da API não tem a senha de dono', !environ.includes('FARMAERP_MIGRATOR_PASSWORD'));
-  check('o processo da API não tem a senha de administrador', !environ.includes('POSTGRES_ADMIN_PASSWORD'));
-
+  for (const name of ['FARMAERP_MIGRATOR_PASSWORD', 'POSTGRES_ADMIN_PASSWORD', 'BOOTSTRAP_ADMIN_PASSWORD']) {
+    check(`o processo da API não tem ${name}`, !environ.includes(name));
+  }
   const leaked = execApi('ls -a /app; ls -a /app/apps/api').stdout;
-  check('a imagem não leva .env nem .git', !/.env|.git/.test(leaked));
+  check('a imagem não leva .env nem .git', !/\.env|\.git\b/.test(leaked));
 
-  // Rotas de administração fechadas para quem não é a retaguarda.
-  const admin = (headers) => fetch(`${API}/admin/terminals`, { headers });
-  check('admin recusa sem o segredo', (await admin({ 'X-Dev-User-Id': ADMIN_USER })).status === 403);
-  check('admin recusa segredo errado', (await admin({ 'X-Dev-User-Id': ADMIN_USER, 'X-Internal-Token': 'errado' })).status === 403);
-  const allowed = await admin({ 'X-Dev-User-Id': ADMIN_USER, 'X-Internal-Token': INTERNAL });
-  check('admin aceita o segredo certo', allowed.status === 200);
-  const seeded = await allowed.json();
-  check('seed de demonstração aplicado', seeded.length === 1 && seeded[0].number === 1);
-  check('consultas com RLS funcionam com o papel da API', seeded[0].branch_name === 'Loja Centro');
-
-  // Rotas do aparelho continuam abertas.
+  // Sem sessão, nada abre.
+  check('rotas de administração exigem sessão', (await (await api('/admin/terminals')).json()).code === 'FA402');
+  const legacy = await fetch(`${API}/admin/terminals`, {
+    headers: { 'X-Dev-User-Id': '019a0000-0000-7000-8000-000000000008', 'X-Internal-Token': 'qualquer' },
+  });
+  check('a identidade provisória não funciona mais', legacy.status === 401);
   const device = await fetch(`${API}/terminals/heartbeat`, { method: 'POST' });
-  check('rota do terminal exige o token dele, com o catálogo', (await device.json()).code === 'FA306');
+  check('rota do terminal exige o token dele', (await device.json()).code === 'FA306');
+
+  // Primeiro acesso.
+  check('senha errada é recusada', (await ownerSession('senha-errada-de-teste')).code === 'FA401');
+  const first = await ownerSession(OWNER.password);
+  check('primeiro acesso exige trocar a senha', first.status === 200 && first.mustChangePassword === true);
+  check('antes de trocar, nada abre', (await (await api('/admin/terminals', { token: first.token })).json()).code === 'FA403');
+  const changed = await post('/auth/change-password', { currentPassword: OWNER.password, newPassword: NEW_PASSWORD }, first.token);
+  check('troca a senha', changed.status === 200);
+
+  const terminals = await (await api('/admin/terminals', { token: first.token })).json();
+  check('seed de demonstração aplicado', terminals.length === 1 && terminals[0].number === 1);
+  check('consultas com RLS funcionam com o papel da API', terminals[0].branch_name === 'Loja Centro');
+
+  const seedLogin = await post('/auth/login', { email: 'admin@farmaerp.test', password: 'farmaerp-dev-123' });
+  check('a senha de exemplo do seed não vale em homologação', seedLogin.status === 401);
 
   // Retaguarda.
   check('retaguarda responde à verificação de saúde', (await (await waitFor(`${WEB}/api/health`)).json()).status === 'ok');
   check('retaguarda roda sem privilégios', compose(['exec', '-T', 'web', 'id', '-u'], { quiet: true }).stdout.trim() !== '0');
-  const page = await (await waitFor(`${WEB}/terminais`)).text();
-  check('retaguarda mostra a faixa de homologação', page.includes('HOMOLOGAÇÃO'));
-  check('retaguarda alcança a API com o segredo', page.includes('Caixa 1'));
-  check('o segredo não vai para o navegador', !page.includes(INTERNAL));
+  const anonymous = await fetch(`${WEB}/terminais`, { redirect: 'manual' });
+  check('sem sessão, a retaguarda leva ao login', anonymous.status === 307 && anonymous.headers.get('location').includes('/login'));
+  const loginPage = await (await fetch(`${WEB}/login`)).text();
+  check('a tela de login abre, com a faixa de homologação', loginPage.includes('HOMOLOGAÇÃO') && loginPage.includes('Entre com seu e-mail'));
 
-  // Novo deploy: sem a senha de administrador e sem migrations pendentes.
-  compose(['up', '-d', '--force-recreate', '--no-deps', 'api'], { env: { SMOKE_ADMIN_PASSWORD: '' } });
+  const cookie = `farmaerp_session=${first.token}`;
+  const page = await (await fetch(`${WEB}/terminais`, { headers: { Cookie: cookie } })).text();
+  check('com sessão, a retaguarda mostra os terminais', page.includes('Caixa 1'));
+  const users = await (await fetch(`${WEB}/usuarios`, { headers: { Cookie: cookie } })).text();
+  check('com sessão, a retaguarda mostra os usuários', users.includes(OWNER.email));
+
+  // Novo deploy, sem as variáveis do primeiro.
+  compose(['up', '-d', '--force-recreate', '--no-deps', 'api'], {
+    env: { SMOKE_ADMIN_PASSWORD: '', SMOKE_BOOTSTRAP_EMAIL: '' },
+  });
   await waitFor(`${API}/health`);
   const secondLogs = logsOf('api');
   check('novo deploy não reaplica migrations', /Nenhuma migration pendente/.test(secondLogs));
-  check('novo deploy não usa a senha de administrador', !/Papéis do banco conferidos/.test(secondLogs));
-  const after = await (await admin({ 'X-Dev-User-Id': ADMIN_USER, 'X-Internal-Token': INTERNAL })).json();
-  check('novo deploy não duplica o seed', after.length === 1);
+  check('novo deploy não mexe no administrador', !/administrador/i.test(secondLogs));
+  check('a senha definitiva continua valendo', (await ownerSession(NEW_PASSWORD)).status === 200);
 
-  // Sem banco, a API não publica uma versão quebrada.
+  // Sem banco, a API avisa em vez de cair.
   compose(['stop', 'postgres']);
   const noDatabase = await fetch(`${API}/health`, { signal: AbortSignal.timeout(10000) }).catch(() => null);
   check('sem banco, a API responde 503', noDatabase?.status === 503);
+}
 
+async function production() {
+  console.log('\n--- Produção');
+  compose(['down', '-v', '--remove-orphans'], { quiet: true });
+  const env = { SMOKE_APP_ENV: 'production' };
+  compose(['up', '-d', '--wait', 'postgres'], { env });
+  compose(['up', '-d', '--no-deps', 'api'], { env });
+  await waitFor(`${API}/health`);
+  check('a API inicia em produção', true);
+
+  const logs = logsOf('api');
+  check('produção não roda o seed', !/demonstração/.test(logs));
+  check('produção cria o administrador', /Primeiro administrador criado/.test(logs));
+
+  check('produção exige sessão', (await api('/admin/terminals')).status === 401);
+  const seedLogin = await post('/auth/login', { email: 'admin@farmaerp.test', password: 'farmaerp-dev-123' });
+  check('a senha de exemplo do seed não existe em produção', seedLogin.status === 401);
+
+  const first = await ownerSession(OWNER.password);
+  check('o administrador entra, com troca obrigatória', first.status === 200 && first.mustChangePassword === true);
+  await post('/auth/change-password', { currentPassword: OWNER.password, newPassword: NEW_PASSWORD }, first.token);
+  const terminals = await (await api('/admin/terminals', { token: first.token })).json();
+  check('produção começa sem dados de demonstração', Array.isArray(terminals) && terminals.length === 0);
+}
+
+let failed = false;
+try {
+  compose(['down', '-v', '--remove-orphans'], { allowFailure: true, quiet: true });
+  compose(['build']);
+  await homologation();
+  await production();
   console.log(`\nImagens aprovadas: ${checks} verificações.`);
 } catch (error) {
   failed = true;

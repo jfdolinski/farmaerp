@@ -1,5 +1,6 @@
 // Prepara o banco ao iniciar a API nos ambientes publicados.
 import {
+  bootstrapAdmin,
   bootstrapRoles,
   migratorConfig,
   requireEnv,
@@ -44,6 +45,20 @@ try {
   if (process.env.APP_ENV === 'homologation') {
     await runSeed(config);
     console.log('Dados de demonstração conferidos.');
+  }
+
+  // Só no primeiro deploy: depois, estas variáveis saem do painel.
+  if (process.env.BOOTSTRAP_ADMIN_EMAIL) {
+    const outcome = await bootstrapAdmin(config, {
+      email: process.env.BOOTSTRAP_ADMIN_EMAIL,
+      password: process.env.BOOTSTRAP_ADMIN_PASSWORD,
+      groupName: process.env.BOOTSTRAP_GROUP_NAME,
+    });
+    console.log(
+      outcome === 'created'
+        ? 'Primeiro administrador criado. Remova as variáveis BOOTSTRAP_ das configurações.'
+        : 'O administrador já existia. Remova as variáveis BOOTSTRAP_ das configurações.',
+    );
   }
 } catch (error) {
   if (INVALID_LOGIN.has(error.code)) {

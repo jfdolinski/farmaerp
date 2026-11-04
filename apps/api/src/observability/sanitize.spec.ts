@@ -16,6 +16,11 @@ describe('sanitize', () => {
     'face_code',
     'biometria',
     'body',
+    'email',
+    'temporaryPassword',
+    'newPassword',
+    'currentPassword',
+    'password_hash',
   ])('mascara o campo %s em qualquer nível', (key) => {
     const result = sanitize({ a: { b: [{ [key]: 'segredo' }] } });
     expect(JSON.stringify(result)).not.toContain('segredo');
@@ -30,6 +35,12 @@ describe('sanitize', () => {
       );
     },
   );
+
+  it('mascara e-mails dentro de textos', () => {
+    expect(sanitize('login de fulano@exemplo.com.br falhou')).toBe(
+      'login de [protegido] falhou',
+    );
+  });
 
   it('não mascara um CNPJ de 14 dígitos', () => {
     expect(sanitize('filial 11222333000181')).toBe('filial 11222333000181');

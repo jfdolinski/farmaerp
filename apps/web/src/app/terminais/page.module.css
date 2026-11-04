@@ -165,3 +165,61 @@ button.danger {
   color: #ffffff;
   background: var(--danger);
 }
+
+.appHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.nav a {
+  color: var(--link);
+}
+
+.centered {
+  display: flex;
+  justify-content: center;
+  padding: 48px 16px;
+}
+
+.centered .card {
+  width: 100%;
+  max-width: 420px;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+}
+
+.check input {
+  min-height: 0;
+}
+
+.secret {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--subtle);
+  font-size: 1.125rem;
+  user-select: all;
+}
