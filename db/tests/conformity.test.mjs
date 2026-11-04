@@ -5,7 +5,7 @@ import { asOwner, closePools, connectionConfig, ownerPool } from './helpers.mjs'
 afterAll(closePools);
 
 const EXPECTED_TABLES = [
-  'branch', 'branch_group', 'company', 'economic_group',
+  'branch', 'branch_group', 'code_counter', 'company', 'economic_group',
   'region', 'terminal', 'terminal_event', 'terminal_pairing_request',
   'terminal_status', 'user_account', 'user_branch',
 ];
@@ -37,6 +37,7 @@ describe('migrations', () => {
       '0004_active_views',
       '0005_error_codes_and_trace',
       '0006_terminal_pairing',
+      '0007_human_codes',
     ]);
   });
 });

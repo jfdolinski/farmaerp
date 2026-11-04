@@ -12,7 +12,7 @@ Documento de estruturação da base do sistema. Stack: Flutter (PDV, multiplataf
 
 - UUID v7 como chave primária em todas as tabelas, gerado no próprio PDV (funciona offline, ordenado por tempo).
 - Armazenamento binário: tipo uuid no Postgre, blob de 16 bytes no SQLite.
-- Código humano curto e sequencial por filial para tela e cupom (cliente, produto, venda).
+- Código humano curto para tela e cupom: produto e cliente com sequência única por grupo econômico; venda com número do terminal + contador do terminal (ex.: `2-000123`), gerado mesmo offline. Cliente criado offline fica sem código até sincronizar. O código nunca muda nem é reaproveitado e não substitui o número fiscal.
 - Exclusão lógica (data de exclusão), nada é apagado fisicamente.
 - Campos de auditoria e versão em toda tabela: criado em, atualizado em, versão, alterado por.
 

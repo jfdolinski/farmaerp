@@ -557,7 +557,7 @@ describe('dados de autenticação', () => {
   it('retorna a chave e a situação, e nulo para terminal inexistente', async () => {
     await asUser(null, async (client) => {
       const { rows } = await client.query('SELECT app.terminal_auth_info($1) AS info', [a.terminal1.id]);
-      expect(rows[0].info).toEqual({ publicKey: a.terminal1.public_key, status: 'active' });
+      expect(rows[0].info).toEqual({ publicKey: a.terminal1.public_key, status: 'active', number: 1 });
 
       const { rows: missing } = await client.query('SELECT app.terminal_auth_info($1) AS info', [
         '019a0000-0000-7000-8000-00000000dead',

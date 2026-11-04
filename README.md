@@ -116,3 +116,24 @@ O aparelho guarda uma chave Ed25519, responde a um desafio assinado e recebe um 
 
 - `TERMINAL_TOKEN_SECRET`: assina desafios e tokens, com ao menos 32 caracteres. Sem ela, a API não inicia.
 - `TRUST_PROXY=true`: usar atrás do proxy do EasyPanel, para o limite de tentativas ver o IP real.
+
+## Código humano
+
+O UUID é a identidade do registro. O código humano serve para tela, cupom e atendimento.
+
+| Item | Formato | Quem gera |
+|---|---|---|
+| Produto e cliente | Sequência única por grupo econômico (`10452`) | Banco central |
+| Venda | Número do terminal + contador (`2-000123`) | PDV, mesmo offline |
+
+**Aplicar a uma tabela nova**
+
+1. Inclua as colunas `economic_group_id` e `code bigint NOT NULL`.
+2. Chame `CALL app.apply_human_code('public.nome_da_tabela', 'nome_do_item');`.
+
+**Regras**
+
+- A API não informa o código: um valor enviado é ignorado.
+- Só a migração de dados, conectada como `farmaerp_migrator`, grava códigos antigos, e o contador avança para não repeti-los.
+- O número do terminal é atribuído na aprovação, é único na filial e nunca é reaproveitado, com limite de 999.
+- Inclusões com `ON CONFLICT DO NOTHING` consomem um número. Na sincronização, confira antes se o UUID já existe.

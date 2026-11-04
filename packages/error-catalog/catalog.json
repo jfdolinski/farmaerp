@@ -72,7 +72,8 @@
     "dbConstraints": [
       "terminal_pairing_request_code_active_key",
       "terminal_pairing_request_public_key_active_key",
-      "terminal_status_terminal_active_key"
+      "terminal_status_terminal_active_key",
+      "code_counter_economic_group_entity_active_key"
     ]
   },
   "FA009": {
@@ -140,7 +141,8 @@
       "user_branch_id_uuid_v7_check",
       "terminal_event_id_uuid_v7_check",
       "terminal_pairing_request_id_uuid_v7_check",
-      "terminal_status_id_uuid_v7_check"
+      "terminal_status_id_uuid_v7_check",
+      "code_counter_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -150,6 +152,17 @@
     "severity": "error",
     "retryable": false,
     "dbConstraints": []
+  },
+  "FA108": {
+    "message": "Não foi possível gerar o código do cadastro.",
+    "action": "Tente novamente. Se continuar, informe o suporte.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": true,
+    "dbConstraints": [
+      "code_counter_entity_check",
+      "code_counter_last_value_check"
+    ]
   },
   "FA201": {
     "message": "O grupo econômico informado não está ativo.",
@@ -441,7 +454,18 @@
       "terminal_pairing_request_platform_check",
       "terminal_pairing_request_public_key_check",
       "terminal_pairing_request_status_check",
-      "terminal_status_outbox_pending_check"
+      "terminal_status_outbox_pending_check",
+      "terminal_active_has_number"
+    ]
+  },
+  "FA311": {
+    "message": "Esta filial atingiu o limite de terminais.",
+    "action": "Fale com o suporte para reorganizar os terminais da filial.",
+    "httpStatus": 409,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": [
+      "terminal_number_check"
     ]
   }
 }

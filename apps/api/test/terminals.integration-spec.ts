@@ -166,14 +166,22 @@ describe('terminais contra o banco real', () => {
       .expect(200);
     expect((await status()).body).toMatchObject({ terminalStatus: 'active' });
 
+    const approvedStatus = (await status()).body as Json;
+    expect(approvedStatus.terminalNumber).toBeGreaterThan(0);
+
     const token = await login(device, terminalId);
-    await heartbeat(token).expect(200);
+    const beat = await heartbeat(token).expect(200);
+    expect(beat.body).toEqual({
+      status: 'active',
+      terminalNumber: approvedStatus.terminalNumber,
+    });
 
     const monitor = await admin('get', '/terminals').expect(200);
     expect(
       (monitor.body as Json[]).find((terminal) => terminal.id === terminalId),
     ).toMatchObject({
       status: 'active',
+      number: approvedStatus.terminalNumber,
       connectivity: 'online',
       app_version: '0.2.0',
       device_name: 'CAIXA-TESTE',

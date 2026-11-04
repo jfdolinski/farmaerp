@@ -75,6 +75,11 @@ class TerminalScreen extends StatelessWidget {
           const Icon(Icons.check_circle, size: 56, color: Colors.green),
           const SizedBox(height: 16),
           _title(context, 'Terminal aprovado'),
+          if (controller.terminalNumber != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text('Terminal número ${controller.terminalNumber}'),
+            ),
           const Text(
             'Aguardando a carga inicial de dados da filial antes de liberar '
             'as vendas.',

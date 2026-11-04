@@ -17,6 +17,7 @@ export const metadata: Metadata = { title: "Terminais · FarmaERP" };
 
 interface MonitorRow {
   id: string;
+  number: number | null;
   branch_name: string;
   name: string | null;
   profile: string | null;
@@ -119,7 +120,10 @@ async function TerminalsContent() {
                   <tr key={terminal.id}>
                     <td>{terminal.branch_name}</td>
                     <td>
-                      <strong>{terminal.name ?? "Sem nome"}</strong>
+                      <strong>
+                        {terminal.number && `${terminal.number} · `}
+                        {terminal.name ?? "Sem nome"}
+                      </strong>
                       <small>
                         {terminal.profile && PROFILE_LABELS[terminal.profile]}
                         {terminal.profile && terminal.device_name && " · "}

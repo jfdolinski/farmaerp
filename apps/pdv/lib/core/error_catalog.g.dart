@@ -118,6 +118,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Cancele a alteração e informe o suporte.',
     retryable: false,
   ),
+  'FA108': ErrorCatalogEntry(
+    code: 'FA108',
+    message: 'Não foi possível gerar o código do cadastro.',
+    action: 'Tente novamente. Se continuar, informe o suporte.',
+    retryable: true,
+  ),
   'FA201': ErrorCatalogEntry(
     code: 'FA201',
     message: 'O grupo econômico informado não está ativo.',
@@ -302,6 +308,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     code: 'FA310',
     message: 'Os dados do terminal são inválidos.',
     action: 'Atualize o sistema e tente novamente.',
+    retryable: false,
+  ),
+  'FA311': ErrorCatalogEntry(
+    code: 'FA311',
+    message: 'Esta filial atingiu o limite de terminais.',
+    action: 'Fale com o suporte para reorganizar os terminais da filial.',
     retryable: false,
   ),
 };
