@@ -59,11 +59,13 @@ export function serializeError(error: unknown, depth = 0): unknown {
 
   // Erros de dado inválido do Postgres (classe 22) repetem o valor recebido.
   const repeatsValue =
-    typeof driverError.code === 'string' && /^22/.test(driverError.code);
+    typeof driverError.code === 'string' && driverError.code.startsWith('22');
 
   return sanitize({
     type: error.name,
-    message: repeatsValue ? 'Dado inválido (valor omitido do log)' : error.message,
+    message: repeatsValue
+      ? 'Dado inválido (valor omitido do log)'
+      : error.message,
     code: driverError.code,
     constraint: driverError.constraint,
     table: driverError.table,

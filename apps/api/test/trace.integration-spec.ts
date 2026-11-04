@@ -67,7 +67,9 @@ class TestController {
   }
 
   @Post('sql')
-  async sql(@Body() body: { sql: string; params?: unknown[]; userId?: string }) {
+  async sql(
+    @Body() body: { sql: string; params?: unknown[]; userId?: string },
+  ) {
     return this.database.withContext(
       async (client) => {
         const { rows } = await client.query(body.sql, body.params);
@@ -184,7 +186,9 @@ describe('rastreio e erros contra o banco real', () => {
     }).expect(409);
 
     expect(response.body).toMatchObject({ code: 'FA212', traceId: TRACE });
-    expect(JSON.stringify(response.body)).not.toContain('branch_cnpj_active_key');
+    expect(JSON.stringify(response.body)).not.toContain(
+      'branch_cnpj_active_key',
+    );
   });
 
   it('o valor duplicado não vai para o log', async () => {
@@ -222,7 +226,10 @@ describe('rastreio e erros contra o banco real', () => {
   });
 
   it('SQL inválido vira FA000', async () => {
-    const response = await post('sql', { sql: 'SELEC 1', userId: ADMIN }).expect(500);
+    const response = await post('sql', {
+      sql: 'SELEC 1',
+      userId: ADMIN,
+    }).expect(500);
     expect(response.body).toMatchObject({ code: 'FA000' });
     expect(JSON.stringify(response.body)).not.toContain('syntax');
   });

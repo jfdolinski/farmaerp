@@ -1,4 +1,8 @@
-import { codeFromDbError, FALLBACK_CODE, getError } from '@farmaerp/error-catalog';
+import {
+  codeFromDbError,
+  FALLBACK_CODE,
+  getError,
+} from '@farmaerp/error-catalog';
 import {
   ArgumentsHost,
   Catch,
