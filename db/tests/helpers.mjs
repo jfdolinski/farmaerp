@@ -1,6 +1,7 @@
 import { randomInt, randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { catalog, codeFromDbError } from '@farmaerp/error-catalog';
 import pg from 'pg';
 
 const envFile = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '.env');
@@ -47,6 +48,21 @@ async function inRolledBackTransaction(pool, fn) {
 /** Define o usuário da transação, como a API fará. */
 export function setUser(client, userId) {
   return client.query(`SELECT set_config('app.user_id', $1, true)`, [userId ?? '']);
+}
+
+/** Define o ID de rastreio da transação, como a API fará. */
+export function setTrace(client, traceId) {
+  return client.query(`SELECT set_config('app.trace_id', $1, true)`, [traceId ?? '']);
+}
+
+/**
+ * Confere se o erro é traduzido para o código do catálogo. Quando o próprio banco
+ * levanta o código, a mensagem também precisa ser a do catálogo.
+ */
+export function hasCode(expected) {
+  return (error) =>
+    codeFromDbError(error) === expected &&
+    (error.code !== expected || error.message === catalog[expected].message);
 }
 
 /** Executa como a API (farmaerp_app) com o usuário informado e desfaz tudo no final. */

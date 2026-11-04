@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "node-pg-migrate": "^9.0.0",
-    "pg": "^8.23.1"
+    "pg": "^8.23.1",
+    "@farmaerp/error-catalog": "*"
   },
   "devDependencies": {
     "vitest": "^5.1.0"

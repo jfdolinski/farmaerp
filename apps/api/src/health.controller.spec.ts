@@ -1,14 +1,8 @@
-import { Logger, ServiceUnavailableException } from '@nestjs/common';
 import { DatabaseService } from './database.service.js';
 import { HealthController } from './health.controller.js';
+import { AppError } from './observability/app-error.js';
 
 describe('HealthController', () => {
-  const logError = vi.spyOn(Logger.prototype, 'error');
-
-  beforeEach(() => {
-    logError.mockImplementation(() => undefined);
-  });
-
   const controllerWith = (ping: () => Promise<void>) =>
     new HealthController({ ping } as unknown as DatabaseService);
 
@@ -20,17 +14,14 @@ describe('HealthController', () => {
     });
   });
 
-  it('não expõe o detalhe técnico quando o banco falha', async () => {
+  it('usa o código do catálogo e guarda a causa técnica', async () => {
     const technicalError = new Error('senha incorreta para farmaerp_app');
     const controller = controllerWith(() => Promise.reject(technicalError));
 
     const failure = await controller.check().catch((error: unknown) => error);
 
-    expect(failure).toBeInstanceOf(ServiceUnavailableException);
-    expect((failure as Error).message).not.toContain('farmaerp_app');
-    expect(logError).toHaveBeenCalledWith(
-      expect.any(String),
-      technicalError,
-    );
+    expect(failure).toBeInstanceOf(AppError);
+    expect((failure as AppError).code).toBe('FA001');
+    expect((failure as AppError).cause).toBe(technicalError);
   });
 });

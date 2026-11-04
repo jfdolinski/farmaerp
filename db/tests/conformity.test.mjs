@@ -34,6 +34,7 @@ describe('migrations', () => {
       '0002_multibranch_structure',
       '0003_row_level_security',
       '0004_active_views',
+      '0005_error_codes_and_trace',
     ]);
   });
 });
@@ -52,6 +53,7 @@ describe('padrão de todas as tabelas', () => {
       deleted_at: 'timestamp with time zone',
       version: 'bigint',
       updated_by: 'uuid',
+      trace_id: 'uuid',
     };
     for (const table of await publicTables()) {
       const { rows } = await ownerPool.query(
@@ -120,7 +122,7 @@ describe('padrão de todas as tabelas', () => {
       await client.query('CREATE TABLE incomplete_table (id uuid PRIMARY KEY)');
       await expect(
         client.query(`CALL app.apply_table_standard('public.incomplete_table')`),
-      ).rejects.toThrow(/colunas obrigatórias: created_at, updated_at, deleted_at, version, updated_by/);
+      ).rejects.toThrow(/colunas obrigatórias: created_at, updated_at, deleted_at, version, updated_by, trace_id/);
     });
   });
 });

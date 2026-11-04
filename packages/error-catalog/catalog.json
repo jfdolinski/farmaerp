@@ -1,0 +1,321 @@
+{
+  "FA000": {
+    "message": "Não foi possível concluir a operação.",
+    "action": "Tente novamente. Se continuar, informe o código e a referência ao suporte.",
+    "httpStatus": 500,
+    "severity": "error",
+    "retryable": true,
+    "dbConstraints": []
+  },
+  "FA001": {
+    "message": "Sistema indisponível no momento.",
+    "action": "Aguarde alguns instantes e tente novamente.",
+    "httpStatus": 503,
+    "severity": "error",
+    "retryable": true,
+    "dbConstraints": []
+  },
+  "FA002": {
+    "message": "Você não tem permissão para esta operação.",
+    "action": "Peça a liberação a um administrador.",
+    "httpStatus": 403,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA003": {
+    "message": "Já existe um cadastro com estes dados.",
+    "action": "Confira os dados informados.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA004": {
+    "message": "Um dos itens informados não foi encontrado.",
+    "action": "Atualize a tela e selecione o item novamente.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA005": {
+    "message": "Alguns dados informados são inválidos.",
+    "action": "Confira os dados e tente novamente.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA006": {
+    "message": "O recurso solicitado não foi encontrado.",
+    "action": "Atualize a tela e tente novamente.",
+    "httpStatus": 404,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA007": {
+    "message": "Não foi possível entender a solicitação.",
+    "action": "Atualize o sistema e tente novamente.",
+    "httpStatus": 400,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA008": {
+    "message": "Outra operação está usando estes dados.",
+    "action": "Aguarde alguns instantes e tente novamente.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": true,
+    "dbConstraints": []
+  },
+  "FA101": {
+    "message": "Este registro não pode ter o identificador alterado.",
+    "action": "Cancele a alteração e informe o suporte.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA102": {
+    "message": "A data de criação do registro não pode ser alterada.",
+    "action": "Cancele a alteração e informe o suporte.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA103": {
+    "message": "Registros não podem ser apagados. Use a exclusão lógica.",
+    "action": "Use a opção de excluir da tela de cadastro.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA104": {
+    "message": "Este dado não pode ser alterado depois do cadastro.",
+    "action": "Se o dado estiver errado, crie um novo cadastro.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA105": {
+    "message": "Este registro ainda tem itens ativos vinculados.",
+    "action": "Exclua ou mova esses itens primeiro.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA106": {
+    "message": "O identificador do registro é inválido.",
+    "action": "Atualize o sistema e tente novamente.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": [
+      "branch_group_id_uuid_v7_check",
+      "branch_id_uuid_v7_check",
+      "company_id_uuid_v7_check",
+      "economic_group_id_uuid_v7_check",
+      "region_id_uuid_v7_check",
+      "terminal_id_uuid_v7_check",
+      "user_account_id_uuid_v7_check",
+      "user_branch_id_uuid_v7_check"
+    ]
+  },
+  "FA201": {
+    "message": "O grupo econômico informado não está ativo.",
+    "action": "Selecione um grupo econômico ativo.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA202": {
+    "message": "O grupo de filial informado não está ativo.",
+    "action": "Selecione um grupo de filial ativo.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA203": {
+    "message": "O CNPJ da filial precisa ter a mesma raiz do CNPJ da empresa.",
+    "action": "Confira o CNPJ digitado ou a empresa selecionada.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA204": {
+    "message": "A empresa informada não está ativa.",
+    "action": "Selecione uma empresa ativa.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA205": {
+    "message": "A região informada não está ativa.",
+    "action": "Selecione uma região ativa.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA206": {
+    "message": "A região precisa ser do mesmo grupo econômico da empresa.",
+    "action": "Selecione uma região do grupo econômico da empresa.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA207": {
+    "message": "A região só pode ser movida para um grupo de filial do mesmo grupo econômico.",
+    "action": "Selecione um grupo de filial do mesmo grupo econômico.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA208": {
+    "message": "A filial informada não está ativa.",
+    "action": "Selecione uma filial ativa.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA209": {
+    "message": "O usuário informado não está ativo.",
+    "action": "Selecione um usuário ativo.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA210": {
+    "message": "O usuário só pode ser vinculado a filiais do seu grupo econômico.",
+    "action": "Selecione uma filial do grupo econômico do usuário.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA211": {
+    "message": "O CNPJ informado é inválido.",
+    "action": "Confira os 14 caracteres do CNPJ, sem pontuação.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": ["branch_cnpj_check"]
+  },
+  "FA212": {
+    "message": "Já existe uma filial ativa com este CNPJ.",
+    "action": "Confira o CNPJ digitado.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": ["branch_cnpj_active_key"]
+  },
+  "FA213": {
+    "message": "Já existe uma empresa ativa com esta raiz de CNPJ.",
+    "action": "Confira a raiz do CNPJ digitada.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": ["company_cnpj_root_active_key"]
+  },
+  "FA214": {
+    "message": "A raiz do CNPJ da empresa é inválida.",
+    "action": "Informe os 8 primeiros caracteres do CNPJ, sem pontuação.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": ["company_cnpj_root_check"]
+  },
+  "FA215": {
+    "message": "Já existe um cadastro ativo com este nome.",
+    "action": "Informe outro nome.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "branch_group_name_active_key",
+      "branch_name_active_key",
+      "region_name_active_key",
+      "terminal_name_active_key"
+    ]
+  },
+  "FA216": {
+    "message": "O nome é obrigatório.",
+    "action": "Preencha o nome e tente novamente.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "branch_group_name_check",
+      "branch_name_check",
+      "company_legal_name_check",
+      "company_trade_name_check",
+      "economic_group_name_check",
+      "region_name_check",
+      "terminal_name_check",
+      "user_account_name_check"
+    ]
+  },
+  "FA217": {
+    "message": "O terminal precisa de nome e perfil para ser aprovado.",
+    "action": "Preencha o nome e o perfil do terminal.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": ["terminal_approved_has_name_and_profile"]
+  },
+  "FA218": {
+    "message": "O perfil do terminal é inválido.",
+    "action": "Selecione orçamento, caixa ou autoatendimento.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": ["terminal_profile_check"]
+  },
+  "FA219": {
+    "message": "A situação do terminal é inválida.",
+    "action": "Atualize o sistema e tente novamente.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": ["terminal_status_check"]
+  },
+  "FA220": {
+    "message": "Este aparelho já está cadastrado como terminal.",
+    "action": "Consulte a lista de terminais na retaguarda.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": ["terminal_public_key_active_key"]
+  },
+  "FA221": {
+    "message": "A chave de segurança do terminal é inválida.",
+    "action": "Reinicie o cadastro do terminal.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": ["terminal_public_key_check"]
+  },
+  "FA222": {
+    "message": "O usuário já está vinculado a esta filial.",
+    "action": "Atualize a tela para ver os vínculos atuais.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": ["user_branch_active_key"]
+  }
+}

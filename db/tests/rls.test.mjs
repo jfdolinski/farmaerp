@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  appPool, asUser, branchCnpj, closePools, createFixtures, ids, randomRoot, setUser,
+  appPool, asUser, branchCnpj, closePools, createFixtures, hasCode, ids, randomRoot, setUser,
 } from './helpers.mjs';
 
 let a;
@@ -50,7 +50,7 @@ describe('sem contexto de usuário', () => {
           `INSERT INTO region (branch_group_id, name) VALUES ($1, 'Sem contexto')`,
           [a.branchGroup.id],
         ),
-      ).rejects.toThrow(/row-level security/);
+      ).rejects.toSatisfy(hasCode('FA002'));
     });
   });
 
@@ -145,7 +145,7 @@ describe('usuário comum', () => {
     await asUser(a.oneBranchUser.id, async (client) => {
       await expect(
         client.query('INSERT INTO user_branch (user_id, branch_id) VALUES ($1, $2)', [a.oneBranchUser.id, a.branch2.id]),
-      ).rejects.toThrow(/row-level security/);
+      ).rejects.toSatisfy(hasCode('FA002'));
     });
   });
 
@@ -153,7 +153,7 @@ describe('usuário comum', () => {
     await asUser(a.oneBranchUser.id, async (client) => {
       await expect(
         client.query(`INSERT INTO terminal (branch_id, public_key) VALUES ($1, 'chave-comum')`, [a.branch1.id]),
-      ).rejects.toThrow(/row-level security/);
+      ).rejects.toSatisfy(hasCode('FA002'));
     });
   });
 
@@ -226,7 +226,7 @@ describe('admin do grupo', () => {
     await asUser(a.admin.id, async (client) => {
       await expect(
         client.query(`INSERT INTO region (branch_group_id, name) VALUES ($1, 'Invadida')`, [b.branchGroup.id]),
-      ).rejects.toThrow(/row-level security/);
+      ).rejects.toSatisfy(hasCode('FA002'));
     });
   });
 
@@ -234,7 +234,7 @@ describe('admin do grupo', () => {
     await asUser(a.admin.id, async (client) => {
       await expect(
         client.query(`INSERT INTO economic_group (name) VALUES ('Novo grupo')`),
-      ).rejects.toThrow(/permission denied/);
+      ).rejects.toSatisfy(hasCode('FA002'));
     });
   });
 
@@ -329,7 +329,7 @@ describe('admin do grupo', () => {
     await asUser(a.admin.id, async (client) => {
       await expect(
         client.query('INSERT INTO user_branch (user_id, branch_id) VALUES ($1, $2)', [a.noBranchUser.id, b.branch1.id]),
-      ).rejects.toThrow(/filiais do seu grupo econômico/);
+      ).rejects.toSatisfy(hasCode('FA210'));
     });
   });
 
@@ -337,7 +337,7 @@ describe('admin do grupo', () => {
     await asUser(a.admin.id, async (client) => {
       await expect(
         client.query('UPDATE branch SET deleted_at = now() WHERE id = $1', [a.branch1.id]),
-      ).rejects.toThrow(/itens ativos vinculados/);
+      ).rejects.toSatisfy(hasCode('FA105'));
     });
   });
 

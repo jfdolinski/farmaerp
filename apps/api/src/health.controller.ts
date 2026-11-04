@@ -1,28 +1,20 @@
-import {
-  Controller,
-  Get,
-  Logger,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { Controller, Get, Inject } from '@nestjs/common';
 import { DatabaseService } from './database.service.js';
+import { AppError } from './observability/app-error.js';
 
 @Controller('health')
 export class HealthController {
-  private readonly logger = new Logger(HealthController.name);
-
-  constructor(private readonly database: DatabaseService) {}
+  constructor(
+    @Inject(DatabaseService) private readonly database: DatabaseService,
+  ) {}
 
   @Get()
   async check(): Promise<{ status: string; database: string }> {
     try {
       await this.database.ping();
-      return { status: 'ok', database: 'up' };
-    } catch (error) {
-      // O detalhe técnico fica só no log.
-      this.logger.error('Falha ao conectar ao banco de dados', error);
-      throw new ServiceUnavailableException(
-        'Sistema indisponível no momento. Tente novamente em instantes.',
-      );
+    } catch (cause) {
+      throw new AppError('FA001', { cause });
     }
+    return { status: 'ok', database: 'up' };
   }
 }

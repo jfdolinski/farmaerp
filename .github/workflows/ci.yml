@@ -35,6 +35,7 @@ jobs:
           npm run db:seed
           npm run db:seed
       - run: npm run test:db
+      - run: npm run test:integration
       - name: API com queda real do banco
         run: |
           npm run build:api
@@ -54,6 +55,9 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
+      - run: npm run test:catalog
+      - name: Catálogo do PDV em dia com o JSON
+        run: npm run catalog:check
       - run: npm run lint -w apps/api
       - run: npm run test:api
       - run: npm run build:api

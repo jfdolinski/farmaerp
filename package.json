@@ -4,7 +4,8 @@
   "workspaces": [
     "apps/api",
     "apps/web",
-    "db"
+    "db",
+    "packages/*"
   ],
   "engines": {
     "node": ">=24"
@@ -18,6 +19,10 @@
     "test:db": "npm test -w db",
     "test:api": "npm test -w apps/api && npm run test:e2e -w apps/api",
     "test:outage": "npm run test:outage -w apps/api",
+    "test:integration": "npm run test:integration -w apps/api",
+    "test:catalog": "npm test -w packages/error-catalog",
+    "catalog:generate": "npm run generate -w packages/error-catalog",
+    "catalog:check": "npm run check -w packages/error-catalog",
     "build:api": "npm run build -w apps/api",
     "build:web": "npm run build -w apps/web",
     "dev:api": "npm run start:dev -w apps/api",
