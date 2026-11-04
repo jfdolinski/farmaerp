@@ -70,6 +70,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Aguarde alguns instantes e tente novamente.',
     retryable: true,
   ),
+  'FA009': ErrorCatalogEntry(
+    code: 'FA009',
+    message: 'Muitas tentativas em pouco tempo.',
+    action: 'Aguarde um minuto e tente novamente.',
+    retryable: true,
+  ),
   'FA101': ErrorCatalogEntry(
     code: 'FA101',
     message: 'Este registro não pode ter o identificador alterado.',
@@ -104,6 +110,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     code: 'FA106',
     message: 'O identificador do registro é inválido.',
     action: 'Atualize o sistema e tente novamente.',
+    retryable: false,
+  ),
+  'FA107': ErrorCatalogEntry(
+    code: 'FA107',
+    message: 'Este histórico não pode ser alterado.',
+    action: 'Cancele a alteração e informe o suporte.',
     retryable: false,
   ),
   'FA201': ErrorCatalogEntry(
@@ -236,6 +248,60 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     code: 'FA222',
     message: 'O usuário já está vinculado a esta filial.',
     action: 'Atualize a tela para ver os vínculos atuais.',
+    retryable: false,
+  ),
+  'FA301': ErrorCatalogEntry(
+    code: 'FA301',
+    message: 'Código não encontrado ou expirado.',
+    action: 'Confira o código na tela do terminal. Se expirou, o terminal mostra um novo.',
+    retryable: false,
+  ),
+  'FA302': ErrorCatalogEntry(
+    code: 'FA302',
+    message: 'Informe o motivo desta ação.',
+    action: 'Preencha o motivo e tente novamente.',
+    retryable: false,
+  ),
+  'FA303': ErrorCatalogEntry(
+    code: 'FA303',
+    message: 'Esta mudança de situação não é permitida para o terminal.',
+    action: 'Atualize a tela para ver a situação atual.',
+    retryable: false,
+  ),
+  'FA304': ErrorCatalogEntry(
+    code: 'FA304',
+    message: 'Este terminal está bloqueado.',
+    action: 'Procure o administrador da rede.',
+    retryable: false,
+  ),
+  'FA305': ErrorCatalogEntry(
+    code: 'FA305',
+    message: 'Este terminal foi revogado.',
+    action: 'Faça um novo cadastro do terminal.',
+    retryable: false,
+  ),
+  'FA306': ErrorCatalogEntry(
+    code: 'FA306',
+    message: 'Não foi possível confirmar a identidade do terminal.',
+    action: 'Reinicie o terminal. Se continuar, faça um novo cadastro.',
+    retryable: false,
+  ),
+  'FA307': ErrorCatalogEntry(
+    code: 'FA307',
+    message: 'Este terminal ainda não foi aprovado.',
+    action: 'Aguarde a aprovação na retaguarda.',
+    retryable: true,
+  ),
+  'FA308': ErrorCatalogEntry(
+    code: 'FA308',
+    message: 'A chave de segurança do aparelho é inválida.',
+    action: 'Reinicie o terminal e tente novamente.',
+    retryable: false,
+  ),
+  'FA310': ErrorCatalogEntry(
+    code: 'FA310',
+    message: 'Os dados do terminal são inválidos.',
+    action: 'Atualize o sistema e tente novamente.',
     retryable: false,
   ),
 };

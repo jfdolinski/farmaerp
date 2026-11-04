@@ -1,0 +1,167 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.card h2 {
+  font-size: 1.125rem;
+}
+
+.hint {
+  color: var(--muted);
+}
+
+.inline,
+.devUser {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.device {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 6px;
+  background: var(--subtle);
+}
+
+.codeInput {
+  width: 16ch;
+  font-size: 1.125rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.error {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-left: 4px solid var(--danger);
+  border-radius: 4px;
+  background: var(--danger-bg);
+}
+
+.error small {
+  color: var(--muted);
+}
+
+.success {
+  color: var(--success);
+}
+
+.warning {
+  color: var(--warning);
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.tableWrap table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tableWrap th,
+.tableWrap td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.tableWrap small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+}
+
+.tableWrap small.warning {
+  color: var(--warning);
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.active,
+.online {
+  color: var(--success);
+  background: var(--success-bg);
+}
+
+.pending {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+
+.blocked,
+.revoked {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.offline {
+  color: var(--muted);
+  background: var(--subtle);
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 220px;
+}
+
+.rowForm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.reason summary {
+  cursor: pointer;
+  color: var(--link);
+}
+
+.reason .rowForm {
+  margin-top: 8px;
+}
+
+button.danger {
+  border-color: var(--danger);
+  color: #ffffff;
+  background: var(--danger);
+}

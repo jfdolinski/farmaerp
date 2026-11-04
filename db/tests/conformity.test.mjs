@@ -6,7 +6,8 @@ afterAll(closePools);
 
 const EXPECTED_TABLES = [
   'branch', 'branch_group', 'company', 'economic_group',
-  'region', 'terminal', 'user_account', 'user_branch',
+  'region', 'terminal', 'terminal_event', 'terminal_pairing_request',
+  'terminal_status', 'user_account', 'user_branch',
 ];
 
 async function publicTables() {
@@ -35,6 +36,7 @@ describe('migrations', () => {
       '0003_row_level_security',
       '0004_active_views',
       '0005_error_codes_and_trace',
+      '0006_terminal_pairing',
     ]);
   });
 });
@@ -175,7 +177,9 @@ describe('papel da API', () => {
         FROM pg_class c
         JOIN pg_namespace n ON n.oid = c.relnamespace
        WHERE n.nspname = 'public' AND c.relkind = 'v'`);
-    expect(rows).toHaveLength(EXPECTED_TABLES.length);
+    expect(rows.map((view) => view.relname)).toEqual(
+      expect.arrayContaining(EXPECTED_TABLES.map((table) => `v_${table}`)),
+    );
     for (const view of rows) {
       expect(view.reloptions, view.relname).toContain('security_invoker=true');
     }

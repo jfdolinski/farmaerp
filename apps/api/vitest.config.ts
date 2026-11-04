@@ -8,5 +8,8 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['**/*.spec.ts'],
+    env: {
+      TERMINAL_TOKEN_SECRET: 'segredo-de-teste-com-mais-de-32-caracteres',
+    },
   },
 });

@@ -117,7 +117,7 @@ describe('exclusão', () => {
 
   it('bloqueia TRUNCATE mesmo para o dono das tabelas', async () => {
     await asOwner(async (client) => {
-      await expect(client.query('TRUNCATE terminal')).rejects.toSatisfy(hasCode('FA103'));
+      await expect(client.query('TRUNCATE user_branch')).rejects.toSatisfy(hasCode('FA103'));
     });
   });
 

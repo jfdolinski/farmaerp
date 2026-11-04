@@ -50,6 +50,11 @@ export function setUser(client, userId) {
   return client.query(`SELECT set_config('app.user_id', $1, true)`, [userId ?? '']);
 }
 
+/** Define o terminal autenticado da transação, como a API fará. */
+export function setTerminal(client, terminalId) {
+  return client.query(`SELECT set_config('app.terminal_id', $1, true)`, [terminalId ?? '']);
+}
+
 /** Define o ID de rastreio da transação, como a API fará. */
 export function setTrace(client, traceId) {
   return client.query(`SELECT set_config('app.trace_id', $1, true)`, [traceId ?? '']);

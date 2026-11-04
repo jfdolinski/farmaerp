@@ -12,6 +12,10 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   app.useLogger(app.get(AppLogger));
+  if (process.env.TRUST_PROXY === 'true') {
+    // Atrás do proxy do EasyPanel, o IP real do limite de tentativas vem do cabeçalho.
+    app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  }
   await app.listen(process.env.PORT ?? 3001);
 }
 await bootstrap();

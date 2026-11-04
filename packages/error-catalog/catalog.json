@@ -69,6 +69,18 @@
     "httpStatus": 409,
     "severity": "warning",
     "retryable": true,
+    "dbConstraints": [
+      "terminal_pairing_request_code_active_key",
+      "terminal_pairing_request_public_key_active_key",
+      "terminal_status_terminal_active_key"
+    ]
+  },
+  "FA009": {
+    "message": "Muitas tentativas em pouco tempo.",
+    "action": "Aguarde um minuto e tente novamente.",
+    "httpStatus": 429,
+    "severity": "warning",
+    "retryable": true,
     "dbConstraints": []
   },
   "FA101": {
@@ -125,8 +137,19 @@
       "region_id_uuid_v7_check",
       "terminal_id_uuid_v7_check",
       "user_account_id_uuid_v7_check",
-      "user_branch_id_uuid_v7_check"
+      "user_branch_id_uuid_v7_check",
+      "terminal_event_id_uuid_v7_check",
+      "terminal_pairing_request_id_uuid_v7_check",
+      "terminal_status_id_uuid_v7_check"
     ]
+  },
+  "FA107": {
+    "message": "Este histórico não pode ser alterado.",
+    "action": "Cancele a alteração e informe o suporte.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": []
   },
   "FA201": {
     "message": "O grupo econômico informado não está ativo.",
@@ -214,7 +237,9 @@
     "httpStatus": 422,
     "severity": "warning",
     "retryable": false,
-    "dbConstraints": ["branch_cnpj_check"]
+    "dbConstraints": [
+      "branch_cnpj_check"
+    ]
   },
   "FA212": {
     "message": "Já existe uma filial ativa com este CNPJ.",
@@ -222,7 +247,9 @@
     "httpStatus": 409,
     "severity": "warning",
     "retryable": false,
-    "dbConstraints": ["branch_cnpj_active_key"]
+    "dbConstraints": [
+      "branch_cnpj_active_key"
+    ]
   },
   "FA213": {
     "message": "Já existe uma empresa ativa com esta raiz de CNPJ.",
@@ -230,7 +257,9 @@
     "httpStatus": 409,
     "severity": "warning",
     "retryable": false,
-    "dbConstraints": ["company_cnpj_root_active_key"]
+    "dbConstraints": [
+      "company_cnpj_root_active_key"
+    ]
   },
   "FA214": {
     "message": "A raiz do CNPJ da empresa é inválida.",
@@ -238,7 +267,9 @@
     "httpStatus": 422,
     "severity": "warning",
     "retryable": false,
-    "dbConstraints": ["company_cnpj_root_check"]
+    "dbConstraints": [
+      "company_cnpj_root_check"
+    ]
   },
   "FA215": {
     "message": "Já existe um cadastro ativo com este nome.",
@@ -276,7 +307,9 @@
     "httpStatus": 422,
     "severity": "warning",
     "retryable": false,
-    "dbConstraints": ["terminal_approved_has_name_and_profile"]
+    "dbConstraints": [
+      "terminal_approved_has_name_and_profile"
+    ]
   },
   "FA218": {
     "message": "O perfil do terminal é inválido.",
@@ -284,7 +317,9 @@
     "httpStatus": 422,
     "severity": "warning",
     "retryable": false,
-    "dbConstraints": ["terminal_profile_check"]
+    "dbConstraints": [
+      "terminal_profile_check"
+    ]
   },
   "FA219": {
     "message": "A situação do terminal é inválida.",
@@ -292,7 +327,9 @@
     "httpStatus": 422,
     "severity": "error",
     "retryable": false,
-    "dbConstraints": ["terminal_status_check"]
+    "dbConstraints": [
+      "terminal_status_check"
+    ]
   },
   "FA220": {
     "message": "Este aparelho já está cadastrado como terminal.",
@@ -300,7 +337,9 @@
     "httpStatus": 409,
     "severity": "warning",
     "retryable": false,
-    "dbConstraints": ["terminal_public_key_active_key"]
+    "dbConstraints": [
+      "terminal_public_key_active_key"
+    ]
   },
   "FA221": {
     "message": "A chave de segurança do terminal é inválida.",
@@ -308,7 +347,9 @@
     "httpStatus": 422,
     "severity": "error",
     "retryable": false,
-    "dbConstraints": ["terminal_public_key_check"]
+    "dbConstraints": [
+      "terminal_public_key_check"
+    ]
   },
   "FA222": {
     "message": "O usuário já está vinculado a esta filial.",
@@ -316,6 +357,91 @@
     "httpStatus": 409,
     "severity": "warning",
     "retryable": false,
-    "dbConstraints": ["user_branch_active_key"]
+    "dbConstraints": [
+      "user_branch_active_key"
+    ]
+  },
+  "FA301": {
+    "message": "Código não encontrado ou expirado.",
+    "action": "Confira o código na tela do terminal. Se expirou, o terminal mostra um novo.",
+    "httpStatus": 404,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA302": {
+    "message": "Informe o motivo desta ação.",
+    "action": "Preencha o motivo e tente novamente.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA303": {
+    "message": "Esta mudança de situação não é permitida para o terminal.",
+    "action": "Atualize a tela para ver a situação atual.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA304": {
+    "message": "Este terminal está bloqueado.",
+    "action": "Procure o administrador da rede.",
+    "httpStatus": 403,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA305": {
+    "message": "Este terminal foi revogado.",
+    "action": "Faça um novo cadastro do terminal.",
+    "httpStatus": 403,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA306": {
+    "message": "Não foi possível confirmar a identidade do terminal.",
+    "action": "Reinicie o terminal. Se continuar, faça um novo cadastro.",
+    "httpStatus": 401,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA307": {
+    "message": "Este terminal ainda não foi aprovado.",
+    "action": "Aguarde a aprovação na retaguarda.",
+    "httpStatus": 403,
+    "severity": "warning",
+    "retryable": true,
+    "dbConstraints": []
+  },
+  "FA308": {
+    "message": "A chave de segurança do aparelho é inválida.",
+    "action": "Reinicie o terminal e tente novamente.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA310": {
+    "message": "Os dados do terminal são inválidos.",
+    "action": "Atualize o sistema e tente novamente.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": [
+      "terminal_event_event_type_check",
+      "terminal_pairing_request_app_version_check",
+      "terminal_pairing_request_claimed_has_terminal",
+      "terminal_pairing_request_code_check",
+      "terminal_pairing_request_device_name_check",
+      "terminal_pairing_request_key_storage_check",
+      "terminal_pairing_request_platform_check",
+      "terminal_pairing_request_public_key_check",
+      "terminal_pairing_request_status_check",
+      "terminal_status_outbox_pending_check"
+    ]
   }
 }

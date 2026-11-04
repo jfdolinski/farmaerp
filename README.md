@@ -35,7 +35,7 @@ npm run db:seed
 | `npm run db:reset` | Apaga o banco local e recria tudo do zero |
 | `npm run test:db` | Testa triggers, RLS e conformidade em um banco separado (`farmaerp_test`) |
 | `npm run test:api` | Testa a API |
-| `npm run test:integration` | Segue requisições reais da API até o banco (requer migrations e seed) |
+| `npm run test:integration` | Testa a API contra o banco real, em um banco próprio recriado a cada execução |
 | `npm run test:catalog` | Testa o catálogo de erros |
 | `npm run catalog:generate` | Gera o catálogo em Dart para o PDV depois de alterar o JSON |
 | `npm run test:outage` | Derruba o PostgreSQL local e confere se a API sobrevive (requer o build da API) |
@@ -94,3 +94,25 @@ A API responde sempre no formato `{ code, message, action, retryable, traceId }`
 
 - A API grava JSON na saída padrão. O PDV grava em `logs/`, na pasta de dados do app, com retenção de 14 dias e limite total de 50 MB.
 - Nunca registre corpo de requisição, query string, CPF, senha, PIN, token, certificado ou biometria. Campos com esses nomes são mascarados.
+
+## Terminais
+
+**Testar o pareamento em desenvolvimento**
+
+1. Suba o banco e a API: `npm run db:up`, `npm run db:migrate`, `npm run db:seed` e `npm run dev:api`.
+2. Suba a retaguarda: `npm run dev:web`, e abra http://localhost:3000/terminais.
+3. Em `apps/pdv`, rode `flutter run -d windows`. O endereço da API muda com `--dart-define=API_URL=...`.
+4. Digite na retaguarda o código mostrado no PDV, escolha a filial e aprove o terminal.
+
+**Identidade de desenvolvimento**
+
+Enquanto o login não existir, a retaguarda usa um seletor com os usuários do seed, e a API confia no cabeçalho `X-Dev-User-Id`. Por segurança, **a API não inicia com `NODE_ENV=production`** até esse modo ser substituído pelo login.
+
+**Autenticação do terminal**
+
+O aparelho guarda uma chave Ed25519, responde a um desafio assinado e recebe um token de 15 minutos. A situação do terminal é consultada a cada requisição, então um bloqueio vale no próximo contato, em até 60 segundos. Um terminal offline só descobre o bloqueio ao reconectar.
+
+**Variáveis de ambiente da API**
+
+- `TERMINAL_TOKEN_SECRET`: assina desafios e tokens, com ao menos 32 caracteres. Sem ela, a API não inicia.
+- `TRUST_PROXY=true`: usar atrás do proxy do EasyPanel, para o limite de tentativas ver o IP real.
