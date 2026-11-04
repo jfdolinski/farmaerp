@@ -1,0 +1,23 @@
+{
+  "name": "@farmaerp/error-catalog",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./catalog.json": "./catalog.json"
+  },
+  "scripts": {
+    "generate": "node scripts/generate-dart.mjs",
+    "check": "node scripts/generate-dart.mjs --check",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^5.1.0"
+  }
+}

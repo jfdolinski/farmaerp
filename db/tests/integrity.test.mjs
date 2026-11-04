@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  asOwner, branchCnpj, closePools, createFixtures, ownerPool, randomRoot, withCheckDigits,
+  asOwner, branchCnpj, closePools, createFixtures, hasCode, ownerPool, randomRoot, withCheckDigits,
 } from './helpers.mjs';
 
 let a;
@@ -68,7 +68,7 @@ describe('filial', () => {
     await asOwner(async (client) => {
       await expect(
         insertBranch(client, a.company.id, null, `${a.root}000100`),
-      ).rejects.toThrow(/branch_cnpj_check/);
+      ).rejects.toSatisfy(hasCode('FA211'));
     });
   });
 
@@ -76,7 +76,7 @@ describe('filial', () => {
     await asOwner(async (client) => {
       await expect(
         insertBranch(client, a.company.id, null, branchCnpj(b.root, 60)),
-      ).rejects.toThrow(/mesma raiz/);
+      ).rejects.toSatisfy(hasCode('FA203'));
     });
   });
 
@@ -84,7 +84,7 @@ describe('filial', () => {
     await asOwner(async (client) => {
       await expect(
         insertBranch(client, a.company.id, null, a.branch1.cnpj),
-      ).rejects.toThrow(/branch_cnpj_active_key/);
+      ).rejects.toSatisfy(hasCode('FA212'));
     });
   });
 
@@ -92,7 +92,7 @@ describe('filial', () => {
     await asOwner(async (client) => {
       await expect(
         insertBranch(client, a.company.id, b.region.id, branchCnpj(a.root, 61)),
-      ).rejects.toThrow(/mesmo grupo econômico/);
+      ).rejects.toSatisfy(hasCode('FA206'));
     });
   });
 
@@ -113,7 +113,7 @@ describe('filial', () => {
       );
       await expect(
         insertBranch(client, company.id, null, branchCnpj(root, 1)),
-      ).rejects.toThrow(/empresa informada não está ativa/);
+      ).rejects.toSatisfy(hasCode('FA204'));
     });
   });
 
@@ -125,7 +125,7 @@ describe('filial', () => {
       );
       await expect(
         insertBranch(client, a.company.id, region.id, branchCnpj(a.root, 63)),
-      ).rejects.toThrow(/região informada não está ativa/);
+      ).rejects.toSatisfy(hasCode('FA205'));
     });
   });
 });
@@ -149,7 +149,7 @@ describe('região', () => {
     await asOwner(async (client) => {
       await expect(
         client.query('UPDATE region SET branch_group_id = $1 WHERE id = $2', [b.branchGroup.id, a.region.id]),
-      ).rejects.toThrow(/mesmo grupo econômico/);
+      ).rejects.toSatisfy(hasCode('FA207'));
     });
   });
 });
@@ -159,7 +159,7 @@ describe('vínculo de usuário e filial', () => {
     await asOwner(async (client) => {
       await expect(
         client.query('INSERT INTO user_branch (user_id, branch_id) VALUES ($1, $2)', [a.noBranchUser.id, b.branch1.id]),
-      ).rejects.toThrow(/filiais do seu grupo econômico/);
+      ).rejects.toSatisfy(hasCode('FA210'));
     });
   });
 
@@ -167,7 +167,7 @@ describe('vínculo de usuário e filial', () => {
     await asOwner(async (client) => {
       await expect(
         client.query('INSERT INTO user_branch (user_id, branch_id) VALUES ($1, $2)', [a.oneBranchUser.id, a.branch1.id]),
-      ).rejects.toThrow(/user_branch_active_key/);
+      ).rejects.toSatisfy(hasCode('FA222'));
     });
   });
 });
@@ -186,7 +186,7 @@ describe('colunas imutáveis', () => {
       const [id, value] = values();
       await expect(
         client.query(`UPDATE ${table} SET ${column} = $2 WHERE id = $1`, [id, value]),
-      ).rejects.toThrow(/não pode ser alterado depois do cadastro/);
+      ).rejects.toSatisfy(hasCode('FA104'));
     });
   });
 });
@@ -201,7 +201,7 @@ describe('exclusão lógica com filhos ativos', () => {
     ['user_account', () => a.oneBranchUser.id],
   ])('%s é bloqueado', async (table, id) => {
     await asOwner(async (client) => {
-      await expect(softDelete(client, table, id())).rejects.toThrow(/itens ativos vinculados/);
+      await expect(softDelete(client, table, id())).rejects.toSatisfy(hasCode('FA105'));
     });
   });
 
@@ -237,7 +237,7 @@ describe('concorrência', () => {
 
       await deleter.query('BEGIN');
       await deleter.query(`SET LOCAL lock_timeout = '300ms'`);
-      await expect(softDelete(deleter, 'branch', a.branchFree.id)).rejects.toThrow(/lock timeout/);
+      await expect(softDelete(deleter, 'branch', a.branchFree.id)).rejects.toSatisfy(hasCode('FA008'));
     } finally {
       await writer.query('ROLLBACK');
       await deleter.query('ROLLBACK');
@@ -265,7 +265,7 @@ describe('terminal', () => {
           `INSERT INTO terminal (branch_id, public_key, status) VALUES ($1, 'chave-sem-nome', 'active')`,
           [a.branch1.id],
         ),
-      ).rejects.toThrow(/terminal_approved_has_name_and_profile/);
+      ).rejects.toSatisfy(hasCode('FA217'));
     });
   });
 
@@ -276,7 +276,7 @@ describe('terminal', () => {
           `INSERT INTO terminal (branch_id, public_key, profile) VALUES ($1, 'chave-perfil', 'gerente')`,
           [a.branch1.id],
         ),
-      ).rejects.toThrow(/terminal_profile_check/);
+      ).rejects.toSatisfy(hasCode('FA218'));
     });
   });
 
@@ -285,7 +285,7 @@ describe('terminal', () => {
       await softDelete(client, 'branch', a.branchFree.id);
       await expect(
         client.query(`INSERT INTO terminal (branch_id, public_key) VALUES ($1, 'chave-filial')`, [a.branchFree.id]),
-      ).rejects.toThrow(/filial informada não está ativa/);
+      ).rejects.toSatisfy(hasCode('FA208'));
     });
   });
 });

@@ -1,5 +1,8 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import pg from 'pg';
+import { currentContext } from './observability/request-context.js';
+
+export type DbClient = Pick<pg.PoolClient, 'query'>;
 
 @Injectable()
 export class DatabaseService implements OnModuleDestroy {
@@ -24,6 +27,45 @@ export class DatabaseService implements OnModuleDestroy {
 
   async ping(): Promise<void> {
     await this.pool.query('SELECT 1');
+  }
+
+  /**
+   * Executa uma transação com o usuário e o ID de rastreio da requisição.
+   * O contexto usa set_config local, que termina com a transação: é seguro com pool.
+   * Sem usuário autenticado, a RLS não libera nenhuma linha.
+   */
+  async withContext<T>(
+    fn: (client: DbClient) => Promise<T>,
+    options: { userId?: string } = {},
+  ): Promise<T> {
+    const context = currentContext();
+    const userId = options.userId ?? context?.userId ?? '';
+    const traceId = context?.traceId ?? '';
+
+    const client = await this.pool.connect();
+    let releaseError: Error | undefined;
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `SELECT set_config('app.user_id', $1, true),
+                set_config('app.trace_id', $2, true),
+                set_config('application_name', $3, true)`,
+        [userId, traceId, traceId ? `api:${traceId}` : 'api'],
+      );
+      const result = await fn(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        // Conexão quebrada não pode voltar para o pool.
+        releaseError = rollbackError as Error;
+      }
+      throw error;
+    } finally {
+      client.release(releaseError);
+    }
   }
 
   async onModuleDestroy(): Promise<void> {

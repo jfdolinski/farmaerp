@@ -15,18 +15,20 @@ Documento de referência obrigatório: docs/base.md. Siga-o em todas as decisõe
 - apps/api      → NestJS
 - apps/web      → Next.js
 - db/           → migrations, triggers, procedures, views (versionados)
+- packages/     → pacotes compartilhados (catálogo de erros)
 - docs/         → documentação do projeto
 
 ## Regras inegociáveis
 - Regras de negócio e conformidade ficam no banco (triggers, procedures, views), não na aplicação.
 - Chave primária UUID v7 em todas as tabelas; uuid no Postgre, blob 16 bytes no SQLite.
-- Toda tabela tem: created_at, updated_at, deleted_at (exclusão lógica), version, updated_by.
+- Toda tabela tem: created_at, updated_at, deleted_at (exclusão lógica), version, updated_by, trace_id.
 - Nunca apagar registros fisicamente.
 - Multifilial: grupo econômico > empresa (CNPJ) > filial > terminal; Row Level Security por filiais permitidas.
 - Estoque só muda via movimentações imutáveis; saldo atualizado por trigger.
 - Sincronização PDV → central sempre via outbox, idempotente pelo UUID.
 - Views comuns para consultas; views materializadas para relatórios pesados.
 - Usabilidade é prioridade: mensagens claras ao operador, detalhe técnico só no log.
+- Todo erro mostrado ao operador tem código em packages/error-catalog; o log nunca recebe dados pessoais.
 
 ## Publicação (produção)
 - Parte online (PostgreSQL, API NestJS, retaguarda Next.js) roda numa VPS Hostinger com Ubuntu, gerenciada pelo EasyPanel.

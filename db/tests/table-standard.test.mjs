@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { asOwner, asUser, closePools, createFixtures, uuidV4 } from './helpers.mjs';
+import {
+  asOwner, asUser, closePools, createFixtures, hasCode, uuidV4,
+} from './helpers.mjs';
 
 let a;
 
@@ -35,7 +37,7 @@ describe('UUID v7', () => {
     await asOwner(async (client) => {
       await expect(
         client.query('INSERT INTO economic_group (id, name) VALUES ($1, $2)', [uuidV4(), 'Grupo inválido']),
-      ).rejects.toThrow(/economic_group_id_uuid_v7_check/);
+      ).rejects.toSatisfy(hasCode('FA106'));
     });
   });
 });
@@ -86,7 +88,7 @@ describe('auditoria e versão', () => {
           `UPDATE economic_group SET id = '019a0000-0000-7000-8000-0000000000fe' WHERE id = $1`,
           [created.id],
         ),
-      ).rejects.toThrow(/identificador alterado/);
+      ).rejects.toSatisfy(hasCode('FA101'));
     });
   });
 
@@ -95,7 +97,7 @@ describe('auditoria e versão', () => {
       const { rows: [created] } = await insertGroup(client);
       await expect(
         client.query(`UPDATE economic_group SET created_at = '2000-01-01' WHERE id = $1`, [created.id]),
-      ).rejects.toThrow(/data de criação/);
+      ).rejects.toSatisfy(hasCode('FA102'));
     });
   });
 
@@ -109,19 +111,19 @@ describe('auditoria e versão', () => {
 describe('exclusão', () => {
   it('bloqueia DELETE mesmo para o dono das tabelas', async () => {
     await asOwner(async (client) => {
-      await expect(client.query('DELETE FROM terminal')).rejects.toThrow(/não podem ser apagados/);
+      await expect(client.query('DELETE FROM terminal')).rejects.toSatisfy(hasCode('FA103'));
     });
   });
 
   it('bloqueia TRUNCATE mesmo para o dono das tabelas', async () => {
     await asOwner(async (client) => {
-      await expect(client.query('TRUNCATE terminal')).rejects.toThrow(/não podem ser apagados/);
+      await expect(client.query('TRUNCATE terminal')).rejects.toSatisfy(hasCode('FA103'));
     });
   });
 
   it('nega DELETE para a API', async () => {
     await asUser(a.admin.id, async (client) => {
-      await expect(client.query('DELETE FROM terminal')).rejects.toThrow(/permission denied/);
+      await expect(client.query('DELETE FROM terminal')).rejects.toSatisfy(hasCode('FA002'));
     });
   });
 
@@ -154,7 +156,7 @@ describe('exclusão', () => {
           `INSERT INTO terminal (branch_id, public_key) VALUES ($1, $2)`,
           [a.branch1.id, a.terminal1.public_key],
         ),
-      ).rejects.toThrow(/terminal_public_key_active_key/);
+      ).rejects.toSatisfy(hasCode('FA220'));
     });
   });
 });

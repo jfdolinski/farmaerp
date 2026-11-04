@@ -4,6 +4,8 @@ services:
   postgres:
     image: postgres:18.6
     restart: unless-stopped
+    # application_name traz o ID de rastreio da API para os logs do Postgres.
+    command: ["postgres", "-c", "log_line_prefix=%m [%p] app=%a "]
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Copie .env.example para .env}
