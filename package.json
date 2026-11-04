@@ -1,0 +1,25 @@
+{
+  "name": "farmaerp",
+  "private": true,
+  "workspaces": [
+    "apps/api",
+    "apps/web",
+    "db"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:migrate": "npm run migrate -w db",
+    "db:seed": "npm run seed -w db",
+    "db:reset": "docker compose down -v && docker compose up -d --wait && npm run db:migrate && npm run db:seed",
+    "test:db": "npm test -w db",
+    "test:api": "npm test -w apps/api && npm run test:e2e -w apps/api",
+    "build:api": "npm run build -w apps/api",
+    "build:web": "npm run build -w apps/web",
+    "dev:api": "npm run start:dev -w apps/api",
+    "dev:web": "npm run dev -w apps/web"
+  }
+}
