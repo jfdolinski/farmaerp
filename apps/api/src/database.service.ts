@@ -40,6 +40,7 @@ export class DatabaseService implements OnModuleDestroy {
   ): Promise<T> {
     const context = currentContext();
     const userId = options.userId ?? context?.userId ?? '';
+    const terminalId = context?.terminalId ?? '';
     const traceId = context?.traceId ?? '';
 
     const client = await this.pool.connect();
@@ -49,8 +50,9 @@ export class DatabaseService implements OnModuleDestroy {
       await client.query(
         `SELECT set_config('app.user_id', $1, true),
                 set_config('app.trace_id', $2, true),
-                set_config('application_name', $3, true)`,
-        [userId, traceId, traceId ? `api:${traceId}` : 'api'],
+                set_config('app.terminal_id', $3, true),
+                set_config('application_name', $4, true)`,
+        [userId, traceId, terminalId, traceId ? `api:${traceId}` : 'api'],
       );
       const result = await fn(client);
       await client.query('COMMIT');

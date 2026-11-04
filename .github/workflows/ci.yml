@@ -35,6 +35,7 @@ jobs:
           npm run db:seed
           npm run db:seed
       - run: npm run test:db
+      # Usa um banco próprio, recriado a cada execução.
       - run: npm run test:integration
       - name: API com queda real do banco
         run: |

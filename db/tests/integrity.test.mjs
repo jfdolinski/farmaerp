@@ -65,9 +65,12 @@ describe('filial', () => {
   });
 
   it('rejeita CNPJ inválido', async () => {
+    // Muda o último dígito de um CNPJ válido: nunca coincide com o dígito certo.
+    const valid = branchCnpj(a.root, 70);
+    const invalid = `${valid.slice(0, -1)}${(Number(valid.at(-1)) + 1) % 10}`;
     await asOwner(async (client) => {
       await expect(
-        insertBranch(client, a.company.id, null, `${a.root}000100`),
+        insertBranch(client, a.company.id, null, invalid),
       ).rejects.toSatisfy(hasCode('FA211'));
     });
   });

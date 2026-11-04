@@ -1,8 +1,5 @@
+import { redirect } from "next/navigation";
+
 export default function Home() {
-  return (
-    <main>
-      <h1>FarmaERP</h1>
-      <p>Retaguarda em construção.</p>
-    </main>
-  );
+  redirect("/terminais");
 }
