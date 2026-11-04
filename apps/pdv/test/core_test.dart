@@ -3,11 +3,34 @@ import 'dart:io';
 
 import 'package:farmaerp_pdv/core/error_catalog.g.dart';
 import 'package:farmaerp_pdv/core/error_display.dart';
+import 'package:farmaerp_pdv/core/human_code.dart';
 import 'package:farmaerp_pdv/core/local_logger.dart';
 import 'package:farmaerp_pdv/core/trace_id.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('formatSaleCode', () {
+    test('combina o número do terminal com o contador', () {
+      expect(formatSaleCode(terminalNumber: 2, counter: 123), '2-000123');
+      expect(formatSaleCode(terminalNumber: 999, counter: 1), '999-000001');
+    });
+
+    test('não corta um contador maior que seis dígitos', () {
+      expect(formatSaleCode(terminalNumber: 1, counter: 1234567), '1-1234567');
+    });
+
+    test('rejeita valores abaixo de 1', () {
+      expect(
+        () => formatSaleCode(terminalNumber: 0, counter: 1),
+        throwsArgumentError,
+      );
+      expect(
+        () => formatSaleCode(terminalNumber: 1, counter: 0),
+        throwsArgumentError,
+      );
+    });
+  });
+
   group('newTraceId', () {
     test('gera UUID v7 ordenado por tempo', () async {
       final first = newTraceId();

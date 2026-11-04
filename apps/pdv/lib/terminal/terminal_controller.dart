@@ -28,6 +28,7 @@ enum TerminalPhase {
 const _requestIdKey = 'terminal_pairing_request_id';
 const _terminalIdKey = 'terminal_id';
 const _lastStatusKey = 'terminal_last_status';
+const _terminalNumberKey = 'terminal_number';
 
 const _pairingMessagePrefix = 'farmaerp-terminal-pairing:';
 const _challengeMessagePrefix = 'farmaerp-terminal-auth:';
@@ -68,6 +69,11 @@ class TerminalController extends ChangeNotifier {
       ? null
       : '${_code!.substring(0, 4)}-${_code!.substring(4)}';
 
+  int? _terminalNumber;
+
+  /// Número do terminal na filial, usado no código das vendas. Fica guardado para uso offline.
+  int? get terminalNumber => _terminalNumber;
+
   bool _online = true;
   bool get online => _online;
 
@@ -98,6 +104,8 @@ class TerminalController extends ChangeNotifier {
     await store.delete(_requestIdKey);
     await store.delete(_terminalIdKey);
     await store.delete(_lastStatusKey);
+    await store.delete(_terminalNumberKey);
+    _terminalNumber = null;
     _identity = null;
     _requestId = null;
     _terminalId = null;
@@ -150,6 +158,7 @@ class TerminalController extends ChangeNotifier {
     _identity = await TerminalIdentity.loadOrCreate(store);
     _requestId = await store.read(_requestIdKey);
     _terminalId = await store.read(_terminalIdKey);
+    _terminalNumber = int.tryParse(await store.read(_terminalNumberKey) ?? '');
 
     if (_terminalId == null) {
       await _step();
@@ -259,7 +268,14 @@ class TerminalController extends ChangeNotifier {
 
   Future<void> _sendHeartbeat() async {
     final token = await _validToken();
-    await api.heartbeat(accessToken: token.value, appVersion: appVersion);
+    final number = await api.heartbeat(
+      accessToken: token.value,
+      appVersion: appVersion,
+    );
+    if (number != null && number != _terminalNumber) {
+      _terminalNumber = number;
+      await store.write(_terminalNumberKey, number.toString());
+    }
     if (_phase != TerminalPhase.ready) {
       logger?.info('Terminal liberado');
     }

@@ -34,6 +34,7 @@ class FakeApi implements TerminalApi {
   Object? failure;
   Object? heartbeatFailure;
   int heartbeats = 0;
+  int? terminalNumber = 2;
   int logins = 0;
   int creations = 0;
   String? lastKeyStorage;
@@ -90,13 +91,14 @@ class FakeApi implements TerminalApi {
   }
 
   @override
-  Future<void> heartbeat({
+  Future<int?> heartbeat({
     required String accessToken,
     required String appVersion,
   }) async {
     _maybeFail();
     if (heartbeatFailure != null) throw heartbeatFailure!;
     heartbeats += 1;
+    return terminalNumber;
   }
 }
 
@@ -297,6 +299,29 @@ void main() {
       api.tokenExpiresAt = DateTime(2030);
       await controller.tick();
       expect(api.logins, 2);
+    });
+
+    test('recebe e guarda o número do terminal', () async {
+      final controller = await ready();
+      expect(controller.terminalNumber, 2);
+
+      api.failure = const ApiException('FA001');
+      final reopened = newController();
+      addTearDown(reopened.dispose);
+      await reopened.start();
+      expect(reopened.terminalNumber, 2);
+    });
+
+    test('novo cadastro esquece o número antigo', () async {
+      final controller = await ready();
+      api.heartbeatFailure = const ApiException('FA305');
+      await controller.tick();
+
+      api
+        ..heartbeatFailure = null
+        ..pairingState = 'waiting';
+      await controller.startNewPairing();
+      expect(controller.terminalNumber, isNull);
     });
 
     test('bloqueio muda a tela na hora', () async {
@@ -515,6 +540,16 @@ void main() {
 
       expect(find.text('K7M2-XQ9P'), findsOneWidget);
       expect(find.text('Cadastre este terminal'), findsOneWidget);
+    });
+
+    testWidgets('mostra o número do terminal aprovado', (tester) async {
+      await tester.runAsync(() async {
+        final controller = await ready();
+        await pump(tester, controller);
+      });
+      await tester.pump();
+
+      expect(find.text('Terminal número 2'), findsOneWidget);
     });
 
     testWidgets('mostra o bloqueio com a referência', (tester) async {

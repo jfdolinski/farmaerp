@@ -65,7 +65,8 @@ abstract class TerminalApi {
     required String signature,
   });
 
-  Future<void> heartbeat({
+  /// Retorna o número do terminal, usado no código das vendas.
+  Future<int?> heartbeat({
     required String accessToken,
     required String appVersion,
   });
@@ -196,12 +197,13 @@ class HttpTerminalApi implements TerminalApi {
   }
 
   @override
-  Future<void> heartbeat({
+  Future<int?> heartbeat({
     required String accessToken,
     required String appVersion,
   }) async {
-    await _post('/terminals/heartbeat', {
+    final json = await _post('/terminals/heartbeat', {
       'appVersion': appVersion,
     }, accessToken: accessToken);
+    return json['terminalNumber'] as int?;
   }
 }

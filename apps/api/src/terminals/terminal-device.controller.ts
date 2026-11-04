@@ -121,13 +121,16 @@ export class TerminalDeviceController {
   @UseGuards(TerminalGuard)
   async heartbeat(@RequestBody() rawBody: unknown) {
     const body = asBody(rawBody);
-    await this.database.withContext(async (client) => {
+    return this.database.withContext(async (client) => {
       await client.query('SELECT app.record_terminal_heartbeat($1, $2, $3)', [
         optionalText(body, 'appVersion', 50),
         optionalInstant(body, 'lastSyncAt'),
         optionalCount(body, 'outboxPending'),
       ]);
+      const { rows } = await client.query<{
+        info: { number: number | null } | null;
+      }>('SELECT app.terminal_auth_info(app.current_terminal_id()) AS info');
+      return { status: 'active', terminalNumber: rows[0].info?.number ?? null };
     });
-    return { status: 'active' };
   }
 }
