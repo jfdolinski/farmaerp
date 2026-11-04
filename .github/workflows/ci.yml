@@ -1,0 +1,123 @@
+name: CI
+
+# Roda em todas as branches do repositório, o que cobre também os pull requests.
+on:
+  push:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  db:
+    name: Banco de dados
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      # Valores só de desenvolvimento: o CI não usa segredos.
+      - run: cp .env.example .env
+      - run: npm run db:up
+      - run: npm run db:migrate
+      - name: Seed (a segunda execução não pode falhar)
+        run: |
+          npm run db:seed
+          npm run db:seed
+      - run: npm run test:db
+      - name: API com queda real do banco
+        run: |
+          npm run build:api
+          npm run test:outage
+      - name: Logs do Postgres
+        if: failure()
+        run: docker compose logs postgres
+
+  api:
+    name: API
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run lint -w apps/api
+      - run: npm run test:api
+      - run: npm run build:api
+
+  web:
+    name: Retaguarda
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run lint -w apps/web
+      - run: npm run build:web
+
+  pdv:
+    name: PDV
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/pdv
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: subosito/flutter-action@v2.23.0
+        with:
+          flutter-version: 3.47.9
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+
+  audit:
+    name: Vulnerabilidades
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      # Bloqueia só gravidade alta ou crítica em dependências de produção.
+      - run: npm audit --omit=dev --audit-level=high
+
+  # Verificação única para liberar merge e, no futuro, deploy.
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [db, api, web, pdv, audit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Confere o resultado de todos os jobs
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Resultados: $RESULTS"
+          for result in $RESULTS; do
+            if [ "$result" != "success" ]; then
+              echo "::error::O CI não passou: pelo menos um job terminou como '$result'."
+              exit 1
+            fi
+          done

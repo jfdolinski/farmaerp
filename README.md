@@ -34,6 +34,7 @@ npm run db:seed
 | `npm run db:reset` | Apaga o banco local e recria tudo do zero |
 | `npm run test:db` | Testa triggers, RLS e conformidade em um banco separado (`farmaerp_test`) |
 | `npm run test:api` | Testa a API |
+| `npm run test:outage` | Derruba o PostgreSQL local e confere se a API sobrevive (requer o build da API) |
 | `npm run dev:api` | Sobe a API em http://localhost:3001 (`GET /health`) |
 | `npm run dev:web` | Sobe a retaguarda em http://localhost:3000 |
 

@@ -17,6 +17,7 @@
     "db:reset": "docker compose down -v && docker compose up -d --wait && npm run db:migrate && npm run db:seed",
     "test:db": "npm test -w db",
     "test:api": "npm test -w apps/api && npm run test:e2e -w apps/api",
+    "test:outage": "npm run test:outage -w apps/api",
     "build:api": "npm run build -w apps/api",
     "build:web": "npm run build -w apps/web",
     "dev:api": "npm run start:dev -w apps/api",
