@@ -109,4 +109,18 @@ INSERT INTO product_barcode (id, economic_group_id, product_id, code, is_primary
    '019a0000-0000-7000-8000-000000000027', '7890000000024', false)
 ON CONFLICT (id) DO NOTHING;
 
+-- Não sobrescreve o estado de quem já informou.
+UPDATE branch SET state = 'SP'
+ WHERE id IN ('019a0000-0000-7000-8000-000000000005', '019a0000-0000-7000-8000-000000000006') AND state IS NULL;
+
+INSERT INTO product_price (id, economic_group_id, product_id, branch_id, price, reason) VALUES
+  ('019a0000-0000-7000-8000-00000000002a', '019a0000-0000-7000-8000-000000000001',
+   '019a0000-0000-7000-8000-000000000027', NULL, 12.90, 'Preço de demonstração')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO product_pmc (id, economic_group_id, product_id, state, value) VALUES
+  ('019a0000-0000-7000-8000-00000000002b', '019a0000-0000-7000-8000-000000000001',
+   '019a0000-0000-7000-8000-000000000027', 'SP', 15.00)
+ON CONFLICT (id) DO NOTHING;
+
 COMMIT;

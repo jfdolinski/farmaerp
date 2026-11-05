@@ -5,6 +5,17 @@ import { apiFetch, can, redirectIfNeeded, requireUser } from "@/lib/api";
 import { AppHeader } from "../../app-header";
 import { ErrorNotice } from "../../error-notice";
 import { CatalogResults, CatalogRow, controlledLabel } from "../catalog-results";
+import { moneyText, regionLabel, statusLabel } from "../commercial-format";
+import {
+  AddPmcForm,
+  BranchRow,
+  PmcRow,
+  PriceEvent,
+  PriceForms,
+  ReactivateForm,
+  StatusEvent,
+  StatusForm,
+} from "../commercial-ui";
 import {
   AddBarcodeForm,
   BarcodeCard,
@@ -29,7 +40,18 @@ interface ProductDetail extends ProductValues {
   ncm: string | null;
   cest: string | null;
   barcodes: BarcodeRow[];
+  grid: BranchRow[];
+  pmc: PmcRow[];
+  prices: PriceEvent[];
+  status_events: StatusEvent[];
 }
+
+const dateText = (value: string) =>
+  new Date(value).toLocaleString("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "America/Sao_Paulo",
+  });
 
 type Params = Promise<{ id: string }>;
 type SearchParams = Promise<{ catalogo?: string | string[]; vincular?: string | string[] }>;
@@ -63,6 +85,7 @@ async function ProductContent({
   const path = `/produtos/${id}`;
   const user = await requireUser(path);
   const canManage = can(user, "products.manage");
+  const canPrice = can(user, "products.price");
 
   if (!can(user, "products.view") && !canManage) {
     return (
@@ -180,6 +203,142 @@ async function ProductContent({
           canManage={canManage}
           linkingTo={linking?.id}
         />
+      </section>
+
+      <section className={styles.card}>
+        <h2>Preços e status por filial</h2>
+        {product.grid.some((row) => row.above_pmc) && (
+          <p className={styles.warning} role="status">
+            Há filial com preço acima do PMC. Revise os preços abaixo.
+          </p>
+        )}
+        {product.uses_pmc && product.grid.some((row) => !row.state) && (
+          <p className={styles.warning} role="status">
+            Há filial sem estado informado. Sem ele, o preço não pode ser salvo neste produto.{" "}
+            <Link href="/produtos/estrutura">Informar em Estrutura</Link>.
+          </p>
+        )}
+        {can(user, "products.status") ? (
+          <StatusForm productId={product.id} grid={product.grid} />
+        ) : (
+          <div className={styles.tableWrap}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Filial</th>
+                  <th>Status</th>
+                  <th>Preço em vigor</th>
+                  <th>PMC</th>
+                </tr>
+              </thead>
+              <tbody>
+                {product.grid.map((row) => (
+                  <tr key={row.branch_id}>
+                    <td>{row.branch_name}</td>
+                    <td>{statusLabel(row.status)}</td>
+                    <td>
+                      {moneyText(row.effective_price)}
+                      {row.above_pmc && <small className={styles.warning}>Acima do PMC</small>}
+                    </td>
+                    <td>{moneyText(row.pmc)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {can(user, "products.reactivate") && product.grid.some((row) => row.status === "inactive") && (
+          <ReactivateForm productId={product.id} grid={product.grid} />
+        )}
+        {canPrice && <PriceForms productId={product.id} grid={product.grid} />}
+        <details className={styles.reason}>
+          <summary>Histórico de preços</summary>
+          <div className={styles.tableWrap}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Quando</th>
+                  <th>Onde</th>
+                  <th>Preço</th>
+                  <th>Motivo</th>
+                  <th>Quem</th>
+                </tr>
+              </thead>
+              <tbody>
+                {product.prices.map((event, index) => (
+                  <tr key={index}>
+                    <td>{dateText(event.created_at)}</td>
+                    <td>{event.branch_id ? event.branch_name : "Rede"}</td>
+                    <td>{event.price === null ? "Exceção encerrada" : moneyText(event.price)}</td>
+                    <td>{event.reason}</td>
+                    <td>{event.author}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+        <details className={styles.reason}>
+          <summary>Histórico de status</summary>
+          <div className={styles.tableWrap}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Quando</th>
+                  <th>Filial</th>
+                  <th>Mudança</th>
+                  <th>Motivo</th>
+                  <th>Quem</th>
+                </tr>
+              </thead>
+              <tbody>
+                {product.status_events.map((event, index) => (
+                  <tr key={index}>
+                    <td>{dateText(event.created_at)}</td>
+                    <td>{event.branch_name}</td>
+                    <td>
+                      {statusLabel(event.old_status)} → {statusLabel(event.new_status)}
+                    </td>
+                    <td>{event.reason}</td>
+                    <td>{event.author}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </section>
+
+      <section className={styles.card}>
+        <h2>PMC</h2>
+        {product.pmc.length === 0 && <p className={styles.hint}>Nenhum PMC informado.</p>}
+        {product.pmc.length > 0 && (
+          <div className={styles.tableWrap}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Estado</th>
+                  <th>Região</th>
+                  <th>Valor</th>
+                  <th>Origem</th>
+                  <th>Quando</th>
+                </tr>
+              </thead>
+              <tbody>
+                {product.pmc.map((row, index) => (
+                  <tr key={index}>
+                    <td>{row.state}</td>
+                    <td>{regionLabel(row.pmc_region)}</td>
+                    <td>{moneyText(row.value)}</td>
+                    <td>{row.source === "catalog" ? "Catálogo" : row.source === "invoice" ? "Nota" : row.author ? `Digitado por ${row.author}` : "Digitado"}</td>
+                    <td>{dateText(row.created_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {canPrice && <AddPmcForm productId={product.id} />}
       </section>
 
       <section className={styles.card}>

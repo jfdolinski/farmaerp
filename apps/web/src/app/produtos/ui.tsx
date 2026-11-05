@@ -73,7 +73,7 @@ export interface BarcodeRow {
  * O React limpa o formulário ao terminar uma action, e um erro faria a pessoa perder o que digitou.
  * Enviar pelo onSubmit evita isso. O botão clicado continua indo junto, para saber a intenção.
  */
-const keepValues =
+export const keepValues =
   (action: (data: FormData) => void) => (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const submitter = (event.nativeEvent as SubmitEvent).submitter;

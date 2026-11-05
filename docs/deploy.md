@@ -151,6 +151,10 @@ Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda.
 
 Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda. A migration ativa as extensões `pg_trgm` e `unaccent`, que já vêm na imagem oficial do PostgreSQL, e o Gerente passa a ver produtos. Em homologação, o seed cria um Catálogo fictício.
 
+## Atualizar para preço, PMC e status por filial
+
+Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda. Toda filial e produto recebem uma linha de status ativa. Depois, informe o estado de cada filial em **Produtos > Estrutura**: sem ele, produto com a flag PMC não aceita preço.
+
 ## Antes de publicar a produção
 
 A produção usa os mesmos passos, em um projeto próprio e com segredos próprios, mas depende destes itens:
