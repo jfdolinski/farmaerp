@@ -159,6 +159,10 @@ Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda.
 
 Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda. Em homologação, o seed cria regras fictícias. Em produção não nasce nenhuma regra, porque os percentuais são decisão de cada rede.
 
+## Atualizar para o estoque
+
+Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda. O Gerente passa a ver o estoque e a registrar perdas. Em homologação, o seed cria um saldo fictício.
+
 ## Antes de publicar a produção
 
 A produção usa os mesmos passos, em um projeto próprio e com segredos próprios, mas depende destes itens:

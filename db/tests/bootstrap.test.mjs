@@ -232,4 +232,44 @@ describe('seed sobre dados existentes', () => {
     );
     expect(rows[0].total).toBe(1);
   });
+
+  // Em homologação o seed roda a cada deploy, depois de as pessoas mexerem nos dados pela tela.
+  // Trigger de validação roda antes do ON CONFLICT: sem a conferência, a API não subiria.
+  it('não quebra depois de mudarem os dados de demonstração pela tela', async () => {
+    const CENTRO = '019a0000-0000-7000-8000-000000000005';
+    const SUL = '019a0000-0000-7000-8000-000000000006';
+    const PRODUCT = '019a0000-0000-7000-8000-000000000027';
+    await withClient(owner(), async (client) => {
+      // Controle de lote invertido nas duas lojas.
+      await client.query(
+        `UPDATE product_branch_status SET tracks_batches = (branch_id = $1) WHERE product_id = $2`,
+        [SUL, PRODUCT],
+      );
+      // Regras encerradas e estrutura de demonstração excluída.
+      await client.query(`UPDATE product_rule SET deleted_at = now() WHERE deleted_at IS NULL`);
+      await client.query(`UPDATE product SET category_id = NULL WHERE id = $1`, [PRODUCT]);
+      await client.query(
+        `UPDATE product_category SET deleted_at = now() WHERE level = 3 AND deleted_at IS NULL`,
+      );
+      await client.query(
+        `UPDATE product_category SET deleted_at = now() WHERE level = 2 AND deleted_at IS NULL`,
+      );
+      await client.query(
+        `UPDATE product_category SET deleted_at = now() WHERE level = 1 AND deleted_at IS NULL`,
+      );
+    });
+
+    await expect(runSeed(owner(), 'homologation')).resolves.toBeUndefined();
+
+    const { rows } = await withClient(owner(), (client) =>
+      client.query(
+        `SELECT
+           (SELECT count(*)::int FROM product_category WHERE deleted_at IS NULL) AS categories,
+           (SELECT count(*)::int FROM product_rule WHERE deleted_at IS NULL) AS rules,
+           (SELECT sum(quantity)::int FROM stock_balance WHERE branch_id IN ($1, $2)) AS stock`,
+        [CENTRO, SUL],
+      ),
+    );
+    expect(rows[0]).toEqual({ categories: 0, rules: 0, stock: 70 });
+  });
 });

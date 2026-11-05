@@ -216,3 +216,12 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 1. Acrescente a linha em `rule_type` por uma migration nova, com unidade e faixa válida.
 2. Chame `app.resolve_product_rule` com o código do tipo no módulo que usa a regra.
 3. Acrescente aos testes de `db/tests/product-rules.test.mjs`.
+
+## Estoque
+
+- **Fonte da verdade:** a tabela `stock_movement`, que nunca é alterada. Correção é uma movimentação contrária, com `reversal_of` apontando para a original.
+- **Saldo:** `stock_balance`, por filial, produto e lote, mantido só pelo trigger. `app.stock_balance_divergences()` compara o saldo com a soma das movimentações, e qualquer linha ali é defeito.
+- **Saldo negativo:** só por venda, porque o PDV pode vender offline. As demais saídas são recusadas se faltar saldo.
+- **Lote:** cadastro próprio por filial e produto. O controle é ligado por filial e produto, e em controlado é sempre obrigatório. Ligar ou desligar exige o saldo do outro modo zerado.
+- **MS do lote:** herda o do Catálogo. Pode ser editado, com histórico, e `ms_original` guarda o primeiro valor.
+- **Seed:** em tabela com trigger de validação, confira com `NOT EXISTS` antes de incluir. O trigger roda antes do `ON CONFLICT`, e o seed roda a cada deploy de homologação.

@@ -11,6 +11,7 @@ import { AllExceptionsFilter } from './observability/all-exceptions.filter.js';
 import { AppLogger, createPinoLogger } from './observability/app-logger.js';
 import { ProductsController } from './products/products.controller.js';
 import { RulesController } from './products/rules.controller.js';
+import { StockController } from './products/stock.controller.js';
 import { TraceMiddleware } from './observability/trace.middleware.js';
 import { TerminalAdminController } from './terminals/terminal-admin.controller.js';
 import { TerminalDeviceController } from './terminals/terminal-device.controller.js';
@@ -28,6 +29,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     RolesController,
     ProductsController,
     RulesController,
+    StockController,
     TerminalDeviceController,
     TerminalAdminController,
   ],

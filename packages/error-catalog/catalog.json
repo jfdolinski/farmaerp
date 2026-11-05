@@ -85,7 +85,8 @@
       "catalog_product_source_key_active_key",
       "catalog_product_barcode_code_active_key",
       "product_branch_status_active_key",
-      "rule_type_code_active_key"
+      "rule_type_code_active_key",
+      "stock_balance_active_key"
     ]
   },
   "FA009": {
@@ -185,7 +186,11 @@
       "product_branch_status_id_uuid_v7_check",
       "product_status_event_id_uuid_v7_check",
       "rule_type_id_uuid_v7_check",
-      "product_rule_id_uuid_v7_check"
+      "product_rule_id_uuid_v7_check",
+      "product_batch_id_uuid_v7_check",
+      "product_batch_event_id_uuid_v7_check",
+      "stock_movement_id_uuid_v7_check",
+      "stock_balance_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -440,7 +445,8 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": [
-      "product_status_event_reason_check"
+      "product_status_event_reason_check",
+      "product_batch_event_reason_check"
     ]
   },
   "FA303": {
@@ -911,6 +917,113 @@
       "rule_type_name_check",
       "rule_type_unit_check",
       "rule_type_range_check"
+    ]
+  },
+  "FA801": {
+    "message": "A quantidade é maior que o saldo disponível.",
+    "action": "Confira o saldo e a quantidade informada.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA802": {
+    "message": "Este produto exige lote nesta filial.",
+    "action": "Informe o número do lote.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA803": {
+    "message": "Este produto não controla lote nesta filial.",
+    "action": "Deixe o lote em branco ou ligue o controle de lote no produto.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA804": {
+    "message": "Este lote já existe com outra validade ou outro MS.",
+    "action": "Confira os dados ou corrija o lote antes de continuar.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA805": {
+    "message": "Já existe um lote com este número.",
+    "action": "Confira o número informado.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "product_batch_number_active_key"
+    ]
+  },
+  "FA806": {
+    "message": "Os dados do lote são inválidos.",
+    "action": "Confira o número, a validade e o MS do lote.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "product_batch_number_check",
+      "product_batch_ms_check",
+      "product_batch_ms_original_check"
+    ]
+  },
+  "FA807": {
+    "message": "Produto controlado sempre exige lote.",
+    "action": "Mantenha o controle de lote ligado neste produto.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA808": {
+    "message": "Lote não encontrado neste produto e filial.",
+    "action": "Confira o número do lote e a filial.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA809": {
+    "message": "O controle de lote só muda com o saldo zerado.",
+    "action": "Zere o saldo que está no outro modo e tente novamente.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA810": {
+    "message": "Os dados da movimentação são inválidos.",
+    "action": "Confira a quantidade e tente novamente.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "stock_movement_type_check",
+      "stock_movement_quantity_check"
+    ]
+  },
+  "FA811": {
+    "message": "Esta movimentação não pode ser estornada.",
+    "action": "Só ajuste, perda e inventário são estornados por aqui.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA812": {
+    "message": "Esta movimentação já foi estornada.",
+    "action": "Atualize a tela para ver as movimentações atuais.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "stock_movement_reversal_active_key"
     ]
   }
 }
