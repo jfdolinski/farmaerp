@@ -11,6 +11,9 @@ export function AppHeader({ user }: { user: CurrentUser }) {
         {(can(user, "products.view") || can(user, "products.manage")) && (
           <Link href="/produtos">Produtos</Link>
         )}
+        {(can(user, "rules.view") || can(user, "rules.manage")) && (
+          <Link href="/regras">Regras</Link>
+        )}
         {(can(user, "terminals.view") || can(user, "terminals.request")) && (
           <Link href="/terminais">Terminais</Link>
         )}

@@ -84,7 +84,8 @@
       "catalog_manufacturer_name_active_key",
       "catalog_product_source_key_active_key",
       "catalog_product_barcode_code_active_key",
-      "product_branch_status_active_key"
+      "product_branch_status_active_key",
+      "rule_type_code_active_key"
     ]
   },
   "FA009": {
@@ -182,7 +183,9 @@
       "product_pmc_id_uuid_v7_check",
       "catalog_product_pmc_id_uuid_v7_check",
       "product_branch_status_id_uuid_v7_check",
-      "product_status_event_id_uuid_v7_check"
+      "product_status_event_id_uuid_v7_check",
+      "rule_type_id_uuid_v7_check",
+      "product_rule_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -865,6 +868,49 @@
     "dbConstraints": [
       "branch_state_check",
       "branch_pmc_region_check"
+    ]
+  },
+  "FA701": {
+    "message": "O valor da regra está fora da faixa permitida.",
+    "action": "Confira o valor informado para este tipo de regra.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA702": {
+    "message": "O alvo da regra não é válido.",
+    "action": "Selecione de novo o que esta regra atinge.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "product_rule_target_check"
+    ]
+  },
+  "FA703": {
+    "message": "A validade da regra é inválida.",
+    "action": "A data final precisa ser depois da data inicial.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "product_rule_validity_check"
+    ]
+  },
+  "FA704": {
+    "message": "Os dados da regra são inválidos.",
+    "action": "Atualize a tela e tente novamente.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "product_rule_level_check",
+      "product_rule_priority_check",
+      "rule_type_code_check",
+      "rule_type_name_check",
+      "rule_type_unit_check",
+      "rule_type_range_check"
     ]
   }
 }

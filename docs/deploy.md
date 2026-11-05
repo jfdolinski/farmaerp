@@ -155,6 +155,10 @@ Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda.
 
 Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda. Toda filial e produto recebem uma linha de status ativa. Depois, informe o estado de cada filial em **Produtos > Estrutura**: sem ele, produto com a flag PMC não aceita preço.
 
+## Atualizar para o motor de regras
+
+Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda. Em homologação, o seed cria regras fictícias. Em produção não nasce nenhuma regra, porque os percentuais são decisão de cada rede.
+
 ## Antes de publicar a produção
 
 A produção usa os mesmos passos, em um projeto próprio e com segredos próprios, mas depende destes itens:

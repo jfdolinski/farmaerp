@@ -196,3 +196,23 @@ O arquivo é uma lista JSON, e `sourceKey` identifica o item na origem. Importar
 ```
 
 Em `controlledClass`, deixe vazio para não controlado ou use `A1`, `A2`, `A3`, `B1`, `B2`, `C1` a `C5`, `D1` ou `antimicrobial`. Em `region`, use `free_trade_area` ou `manaus_free_zone`.
+
+## Motor de regras
+
+Responde qual regra vale para um produto em uma filial, e por quê. Os módulos chamam o banco:
+
+```sql
+SELECT * FROM app.resolve_product_rule('commission', produto, filial);
+```
+
+- **Ordem de decisão:** primeiro o nível (produto, grupo de preço, fabricante, subcategoria, categoria, departamento, grupo de precificação, grupo de comissão, padrão da loja). No mesmo nível, a filial vence a rede, depois a maior prioridade, depois a mais recente.
+- **Sem regra:** não volta nenhuma linha, e cada módulo decide o que fazer. Não existe valor padrão escondido.
+- **Produto sem Catálogo:** o nível do fabricante não se aplica, porque o fabricante dele é texto livre.
+- **Histórico:** o valor de uma regra não muda. Editar encerra a regra e cria outra.
+- **Permissão de leitura:** a função roda como quem chama, então a RLS vale. As funções dos módulos rodam como dono e enxergam tudo.
+
+**Criar um tipo de regra**
+
+1. Acrescente a linha em `rule_type` por uma migration nova, com unidade e faixa válida.
+2. Chame `app.resolve_product_rule` com o código do tipo no módulo que usa a regra.
+3. Acrescente aos testes de `db/tests/product-rules.test.mjs`.

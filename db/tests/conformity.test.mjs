@@ -8,7 +8,7 @@ const EXPECTED_TABLES = [
   'auth_event', 'branch', 'branch_group', 'catalog_manufacturer', 'catalog_product', 'catalog_product_barcode',
   'catalog_product_pmc', 'code_counter', 'company', 'economic_group', 'permission', 'product', 'product_barcode',
   'product_barcode_channel', 'product_branch_status', 'product_category', 'product_group', 'product_pmc',
-  'product_price', 'product_status_event', 'region', 'role', 'role_permission', 'sales_channel',
+  'product_price', 'product_rule', 'product_status_event', 'region', 'role', 'role_permission', 'rule_type', 'sales_channel',
   'terminal', 'terminal_event', 'terminal_pairing_request',
   'terminal_status', 'user_account', 'user_branch', 'user_credential', 'user_role', 'user_session',
 ];
@@ -45,6 +45,7 @@ describe('migrations', () => {
       '0009_roles_and_permissions',
       '0010_products',
       '0011_product_prices_and_status',
+      '0012_product_rules',
     ]);
   });
 });
