@@ -19,6 +19,7 @@ import {
 const ADMIN = '019a0000-0000-7000-8000-000000000008';
 const ADMIN_EMAIL = 'admin@farmaerp.test';
 const OPERATOR_EMAIL = 'operador@farmaerp.test';
+const MANAGER_EMAIL = 'gerente@farmaerp.test';
 const DEV_PASSWORD = 'farmaerp-dev-123';
 const BRANCH = '019a0000-0000-7000-8000-000000000005';
 
@@ -118,7 +119,7 @@ describe('terminais contra o banco real', () => {
     app.getHttpAdapter().getInstance().set('trust proxy', 1);
     await app.init();
 
-    for (const email of [ADMIN_EMAIL, OPERATOR_EMAIL]) {
+    for (const email of [ADMIN_EMAIL, OPERATOR_EMAIL, MANAGER_EMAIL]) {
       const response = await request(app.getHttpServer())
         .post('/auth/login')
         .set('X-Forwarded-For', '10.255.255.254')
@@ -420,8 +421,13 @@ describe('terminais contra o banco real', () => {
       expectCode(await admin('get', `/pairing/${code}`, OPERATOR_EMAIL).expect(403), 'FA002');
     });
 
-    it('o operador só vê os terminais da própria filial', async () => {
+    it('o operador de caixa não vê terminais', async () => {
       const response = await admin('get', '/terminals', OPERATOR_EMAIL).expect(200);
+      expect(response.body).toEqual([]);
+    });
+
+    it('o gerente só vê os terminais da própria filial', async () => {
+      const response = await admin('get', '/terminals', MANAGER_EMAIL).expect(200);
       const branches = new Set((response.body as Json[]).map((t) => t.branch_id));
       expect([...branches]).toEqual([BRANCH]);
     });

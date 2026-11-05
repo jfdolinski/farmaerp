@@ -75,7 +75,10 @@
       "terminal_status_terminal_active_key",
       "code_counter_economic_group_entity_active_key",
       "user_credential_user_active_key",
-      "user_session_token_hash_active_key"
+      "user_session_token_hash_active_key",
+      "permission_code_active_key",
+      "role_permission_active_key",
+      "role_system_key_active_key"
     ]
   },
   "FA009": {
@@ -155,7 +158,11 @@
       "code_counter_id_uuid_v7_check",
       "auth_event_id_uuid_v7_check",
       "user_credential_id_uuid_v7_check",
-      "user_session_id_uuid_v7_check"
+      "user_session_id_uuid_v7_check",
+      "permission_id_uuid_v7_check",
+      "role_id_uuid_v7_check",
+      "role_permission_id_uuid_v7_check",
+      "user_role_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -324,7 +331,8 @@
       "economic_group_name_check",
       "region_name_check",
       "terminal_name_check",
-      "user_account_name_check"
+      "user_account_name_check",
+      "role_name_check"
     ]
   },
   "FA217": {
@@ -569,5 +577,86 @@
       "user_credential_password_hash_check",
       "user_session_token_hash_check"
     ]
+  },
+  "FA501": {
+    "message": "Já existe um perfil com este nome.",
+    "action": "Informe outro nome.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "role_name_active_key"
+    ]
+  },
+  "FA502": {
+    "message": "O perfil Administrador não pode ser alterado.",
+    "action": "Crie outro perfil, se precisar de outras permissões.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA503": {
+    "message": "Este perfil ainda está atribuído a usuários.",
+    "action": "Retire o perfil dos usuários antes de excluir.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA504": {
+    "message": "Você não pode conceder uma permissão que não tem.",
+    "action": "Peça a um administrador.",
+    "httpStatus": 403,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA505": {
+    "message": "Vincule o usuário a esta filial antes de atribuir o perfil.",
+    "action": "Marque a filial do usuário e tente novamente.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA506": {
+    "message": "O perfil Administrador vale para todas as filiais.",
+    "action": "Atribua sem escolher uma filial.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA507": {
+    "message": "O usuário já tem este perfil.",
+    "action": "Atualize a tela para ver os perfis atuais.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "user_role_active_key"
+    ]
+  },
+  "FA508": {
+    "message": "Os dados do perfil são inválidos.",
+    "action": "Atualize o sistema e tente novamente.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": [
+      "permission_code_check",
+      "permission_module_check",
+      "permission_name_check",
+      "role_system_key_check"
+    ]
+  },
+  "FA509": {
+    "message": "Este perfil não pertence ao grupo do usuário.",
+    "action": "Atualize a tela e selecione o perfil novamente.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
   }
 }

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { CurrentUser } from "@/lib/api";
+import { can, CurrentUser } from "@/lib/api";
 import { logout } from "./auth-actions";
 import styles from "./terminais/page.module.css";
 
@@ -8,8 +8,15 @@ export function AppHeader({ user }: { user: CurrentUser }) {
     <header className={styles.appHeader}>
       <nav className={styles.nav} aria-label="Principal">
         <strong>FarmaERP</strong>
-        <Link href="/terminais">Terminais</Link>
-        <Link href="/usuarios">Usuários</Link>
+        {(can(user, "terminals.view") || can(user, "terminals.request")) && (
+          <Link href="/terminais">Terminais</Link>
+        )}
+        {(can(user, "users.view") || can(user, "users.manage")) && (
+          <Link href="/usuarios">Usuários</Link>
+        )}
+        {(can(user, "roles.manage") || can(user, "roles.assign")) && (
+          <Link href="/perfis">Perfis</Link>
+        )}
       </nav>
       <div className={styles.nav}>
         <span>{user.name}</span>

@@ -29,7 +29,6 @@ export async function createUser(
     body: {
       name: text(form, "name"),
       email: text(form, "email") || null,
-      isGroupAdmin: checked(form, "isGroupAdmin"),
     },
   });
   if (!result.ok) return handleFailure(result.error);
@@ -46,7 +45,6 @@ export async function updateUser(
     body: {
       name: text(form, "name"),
       email: text(form, "email") || null,
-      isGroupAdmin: checked(form, "isGroupAdmin"),
       isActive: checked(form, "isActive"),
     },
   });
@@ -62,6 +60,34 @@ export async function setUserBranches(
   const result = await apiFetch(`/admin/users/${text(form, "id")}/branches`, {
     method: "PUT",
     body: { branchIds: form.getAll("branchIds").map(String) },
+  });
+  if (!result.ok) return handleFailure(result.error);
+  refresh();
+  return { done: true };
+}
+
+export async function assignRole(
+  _previous: UserFormState,
+  form: FormData,
+): Promise<UserFormState> {
+  const result = await apiFetch(`/admin/users/${text(form, "id")}/roles`, {
+    method: "POST",
+    body: {
+      roleId: text(form, "roleId"),
+      branchId: text(form, "branchId") || null,
+    },
+  });
+  if (!result.ok) return handleFailure(result.error);
+  refresh();
+  return { done: true };
+}
+
+export async function removeRole(
+  _previous: UserFormState,
+  form: FormData,
+): Promise<UserFormState> {
+  const result = await apiFetch(`/admin/user-roles/${text(form, "userRoleId")}/remove`, {
+    method: "POST",
   });
   if (!result.ok) return handleFailure(result.error);
   refresh();

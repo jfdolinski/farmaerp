@@ -29,15 +29,23 @@ export class UsersController {
   list() {
     return this.database.withContext(async (client) => {
       const { rows } = await client.query(
-        `SELECT u.id, u.code, u.name, u.email, u.is_group_admin, u.is_active,
+        `SELECT u.id, u.code, u.name, u.email, u.is_active,
                 u.id = ANY (app.user_ids_with_access()) AS has_access,
                 COALESCE(
-                  array_agg(ub.branch_id) FILTER (WHERE ub.branch_id IS NOT NULL),
+                  (SELECT array_agg(ub.branch_id)
+                     FROM v_user_branch ub WHERE ub.user_id = u.id),
                   '{}'
-                ) AS branch_ids
+                ) AS branch_ids,
+                COALESCE(
+                  (SELECT json_agg(json_build_object(
+                            'id', ur.id, 'role_id', r.id, 'name', r.name, 'branch_id', ur.branch_id
+                          ) ORDER BY r.name)
+                     FROM v_user_role ur
+                     JOIN v_role r ON r.id = ur.role_id
+                    WHERE ur.user_id = u.id),
+                  '[]'
+                ) AS roles
            FROM v_user_account u
-           LEFT JOIN v_user_branch ub ON ub.user_id = u.id
-          GROUP BY u.id, u.code, u.name, u.email, u.is_group_admin, u.is_active
           ORDER BY u.is_active DESC, u.name`,
       );
       return rows;
@@ -49,19 +57,18 @@ export class UsersController {
     const body = asBody(rawBody);
     const name = requireText(body, 'name', 200);
     const email = optionalText(body, 'email', 254);
-    const isAdmin = body.isGroupAdmin === true;
 
     return this.database.withContext(async (client) => {
-      const { rows: admin } = await client.query<{ group_id: string | null }>(
-        'SELECT app.admin_economic_group_id() AS group_id',
+      const { rows: current } = await client.query<{ group_id: string | null }>(
+        'SELECT app.current_user_group() AS group_id',
       );
-      if (!admin[0].group_id) {
+      if (!current[0].group_id) {
         throw new AppError('FA002');
       }
       const { rows } = await client.query<{ id: string; code: string }>(
-        `INSERT INTO user_account (economic_group_id, name, email, is_group_admin)
-         VALUES ($1, $2, $3, $4) RETURNING id, code`,
-        [admin[0].group_id, name, email, isAdmin],
+        `INSERT INTO user_account (economic_group_id, name, email)
+         VALUES ($1, $2, $3) RETURNING id, code`,
+        [current[0].group_id, name, email],
       );
       return { id: rows[0].id, code: Number(rows[0].code) };
     });
@@ -73,15 +80,14 @@ export class UsersController {
     const userId = requireUuid(id);
     const name = requireText(body, 'name', 200);
     const email = optionalText(body, 'email', 254);
-    const isAdmin = body.isGroupAdmin === true;
     const isActive = body.isActive !== false;
 
     await this.database.withContext(async (client) => {
       const { rowCount } = await client.query(
         `UPDATE user_account
-            SET name = $2, email = $3, is_group_admin = $4, is_active = $5
+            SET name = $2, email = $3, is_active = $4
           WHERE id = $1 AND deleted_at IS NULL`,
-        [userId, name, email, isAdmin, isActive],
+        [userId, name, email, isActive],
       );
       if (rowCount === 0) {
         throw new AppError('FA002');
@@ -100,11 +106,11 @@ export class UsersController {
     const wanted = [...new Set(branchIds.map(requireUuid))];
 
     await this.database.withContext(async (client) => {
-      const { rowCount } = await client.query(
-        'SELECT 1 FROM user_account WHERE id = $1 AND economic_group_id = app.admin_economic_group_id()',
+      const { rows: allowed } = await client.query<{ ok: boolean }>(
+        'SELECT app.can_manage_user($1) AS ok',
         [userId],
       );
-      if (rowCount === 0) {
+      if (!allowed[0].ok) {
         throw new AppError('FA002');
       }
       await client.query(

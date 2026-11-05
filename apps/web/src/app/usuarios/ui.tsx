@@ -3,8 +3,10 @@
 import { useActionState, useEffect, useRef } from "react";
 import { ErrorNotice } from "../error-notice";
 import {
+  assignRole,
   createUser,
   issueTemporaryPassword,
+  removeRole,
   setUserBranches,
   updateUser,
   UserFormState,
@@ -16,10 +18,16 @@ export interface UserRow {
   code: string;
   name: string;
   email: string | null;
-  is_group_admin: boolean;
   is_active: boolean;
   has_access: boolean;
   branch_ids: string[];
+  roles: { id: string; role_id: string; name: string; branch_id: string | null }[];
+}
+
+export interface RoleOption {
+  id: string;
+  name: string;
+  system_key: string | null;
 }
 
 export interface BranchOption {
@@ -52,10 +60,6 @@ export function CreateUserForm() {
         <label>
           E-mail
           <input name="email" type="email" maxLength={254} autoComplete="off" />
-        </label>
-        <label className={styles.check}>
-          <input name="isGroupAdmin" type="checkbox" />
-          Administrador
         </label>
         <button type="submit" disabled={pending}>
           Criar usuário
@@ -97,14 +101,6 @@ export function EditUser({ user }: { user: UserRow }) {
         </label>
         <label className={styles.check}>
           <input
-            name="isGroupAdmin"
-            type="checkbox"
-            defaultChecked={user.is_group_admin}
-          />
-          Administrador
-        </label>
-        <label className={styles.check}>
-          <input
             name="isActive"
             type="checkbox"
             defaultChecked={user.is_active}
@@ -141,11 +137,6 @@ export function UserBranches({
       <summary>Filiais</summary>
       <form action={action} className={styles.rowForm}>
         <input type="hidden" name="id" value={user.id} />
-        {user.is_group_admin && (
-          <p className={styles.hint}>
-            Administradores já enxergam todas as filiais do grupo.
-          </p>
-        )}
         {branches.map((branch) => (
           <label key={branch.id} className={styles.check}>
             <input
@@ -167,6 +158,93 @@ export function UserBranches({
           </p>
         )}
       </form>
+    </details>
+  );
+}
+
+function RemoveRoleButton({ userRoleId }: { userRoleId: string }) {
+  const [state, action, pending] = useActionState<UserFormState, FormData>(
+    removeRole,
+    {},
+  );
+  return (
+    <form action={action}>
+      <input type="hidden" name="userRoleId" value={userRoleId} />
+      <button type="submit" disabled={pending}>
+        Retirar
+      </button>
+      <ErrorNotice error={state.error} />
+    </form>
+  );
+}
+
+export function UserRoles({
+  user,
+  roles,
+  branches,
+  branchName,
+}: {
+  user: UserRow;
+  roles: RoleOption[];
+  branches: BranchOption[];
+  branchName: Record<string, string>;
+}) {
+  const [state, action, pending] = useActionState<UserFormState, FormData>(
+    assignRole,
+    {},
+  );
+  const linked = branches.filter((branch) => user.branch_ids.includes(branch.id));
+  return (
+    <details className={styles.reason}>
+      <summary>Perfis</summary>
+      <div className={styles.rowForm}>
+        {user.roles.map((role) => (
+          <div key={role.id} className={styles.inline}>
+            <span>
+              {role.name}
+              {" · "}
+              {role.branch_id ? (branchName[role.branch_id] ?? "Filial") : "Todas as filiais"}
+            </span>
+            <RemoveRoleButton userRoleId={role.id} />
+          </div>
+        ))}
+        <form action={action} className={styles.rowForm}>
+          <input type="hidden" name="id" value={user.id} />
+          <label>
+            Perfil
+            <select name="roleId" required defaultValue="">
+              <option value="" disabled>
+                Selecione
+              </option>
+              {roles.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {role.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Onde vale
+            <select name="branchId" defaultValue="">
+              <option value="">Todas as filiais do usuário</option>
+              {linked.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="submit" disabled={pending}>
+            Atribuir perfil
+          </button>
+          <ErrorNotice error={state.error} />
+          {state.done && (
+            <p className={styles.success} role="status">
+              Perfil atribuído.
+            </p>
+          )}
+        </form>
+      </div>
     </details>
   );
 }

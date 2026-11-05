@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { apiFetch, redirectIfNeeded, requireUser } from "@/lib/api";
+import { apiFetch, can, redirectIfNeeded, requireUser } from "@/lib/api";
 import { AppHeader } from "../app-header";
 import { ErrorNotice } from "../error-notice";
 import {
   BranchOption,
   CreateUserForm,
   EditUser,
+  RoleOption,
   TemporaryPassword,
   UserBranches,
+  UserRoles,
   UserRow,
 } from "./ui";
 import styles from "../terminais/page.module.css";
@@ -27,34 +29,40 @@ export default function UsersPage() {
 
 async function UsersContent() {
   const user = await requireUser("/usuarios");
-  if (!user.isAdmin) {
+  const canManage = can(user, "users.manage");
+  const canAssign = can(user, "roles.assign");
+  const canReset = can(user, "users.reset_password");
+
+  if (!can(user, "users.view") && !canManage) {
     return (
       <>
         <AppHeader user={user} />
         <h1>Usuários</h1>
         <section className={styles.card}>
-          <p>Só administradores podem gerenciar usuários.</p>
+          <p>Você não tem permissão para ver os usuários.</p>
         </section>
       </>
     );
   }
 
-  const [users, branches] = await Promise.all([
+  const [users, branches, roles] = await Promise.all([
     apiFetch<UserRow[]>("/admin/users"),
     apiFetch<BranchOption[]>("/admin/branches"),
+    apiFetch<RoleOption[]>("/admin/roles"),
   ]);
   if (!users.ok) redirectIfNeeded(users.error, "/usuarios");
 
   const branchList = branches.ok ? branches.data : [];
+  const roleList = roles.ok ? roles.data : [];
   const branchName = new Map(branchList.map((branch) => [branch.id, branch.name]));
 
   return (
     <>
       <AppHeader user={user} />
       <h1>Usuários</h1>
-      <CreateUserForm />
+      {canManage && <CreateUserForm />}
       <section className={styles.card}>
-        <h2>Usuários do grupo</h2>
+        <h2>Usuários</h2>
         {!users.ok && <ErrorNotice error={users.error} />}
         {users.ok && (
           <div className={styles.tableWrap}>
@@ -63,7 +71,7 @@ async function UsersContent() {
                 <tr>
                   <th>Código</th>
                   <th>Nome</th>
-                  <th>Papel</th>
+                  <th>Perfis</th>
                   <th>Situação</th>
                   <th>Filiais</th>
                   <th>Ações</th>
@@ -77,7 +85,16 @@ async function UsersContent() {
                       <strong>{row.name}</strong>
                       <small>{row.email ?? "Sem e-mail"}</small>
                     </td>
-                    <td>{row.is_group_admin ? "Administrador" : "Usuário"}</td>
+                    <td>
+                      {row.roles.length === 0 && "Nenhum"}
+                      {row.roles.map((role) => (
+                        <small key={role.id}>
+                          {role.name}
+                          {role.branch_id &&
+                            ` · ${branchName.get(role.branch_id) ?? "Filial"}`}
+                        </small>
+                      ))}
+                    </td>
                     <td>
                       <span
                         className={`${styles.badge} ${row.is_active ? styles.active : styles.offline}`}
@@ -89,16 +106,22 @@ async function UsersContent() {
                       </small>
                     </td>
                     <td>
-                      {row.is_group_admin
-                        ? "Todas"
-                        : row.branch_ids
-                            .map((id) => branchName.get(id) ?? "Filial")
-                            .join(", ") || "Nenhuma"}
+                      {row.branch_ids
+                        .map((id) => branchName.get(id) ?? "Filial")
+                        .join(", ") || "Nenhuma"}
                     </td>
                     <td className={styles.actions}>
-                      <EditUser user={row} />
-                      <UserBranches user={row} branches={branchList} />
-                      {row.is_active && <TemporaryPassword user={row} />}
+                      {canManage && <EditUser user={row} />}
+                      {canManage && <UserBranches user={row} branches={branchList} />}
+                      {canAssign && (
+                        <UserRoles
+                          user={row}
+                          roles={roleList}
+                          branches={branchList}
+                          branchName={Object.fromEntries(branchName)}
+                        />
+                      )}
+                      {canReset && row.is_active && <TemporaryPassword user={row} />}
                     </td>
                   </tr>
                 ))}

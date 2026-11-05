@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { apiFetch, redirectIfNeeded, requireUser } from "@/lib/api";
+import { apiFetch, can, redirectIfNeeded, requireUser } from "@/lib/api";
 import { AppHeader } from "../app-header";
 import { ErrorNotice } from "../error-notice";
 import {
@@ -67,6 +67,11 @@ export default function TerminalsPage() {
 
 async function TerminalsContent() {
   const user = await requireUser("/terminais");
+  const canView = can(user, "terminals.view");
+  const canRequest = can(user, "terminals.request");
+  const canApprove = can(user, "terminals.approve");
+  const canBlock = can(user, "terminals.block");
+  const canRevoke = can(user, "terminals.revoke");
   const [terminals, branches] = await Promise.all([
     apiFetch<MonitorRow[]>("/admin/terminals"),
     apiFetch<{ id: string; name: string }[]>("/admin/branches"),
@@ -79,9 +84,14 @@ async function TerminalsContent() {
       <AppHeader user={user} />
       <h1>Terminais</h1>
 
-      <AddTerminal branches={branches.ok ? branches.data : []} />
+      {canRequest && <AddTerminal branches={branches.ok ? branches.data : []} />}
 
-      <section className={styles.card}>
+      {!canView && !canRequest && (
+        <section className={styles.card}>
+          <p>Você não tem permissão para ver os terminais.</p>
+        </section>
+      )}
+      {canView && <section className={styles.card}>
         <h2>Situação dos terminais</h2>
         {!terminals.ok && <ErrorNotice error={terminals.error} />}
         {terminals.ok && terminals.data.length === 0 && (
@@ -143,7 +153,7 @@ async function TerminalsContent() {
                     </td>
                     <td>{terminal.outbox_pending ?? NOT_AVAILABLE}</td>
                     <td className={styles.actions}>
-                      {terminal.status === "pending" && (
+                      {terminal.status === "pending" && canApprove && (
                         <>
                           <ApproveForm id={terminal.id} />
                           <ReasonAction
@@ -155,14 +165,14 @@ async function TerminalsContent() {
                       )}
                       {terminal.status === "active" && (
                         <>
-                          <ReasonAction id={terminal.id} action="block" />
-                          <ReasonAction id={terminal.id} action="revoke" />
+                          {canBlock && <ReasonAction id={terminal.id} action="block" />}
+                          {canRevoke && <ReasonAction id={terminal.id} action="revoke" />}
                         </>
                       )}
                       {terminal.status === "blocked" && (
                         <>
-                          <UnblockButton id={terminal.id} />
-                          <ReasonAction id={terminal.id} action="revoke" />
+                          {canBlock && <UnblockButton id={terminal.id} />}
+                          {canRevoke && <ReasonAction id={terminal.id} action="revoke" />}
                         </>
                       )}
                     </td>
@@ -172,7 +182,7 @@ async function TerminalsContent() {
             </table>
           </div>
         )}
-      </section>
+      </section>}
     </>
   );
 }
