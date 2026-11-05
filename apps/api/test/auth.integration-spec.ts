@@ -21,6 +21,7 @@ try {
 
 const ADMIN_EMAIL = 'admin@farmaerp.test';
 const OPERATOR_EMAIL = 'operador@farmaerp.test';
+const MANAGER_EMAIL = 'gerente@farmaerp.test';
 const DEV_PASSWORD = 'farmaerp-dev-123';
 const OPERATOR_ID = '019a0000-0000-7000-8000-000000000009';
 const BRANCH_CENTRO = '019a0000-0000-7000-8000-000000000005';
@@ -103,7 +104,8 @@ describe('login e usuários contra o banco real', () => {
       const response = await login(' ADMIN@farmaerp.test ', DEV_PASSWORD).expect(200);
       expect(response.body).toMatchObject({ mustChangePassword: false });
       const me = await as((response.body as Json).token as string).get('/auth/me').expect(200);
-      expect(me.body).toMatchObject({ email: ADMIN_EMAIL, isAdmin: true });
+      expect(me.body).toMatchObject({ email: ADMIN_EMAIL });
+      expect((me.body as Json).permissions).toContain('users.manage');
       expect(JSON.stringify(me.body)).not.toContain('argon2');
     });
 
@@ -204,7 +206,7 @@ describe('login e usuários contra o banco real', () => {
     });
 
     it('a sessão usa o usuário dela nas consultas com RLS', async () => {
-      const token = await tokenOf(OPERATOR_EMAIL);
+      const token = await tokenOf(MANAGER_EMAIL);
       const response = await as(token).get('/admin/terminals').expect(200);
       expect(new Set((response.body as Json[]).map((t) => t.branch_id))).toEqual(new Set([BRANCH_CENTRO]));
     });
@@ -339,8 +341,13 @@ describe('login e usuários contra o banco real', () => {
         `INSERT INTO economic_group (name) VALUES ('Sozinho') RETURNING id`,
       );
       const { rows: [admin] } = await owner.query<{ id: string }>(
-        `INSERT INTO user_account (economic_group_id, name, email, is_group_admin) VALUES ($1, 'Único', $2, true) RETURNING id`,
+        `INSERT INTO user_account (economic_group_id, name, email) VALUES ($1, 'Único', $2) RETURNING id`,
         [group.id, email],
+      );
+      await owner.query(
+        `INSERT INTO user_role (user_id, role_id)
+         SELECT $1, id FROM role WHERE economic_group_id = $2 AND system_key = 'administrator'`,
+        [admin.id, group.id],
       );
       const { argon2id, hash } = await import('argon2');
       await owner.query(
@@ -352,7 +359,7 @@ describe('login e usuários contra o banco real', () => {
       const token = await tokenOf(email, 'senha-do-unico-admin');
       const response = await as(token)
         .patch(`/admin/users/${admin.id}`)
-        .send({ name: 'Único', email, isGroupAdmin: true, isActive: false })
+        .send({ name: 'Único', email, isActive: false })
         .expect(409);
       expect(codeOf(response)).toBe('FA405');
     });
@@ -361,7 +368,7 @@ describe('login e usuários contra o banco real', () => {
       it('operador não cria, não altera nem gera senha', async () => {
         const token = await tokenOf(OPERATOR_EMAIL);
         expect(codeOf(await as(token).post('/admin/users').send({ name: 'X' }).expect(403))).toBe('FA002');
-        expect(codeOf(await as(token).patch(`/admin/users/${OPERATOR_ID}`).send({ name: 'X', isGroupAdmin: true }).expect(403))).toBe('FA002');
+        expect(codeOf(await as(token).patch(`/admin/users/${OPERATOR_ID}`).send({ name: 'X' }).expect(403))).toBe('FA002');
         expect(codeOf(await as(token).post(`/admin/users/${OPERATOR_ID}/temporary-password`).expect(403))).toBe('FA002');
         expect(codeOf(await as(token).put(`/admin/users/${OPERATOR_ID}/branches`).send({ branchIds: [BRANCH_SUL] }).expect(403))).toBe('FA002');
       });

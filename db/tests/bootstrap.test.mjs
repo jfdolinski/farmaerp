@@ -149,8 +149,11 @@ describe('primeiro administrador', () => {
     withClient(owner(), async (client) => ({
       groups: (await client.query('SELECT name FROM economic_group')).rows,
       users: (await client.query(
-        `SELECT u.email, u.is_group_admin, c.must_change_password, c.password_hash
-           FROM user_account u JOIN user_credential c ON c.user_id = u.id`,
+        `SELECT u.email, r.system_key, c.must_change_password, c.password_hash
+           FROM user_account u
+           JOIN user_credential c ON c.user_id = u.id
+           JOIN user_role ur ON ur.user_id = u.id
+           JOIN role r ON r.id = ur.role_id`,
       )).rows,
     }));
 
@@ -168,7 +171,7 @@ describe('primeiro administrador', () => {
     expect(groups).toEqual([{ name: 'Rede Teste' }]);
     expect(users).toHaveLength(1);
     expect(users[0]).toMatchObject({
-      email: 'dono@exemplo.com.br', is_group_admin: true, must_change_password: true,
+      email: 'dono@exemplo.com.br', system_key: 'administrator', must_change_password: true,
     });
     expect(users[0].password_hash).toMatch(/^\$argon2id\$/);
     expect(users[0].password_hash).not.toContain(values.password);
@@ -185,5 +188,48 @@ describe('primeiro administrador', () => {
     const { groups, users } = await state();
     expect(groups).toHaveLength(1);
     expect(users).toHaveLength(2);
+  });
+});
+
+describe('seed sobre dados existentes', () => {
+  const DB3 = 'farmaerp_seed_upgrade_test';
+  const owner = () => connectionConfig('farmaerp_migrator', process.env.FARMAERP_MIGRATOR_PASSWORD, DB3);
+
+  beforeAll(async () => {
+    await withClient(admin('postgres'), async (client) => {
+      await client.query(`DROP DATABASE IF EXISTS ${DB3} WITH (FORCE)`);
+      await client.query(`CREATE DATABASE ${DB3}`);
+    });
+    await bootstrapRoles(admin(DB3), passwords());
+    await runMigrations(owner());
+  });
+  afterAll(() =>
+    withClient(admin('postgres'), (client) => client.query(`DROP DATABASE IF EXISTS ${DB3} WITH (FORCE)`)),
+  );
+
+  // Como a migração deixa: o usuário do seed já tem o perfil, com outro identificador.
+  it('não quebra se o usuário já tiver o perfil', async () => {
+    await withClient(owner(), async (client) => {
+      await client.query(
+        `INSERT INTO economic_group (id, name) VALUES ('019a0000-0000-7000-8000-000000000001', 'Grupo Demonstração')`,
+      );
+      await client.query(
+        `INSERT INTO user_account (id, economic_group_id, name)
+         VALUES ('019a0000-0000-7000-8000-000000000008', '019a0000-0000-7000-8000-000000000001', 'Administrador')`,
+      );
+      await client.query(
+        `INSERT INTO user_role (user_id, role_id)
+         SELECT '019a0000-0000-7000-8000-000000000008', id FROM role WHERE system_key = 'administrator'`,
+      );
+    });
+
+    await expect(runSeed(owner(), 'homologation')).resolves.toBeUndefined();
+
+    const { rows } = await withClient(owner(), (client) =>
+      client.query(
+        `SELECT count(*)::int AS total FROM user_role WHERE user_id = '019a0000-0000-7000-8000-000000000008' AND deleted_at IS NULL`,
+      ),
+    );
+    expect(rows[0].total).toBe(1);
   });
 });

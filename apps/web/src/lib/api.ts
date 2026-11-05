@@ -20,7 +20,7 @@ export interface CurrentUser {
   name: string;
   email: string | null;
   code: number;
-  isAdmin: boolean;
+  permissions: string[];
   mustChangePassword: boolean;
 }
 
@@ -70,6 +70,10 @@ export async function apiFetch<T>(
     return { ok: false, error: unavailable() };
   }
 }
+
+/** Só decide o que aparece na tela: quem barra de verdade é o banco. */
+export const can = (user: CurrentUser, code: string) =>
+  user.permissions.includes(code);
 
 /** Sessão expirada, ou troca de senha pendente, levam direto à tela certa. */
 export function redirectIfNeeded(error: ApiError, next = "/terminais"): void {

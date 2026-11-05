@@ -105,7 +105,7 @@ A API responde sempre no formato `{ code, message, action, retryable, traceId }`
 1. Suba o banco e a API: `npm run db:up`, `npm run db:migrate`, `npm run db:seed` e `npm run dev:api`.
 2. Suba a retaguarda: `npm run dev:web`, e abra http://localhost:3000/terminais.
 3. Em `apps/pdv`, rode `flutter run -d windows`. O endereço da API muda com `--dart-define=API_URL=...`.
-4. Entre na retaguarda com `admin@farmaerp.test` e a senha `farmaerp-dev-123`, que só existe em desenvolvimento, e digite o código mostrado no PDV, escolha a filial e aprove o terminal.
+4. Entre na retaguarda com `admin@farmaerp.test` e a senha `farmaerp-dev-123`, que só existe em desenvolvimento, e digite o código mostrado no PDV. O seed também cria `gerente@farmaerp.test` e `operador@farmaerp.test`, com a mesma senha, escolha a filial e aprove o terminal.
 
 **Autenticação do terminal**
 
@@ -144,4 +144,18 @@ O UUID é a identidade do registro. O código humano serve para tela, cupom e at
 - **Tentativas:** 10 por minuto por IP, e bloqueio da conta por 15 minutos depois de 5 falhas.
 - **Sessão:** 8 horas sem uso, e no máximo 12 horas. A API confere no banco a cada requisição, então desativar um usuário vale na hora.
 - **Histórico:** `auth_event` é imutável. O IP é apagado depois de 90 dias, na rotina que roda a cada login.
-- **Administrador:** `is_group_admin` é provisório, até as permissões granulares. O grupo nunca fica sem um administrador ativo.
+
+## Perfis e permissões
+
+- **Permissões:** o catálogo fica na tabela `permission` e só muda por migration. Os perfis ficam por grupo econômico e as permissões de vários perfis se somam.
+- **Onde vale:** um perfil vale em todas as filiais do usuário ou em uma só. Sem filial informada, `app.has_permission(código)` só considera perfis válidos em todas.
+- **Administrador:** perfil de sistema, com todas as permissões, inclusive as de módulos futuros. Não pode ser alterado, e o grupo nunca fica sem um ativo.
+- **Escalada:** ninguém concede o que não tem, nem age sobre quem tem mais poder.
+- **Histórico:** vínculos de perfil são só incluídos ou excluídos logicamente, então cada linha guarda quem fez e quando.
+
+**Criar uma permissão nova**
+
+1. Acrescente a linha em `permission` por uma migration nova.
+2. Use `app.has_permission('modulo.acao', filial)` nas políticas e funções do banco. Quem decide é sempre o banco.
+3. Na retaguarda, use `can(user, 'modulo.acao')` só para mostrar ou esconder botões.
+4. Acrescente aos testes de `db/tests/permissions.test.mjs`.

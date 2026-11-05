@@ -382,4 +382,58 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Atualize o sistema e tente novamente.',
     retryable: false,
   ),
+  'FA501': ErrorCatalogEntry(
+    code: 'FA501',
+    message: 'Já existe um perfil com este nome.',
+    action: 'Informe outro nome.',
+    retryable: false,
+  ),
+  'FA502': ErrorCatalogEntry(
+    code: 'FA502',
+    message: 'O perfil Administrador não pode ser alterado.',
+    action: 'Crie outro perfil, se precisar de outras permissões.',
+    retryable: false,
+  ),
+  'FA503': ErrorCatalogEntry(
+    code: 'FA503',
+    message: 'Este perfil ainda está atribuído a usuários.',
+    action: 'Retire o perfil dos usuários antes de excluir.',
+    retryable: false,
+  ),
+  'FA504': ErrorCatalogEntry(
+    code: 'FA504',
+    message: 'Você não pode conceder uma permissão que não tem.',
+    action: 'Peça a um administrador.',
+    retryable: false,
+  ),
+  'FA505': ErrorCatalogEntry(
+    code: 'FA505',
+    message: 'Vincule o usuário a esta filial antes de atribuir o perfil.',
+    action: 'Marque a filial do usuário e tente novamente.',
+    retryable: false,
+  ),
+  'FA506': ErrorCatalogEntry(
+    code: 'FA506',
+    message: 'O perfil Administrador vale para todas as filiais.',
+    action: 'Atribua sem escolher uma filial.',
+    retryable: false,
+  ),
+  'FA507': ErrorCatalogEntry(
+    code: 'FA507',
+    message: 'O usuário já tem este perfil.',
+    action: 'Atualize a tela para ver os perfis atuais.',
+    retryable: false,
+  ),
+  'FA508': ErrorCatalogEntry(
+    code: 'FA508',
+    message: 'Os dados do perfil são inválidos.',
+    action: 'Atualize o sistema e tente novamente.',
+    retryable: false,
+  ),
+  'FA509': ErrorCatalogEntry(
+    code: 'FA509',
+    message: 'Este perfil não pertence ao grupo do usuário.',
+    action: 'Atualize a tela e selecione o perfil novamente.',
+    retryable: false,
+  ),
 };

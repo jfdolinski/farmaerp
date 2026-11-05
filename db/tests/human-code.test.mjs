@@ -33,8 +33,8 @@ beforeAll(async () => {
     CALL app.apply_human_code('test_human_code.other', 'other');
     GRANT SELECT, INSERT, UPDATE ON test_human_code.item, test_human_code.other TO farmaerp_app;
     CREATE POLICY item_all ON test_human_code.item TO farmaerp_app
-      USING (economic_group_id = (SELECT app.admin_economic_group_id()))
-      WITH CHECK (economic_group_id = (SELECT app.admin_economic_group_id()));
+      USING (economic_group_id = (SELECT app.permission_group('structure.manage')))
+      WITH CHECK (economic_group_id = (SELECT app.permission_group('structure.manage')));
   `);
 });
 afterAll(closePools);

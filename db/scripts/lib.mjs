@@ -118,12 +118,19 @@ export async function bootstrapAdmin(config, { email, password, groupName }) {
         group = (await client.query('INSERT INTO economic_group (name) VALUES ($1) RETURNING id', [groupName])).rows[0];
       }
       const user = (await client.query(
-        `INSERT INTO user_account (economic_group_id, name, email, is_group_admin)
-         VALUES ($1, 'Administrador', $2, true)
-         ON CONFLICT (email) WHERE deleted_at IS NULL AND email IS NOT NULL DO UPDATE SET is_group_admin = true
+        `INSERT INTO user_account (economic_group_id, name, email)
+         VALUES ($1, 'Administrador', $2)
+         ON CONFLICT (email) WHERE deleted_at IS NULL AND email IS NOT NULL DO UPDATE SET email = EXCLUDED.email
          RETURNING id`,
         [group.id, normalized],
       )).rows[0];
+      await client.query(
+        `INSERT INTO user_role (user_id, role_id)
+         SELECT $1, r.id FROM role r
+          WHERE r.economic_group_id = $2 AND r.system_key = 'administrator' AND r.deleted_at IS NULL
+         ON CONFLICT DO NOTHING`,
+        [user.id, group.id],
+      );
       await client.query(
         'INSERT INTO user_credential (user_id, password_hash, must_change_password) VALUES ($1, $2, true)',
         [user.id, hash],

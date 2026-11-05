@@ -223,3 +223,20 @@ button.danger {
   font-size: 1.125rem;
   user-select: all;
 }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.group {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.group legend {
+  padding: 0 4px;
+  font-weight: bold;
+}

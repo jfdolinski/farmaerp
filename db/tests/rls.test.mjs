@@ -131,13 +131,11 @@ describe('usuário comum', () => {
     });
   });
 
-  it('não concede a si mesmo o papel de admin', async () => {
+  it('não concede a si mesmo o perfil de administrador', async () => {
     await asUser(a.oneBranchUser.id, async (client) => {
-      const { rowCount } = await client.query(
-        'UPDATE user_account SET is_group_admin = true WHERE id = $1',
-        [a.oneBranchUser.id],
-      );
-      expect(rowCount).toBe(0);
+      await expect(
+        client.query('SELECT app.assign_role($1, $2, NULL)', [a.oneBranchUser.id, a.adminRole.id]),
+      ).rejects.toSatisfy(hasCode('FA002'));
     });
   });
 
@@ -352,7 +350,8 @@ describe('admin do grupo', () => {
 
   it('perde o acesso ao deixar de ser admin', async () => {
     await asUser(a.admin.id, async (client) => {
-      await client.query('UPDATE user_account SET is_group_admin = false WHERE id = $1', [a.secondAdmin.id]);
+      const { rows: [assigned] } = await client.query('SELECT id FROM user_role WHERE user_id = $1', [a.secondAdmin.id]);
+      await client.query('SELECT app.unassign_role($1)', [assigned.id]);
       await setUser(client, a.secondAdmin.id);
       expect(await selectAll(client, 'branch')).toEqual([]);
     });

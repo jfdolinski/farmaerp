@@ -149,16 +149,30 @@ async function createGroupStructure(client, label) {
     });
   const terminal1 = await newTerminal(branch1, 1);
   const terminal2 = await newTerminal(branch2, 2);
-  const newUser = (name, isAdmin = false) =>
-    insert(client, 'user_account', {
-      economic_group_id: group.id,
-      name,
-      is_group_admin: isAdmin,
-    });
-  const admin = await newUser(`Admin ${label}`, true);
-  const secondAdmin = await newUser(`Segundo admin ${label}`, true);
-  const oneBranchUser = await newUser(`Usuário uma filial ${label}`);
-  const twoBranchesUser = await newUser(`Usuário duas filiais ${label}`);
+  // Perfil mínimo para os testes: enxerga os terminais das próprias filiais.
+  const viewer = await insert(client, 'role', { economic_group_id: group.id, name: 'Consulta' });
+  await client.query(
+    `INSERT INTO role_permission (role_id, permission_id)
+     SELECT $1, id FROM permission WHERE code = 'terminals.view'`,
+    [viewer.id],
+  );
+  const adminRole = (await client.query(
+    `SELECT * FROM role WHERE economic_group_id = $1 AND system_key = 'administrator'`,
+    [group.id],
+  )).rows[0];
+  const managerRole = (await client.query(
+    `SELECT * FROM role WHERE economic_group_id = $1 AND name = 'Gerente'`,
+    [group.id],
+  )).rows[0];
+  const newUser = async (name, role = null) => {
+    const user = await insert(client, 'user_account', { economic_group_id: group.id, name });
+    if (role) await insert(client, 'user_role', { user_id: user.id, role_id: role.id });
+    return user;
+  };
+  const admin = await newUser(`Admin ${label}`, adminRole);
+  const secondAdmin = await newUser(`Segundo admin ${label}`, adminRole);
+  const oneBranchUser = await newUser(`Usuário uma filial ${label}`, viewer);
+  const twoBranchesUser = await newUser(`Usuário duas filiais ${label}`, viewer);
   const noBranchUser = await newUser(`Usuário sem filial ${label}`);
   const link = (user, branch) =>
     insert(client, 'user_branch', { user_id: user.id, branch_id: branch.id });
@@ -169,7 +183,7 @@ async function createGroupStructure(client, label) {
   return {
     group, root, company, branchGroup, region, branch1, branch2, branchFree,
     terminal1, terminal2, admin, secondAdmin, oneBranchUser, twoBranchesUser,
-    noBranchUser, oneBranchLink,
+    noBranchUser, oneBranchLink, viewer, adminRole, managerRole,
   };
 }
 

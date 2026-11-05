@@ -143,11 +143,14 @@ Fora de desenvolvimento, o PDV recusa um endereço que não seja HTTPS.
 
 Os terminais já aprovados continuam funcionando.
 
+## Atualizar para perfis e permissões
+
+Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda. A migration dá o perfil Administrador a quem era administrador, e os demais usuários ficam sem perfil, até um administrador atribuir.
+
 ## Antes de publicar a produção
 
 A produção usa os mesmos passos, em um projeto próprio e com segredos próprios, mas depende destes itens:
 
-- [ ] Perfis e permissões granulares implementados, no lugar do `is_group_admin`.
 - [ ] VPS própria, sem dividir recursos com outros sistemas.
 - [ ] Decisão sobre como publicar: manualmente pelo painel, sem o job automático.
 - [ ] [Backup diário do banco](https://easypanel.io/docs/backups/database), com destino fora da VPS.

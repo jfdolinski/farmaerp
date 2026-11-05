@@ -6,8 +6,8 @@ afterAll(closePools);
 
 const EXPECTED_TABLES = [
   'auth_event', 'branch', 'branch_group', 'code_counter', 'company', 'economic_group',
-  'region', 'terminal', 'terminal_event', 'terminal_pairing_request',
-  'terminal_status', 'user_account', 'user_branch', 'user_credential', 'user_session',
+  'permission', 'region', 'role', 'role_permission', 'terminal', 'terminal_event', 'terminal_pairing_request',
+  'terminal_status', 'user_account', 'user_branch', 'user_credential', 'user_role', 'user_session',
 ];
 
 async function publicTables() {
@@ -39,6 +39,7 @@ describe('migrations', () => {
       '0006_terminal_pairing',
       '0007_human_codes',
       '0008_authentication',
+      '0009_roles_and_permissions',
     ]);
   });
 });

@@ -17,7 +17,7 @@ export interface SessionUser {
   name: string;
   email: string | null;
   code: number;
-  isAdmin: boolean;
+  permissions: string[];
   mustChangePassword: boolean;
 }
 

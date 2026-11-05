@@ -108,18 +108,34 @@ describe('usuário', () => {
 });
 
 describe('último administrador', () => {
+  const grantAdmin = (client, groupId, userId) =>
+    client.query(
+      `INSERT INTO user_role (user_id, role_id)
+       SELECT $2, id FROM role WHERE economic_group_id = $1 AND system_key = 'administrator'`,
+      [groupId, userId],
+    );
+
   // Grupo próprio, com um único admin.
   async function soloAdmin(client) {
     const { rows: [group] } = await client.query(`INSERT INTO economic_group (name) VALUES ('Solo') RETURNING id`);
     const { rows: [admin] } = await client.query(
-      `INSERT INTO user_account (economic_group_id, name, is_group_admin) VALUES ($1, 'Admin', true) RETURNING id`,
+      `INSERT INTO user_account (economic_group_id, name) VALUES ($1, 'Admin') RETURNING id`,
       [group.id],
     );
+    await grantAdmin(client, group.id, admin.id);
     return { group, admin };
   }
 
+  it('não pode perder o perfil', async () => {
+    await asOwner(async (client) => {
+      const { admin } = await soloAdmin(client);
+      await expect(
+        client.query('UPDATE user_role SET deleted_at = now() WHERE user_id = $1', [admin.id]),
+      ).rejects.toSatisfy(hasCode('FA405'));
+    });
+  });
+
   it.each([
-    ['perder o papel', 'is_group_admin = false'],
     ['ser desativado', 'is_active = false'],
     ['ser excluído', 'deleted_at = now()'],
   ])('não pode %s', async (_label, change) => {
@@ -145,9 +161,10 @@ describe('último administrador', () => {
     await asOwner(async (client) => {
       const { group, admin } = await soloAdmin(client);
       const { rows: [second] } = await client.query(
-        `INSERT INTO user_account (economic_group_id, name, is_group_admin) VALUES ($1, 'Outro', true) RETURNING id`,
+        `INSERT INTO user_account (economic_group_id, name) VALUES ($1, 'Outro') RETURNING id`,
         [group.id],
       );
+      await grantAdmin(client, group.id, second.id);
       await client.query('UPDATE user_account SET is_active = false WHERE id = $1', [second.id]);
       await expect(
         client.query('UPDATE user_account SET is_active = false WHERE id = $1', [admin.id]),
@@ -163,9 +180,10 @@ describe('último administrador', () => {
     try {
       ({ group, admin: first } = await soloAdmin(setup));
       ({ rows: [second] } = await setup.query(
-        `INSERT INTO user_account (economic_group_id, name, is_group_admin) VALUES ($1, 'Outro', true) RETURNING id`,
+        `INSERT INTO user_account (economic_group_id, name) VALUES ($1, 'Outro') RETURNING id`,
         [group.id],
       ));
+      await grantAdmin(setup, group.id, second.id);
     } finally {
       setup.release();
     }
@@ -348,7 +366,7 @@ describe('sessão', () => {
     await asUser(a.admin.id, async (client) => {
       const { hash } = await session(client);
       expect(await validate(client, hash)).toMatchObject({
-        userId: a.noBranchUser.id, isAdmin: false, mustChangePassword: true,
+        userId: a.noBranchUser.id, permissions: [], mustChangePassword: true,
       });
     });
   });
@@ -437,8 +455,8 @@ describe('sessão', () => {
     await asUser(a.admin.id, async (client) => {
       await client.query('UPDATE user_account SET is_active = false WHERE id = $1', [a.secondAdmin.id]);
       await setUser(client, a.secondAdmin.id);
-      const { rows } = await client.query('SELECT app.admin_economic_group_id() AS id');
-      expect(rows[0].id).toBeNull();
+      const { rows } = await client.query(`SELECT app.has_permission('users.manage') AS allowed`);
+      expect(rows[0].allowed).toBe(false);
     });
   });
 

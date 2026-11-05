@@ -2,6 +2,7 @@ import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthController } from './auth/auth.controller.js';
+import { RolesController } from './auth/roles.controller.js';
 import { SessionGuard } from './auth/session.guard.js';
 import { UsersController } from './auth/users.controller.js';
 import { DatabaseService } from './database.service.js';
@@ -22,6 +23,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     HealthController,
     AuthController,
     UsersController,
+    RolesController,
     TerminalDeviceController,
     TerminalAdminController,
   ],
