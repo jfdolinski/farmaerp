@@ -224,4 +224,9 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - **Saldo negativo:** só por venda, porque o PDV pode vender offline. As demais saídas são recusadas se faltar saldo.
 - **Lote:** cadastro próprio por filial e produto. O controle é ligado por filial e produto, e em controlado é sempre obrigatório. Ligar ou desligar exige o saldo do outro modo zerado.
 - **MS do lote:** herda o do Catálogo. Pode ser editado, com histórico, e `ms_original` guarda o primeiro valor.
+- **Baixa por vencimento:** `app.allocate_batches` distribui a quantidade pelos lotes que vencem antes, e em empate pelo que entrou primeiro. Lote vencido nunca entra.
+- **Lote escolhido à mão:** `app.check_chosen_batch` recusa vencido e, fora da ordem, exige `stock.batch_override`, marcando `fefo_override` na movimentação. Vale na transferência e valerá na venda. Perda e ajuste não passam por ela.
+- **Transferência:** imediata, com saída e entrada ligadas por `transfer_group`. No destino, o lote de mesmo número é usado ou criado com a validade e o MS da origem. Não substitui a nota fiscal entre CNPJs.
+- **Inventário simples:** a diferença entre o contado e o saldo vira movimentação do tipo `inventory`. Contagem igual não gera nada.
+- **Status e saldo:** `app.product_availability` diz se o produto vende e se entra na compra automática em cada filial, e o aviso para o vendedor. Lote vencido não conta como saldo vendável.
 - **Seed:** em tabela com trigger de validação, confira com `NOT EXISTS` antes de incluir. O trigger roda antes do `ON CONFLICT`, e o seed roda a cada deploy de homologação.

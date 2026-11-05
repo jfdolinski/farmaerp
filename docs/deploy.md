@@ -163,6 +163,10 @@ Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda.
 
 Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda. O Gerente passa a ver o estoque e a registrar perdas. Em homologação, o seed cria um saldo fictício.
 
+## Atualizar para transferência e inventário
+
+Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda.
+
 ## Antes de publicar a produção
 
 A produção usa os mesmos passos, em um projeto próprio e com segredos próprios, mas depende destes itens:

@@ -30,6 +30,7 @@ interface MovementRow {
   reason: string | null;
   reversal_of: string | null;
   reversed: boolean;
+  fefo_override: boolean;
   occurred_at: string;
   author: string | null;
 }
@@ -72,19 +73,21 @@ async function StockContent({ searchParams }: { searchParams: SearchParams }) {
   const includeZero = params.zerados === "1";
   const canAdjust = can(user, "stock.adjust");
   const canLoss = can(user, "stock.loss");
+  const canTransfer = can(user, "stock.transfer");
   const canEditBatch = can(user, "stock.batch");
 
   const filters = new URLSearchParams({ q: query });
   if (branchId) filters.set("branch", branchId);
   if (includeZero) filters.set("zerados", "1");
 
-  const [balances, movements, branches, check] = await Promise.all([
+  const [balances, movements, branches, check, destinations] = await Promise.all([
     apiFetch<BalanceRow[]>(`/admin/stock?${filters.toString()}`),
     apiFetch<MovementRow[]>(
       `/admin/stock/movements${branchId ? `?branch=${encodeURIComponent(branchId)}` : ""}`,
     ),
     apiFetch<BranchOption[]>("/admin/branches"),
     apiFetch<{ divergences: number }>("/admin/stock/check"),
+    canTransfer ? apiFetch<BranchOption[]>("/admin/stock/destinations") : Promise.resolve(null),
   ]);
   if (!balances.ok) redirectIfNeeded(balances.error, "/estoque");
   const branchList = branches.ok ? branches.data : [];
@@ -102,10 +105,16 @@ async function StockContent({ searchParams }: { searchParams: SearchParams }) {
         </section>
       )}
 
-      {(canAdjust || canLoss) && (
+      {(canAdjust || canLoss || canTransfer) && (
         <section className={styles.card}>
           <h2>Registrar movimentação</h2>
-          <MovementForm branches={branchList} canAdjust={canAdjust} canLoss={canLoss} />
+          <MovementForm
+            branches={branchList}
+            canAdjust={canAdjust}
+            canLoss={canLoss}
+            canTransfer={canTransfer}
+            destinations={destinations?.ok ? destinations.data : []}
+          />
         </section>
       )}
 
@@ -230,6 +239,9 @@ async function StockContent({ searchParams }: { searchParams: SearchParams }) {
                       {MOVEMENT_LABELS[row.movement_type] ?? row.movement_type}
                       {row.reversal_of && <small>Estorno</small>}
                       {row.reversed && <small>Estornada</small>}
+                      {row.fefo_override && (
+                        <small className={styles.warning}>Fora da ordem de vencimento</small>
+                      )}
                     </td>
                     <td>{quantityText(row.quantity)}</td>
                     <td>

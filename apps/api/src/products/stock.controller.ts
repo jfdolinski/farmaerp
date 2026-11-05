@@ -173,6 +173,60 @@ export class StockController {
     });
   }
 
+  @Get('stock/destinations')
+  destinations() {
+    return this.database.withContext(async (client) => {
+      const { rows } = await client.query('SELECT * FROM app.transfer_destinations()');
+      return rows;
+    });
+  }
+
+  @Post('stock/transfers')
+  transfer(@RequestBody() rawBody: unknown) {
+    const body = asBody(rawBody);
+    const data = {
+      productLookup: requireText(body, 'productLookup', 30),
+      fromBranchId: requireUuid(body.fromBranchId),
+      toBranchId: requireUuid(body.toBranchId),
+      quantity: quantityOf(body.quantity),
+      batchNumber: optionalText(body, 'batchNumber', 40),
+      reason: optionalText(body, 'reason', 500),
+    };
+    return this.database.withContext(async (client) => {
+      const { rows } = await client.query<{ id: string }>(
+        'SELECT app.transfer_stock($1::jsonb) AS id',
+        [JSON.stringify(data)],
+      );
+      return { id: rows[0].id };
+    });
+  }
+
+  /** Contagem igual ao saldo não gera movimentação, e a resposta diz isso. */
+  @Post('stock/counts')
+  count(@RequestBody() rawBody: unknown) {
+    const body = asBody(rawBody);
+    const counted = body.countedQuantity;
+    if (typeof counted === 'number' && counted < 0) {
+      throw new AppError('FA005');
+    }
+    const data = {
+      productLookup: requireText(body, 'productLookup', 30),
+      branchId: requireUuid(body.branchId),
+      countedQuantity: counted === 0 ? 0 : quantityOf(counted),
+      batchNumber: optionalText(body, 'batchNumber', 40),
+      expiresOn: optionalDay(body, 'expiresOn'),
+      msRegistration: optionalText(body, 'msRegistration', 13),
+      reason: optionalText(body, 'reason', 500),
+    };
+    return this.database.withContext(async (client) => {
+      const { rows } = await client.query<{ id: string | null }>(
+        'SELECT app.count_stock($1::jsonb) AS id',
+        [JSON.stringify(data)],
+      );
+      return { id: rows[0].id, changed: rows[0].id !== null };
+    });
+  }
+
   @Post('stock/losses')
   loss(@RequestBody() rawBody: unknown) {
     const body = asBody(rawBody);

@@ -7,6 +7,7 @@ import { apiFetch, ApiError } from "@/lib/api";
 export interface StockFormState {
   error?: ApiError;
   done?: boolean;
+  unchanged?: boolean;
 }
 
 const text = (form: FormData, field: string) =>
@@ -40,6 +41,39 @@ export async function registerMovement(
     batchNumber: optional(form, "batchNumber"),
     reason: optional(form, "reason"),
   };
+  if (kind === "transfer") {
+    const result = await apiFetch("/admin/stock/transfers", {
+      method: "POST",
+      body: {
+        productLookup: common.productLookup,
+        fromBranchId: common.branchId,
+        toBranchId: text(form, "toBranchId"),
+        quantity: common.quantity,
+        batchNumber: common.batchNumber,
+        reason: common.reason,
+      },
+    });
+    if (!result.ok) return handleFailure(result.error, "/estoque");
+    refresh();
+    return { done: true };
+  }
+  if (kind === "count") {
+    const result = await apiFetch<{ changed: boolean }>("/admin/stock/counts", {
+      method: "POST",
+      body: {
+        productLookup: common.productLookup,
+        branchId: common.branchId,
+        countedQuantity: common.quantity,
+        batchNumber: common.batchNumber,
+        expiresOn: optional(form, "expiresOn"),
+        msRegistration: optional(form, "msRegistration"),
+        reason: common.reason,
+      },
+    });
+    if (!result.ok) return handleFailure(result.error, "/estoque");
+    refresh();
+    return { done: true, unchanged: !result.data.changed };
+  }
   const result =
     kind === "loss"
       ? await apiFetch("/admin/stock/losses", { method: "POST", body: common })

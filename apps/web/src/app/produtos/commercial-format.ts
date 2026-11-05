@@ -12,6 +12,15 @@ export const REGION_LABELS: Record<string, string> = {
   manaus_free_zone: "Zona Franca de Manaus",
 };
 
+// O que o vendedor precisa saber sobre o status e o saldo desta filial.
+const NOTICES: Record<string, string> = {
+  on_order_without_stock: "Sem estoque: só sai por encomenda",
+  remaining_stock_only: "Vende só o estoque restante",
+  unavailable: "Sem estoque: some da venda e da compra",
+};
+
+export const noticeText = (notice: string) => NOTICES[notice] ?? notice;
+
 export const statusLabel = (status: string) => STATUS_LABELS[status] ?? status;
 
 export const regionLabel = (region: string | null) =>

@@ -5,7 +5,7 @@ import { apiFetch, can, redirectIfNeeded, requireUser } from "@/lib/api";
 import { AppHeader } from "../../app-header";
 import { ErrorNotice } from "../../error-notice";
 import { CatalogResults, CatalogRow, controlledLabel } from "../catalog-results";
-import { moneyText, regionLabel, statusLabel } from "../commercial-format";
+import { moneyText, noticeText, regionLabel, statusLabel } from "../commercial-format";
 import {
   AddPmcForm,
   BranchRow,
@@ -239,6 +239,7 @@ async function ProductContent({
                   <th>Status</th>
                   <th>Preço em vigor</th>
                   <th>PMC</th>
+                  <th>Na venda</th>
                 </tr>
               </thead>
               <tbody>
@@ -251,6 +252,10 @@ async function ProductContent({
                       {row.above_pmc && <small className={styles.warning}>Acima do PMC</small>}
                     </td>
                     <td>{moneyText(row.pmc)}</td>
+                    <td>
+                      {row.sellable ? "Vende" : "Não vende"}
+                      {row.notice && <small className={styles.warning}>{noticeText(row.notice)}</small>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
