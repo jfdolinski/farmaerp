@@ -143,6 +143,64 @@ describe('clientes contra o banco real', () => {
     expect(codeOf(response)).toBe('FA005');
   });
 
+  describe('inscrição estadual e convênios', () => {
+    it('grava a inscrição estadual conferindo o tamanho pelo estado', async () => {
+      const { id } = (await create({ state: 'SP', stateRegistration: '110.042.490.114' }).expect(201)).body as { id: string };
+      const detail = (await call('get', `/admin/customers/${id}`).expect(200)).body as Json;
+      expect(detail.state_registration).toBe('110042490114');
+      const wrong = await create({ state: 'SP', stateRegistration: '1100424901' }).expect(422);
+      expect(codeOf(wrong)).toBe('FA908');
+    });
+
+    it('cria convênio, vincula com matrícula e limite, e a ficha mostra', async () => {
+      const name = `Convênio ${randomInt(1e9)}`;
+      const agreement = (await call('post', '/admin/agreements').send({ name }).expect(201)).body as { id: string };
+      const { id } = (await create().expect(201)).body as { id: string };
+      await call('post', `/admin/customers/${id}/agreements`)
+        .send({ agreementId: agreement.id, registration: 'M-77', creditLimit: 350.5 })
+        .expect(201);
+      const detail = (await call('get', `/admin/customers/${id}`).expect(200)).body as Json;
+      expect(detail.agreements).toEqual([
+        expect.objectContaining({ agreement_name: name, registration: 'M-77', credit_limit: '350.50' }),
+      ]);
+      const list = (await call('get', '/admin/agreements').expect(200)).body as Json[];
+      expect(list.find((row) => row.id === agreement.id)).toMatchObject({ customers: 1 });
+
+      const blocked = await call('post', `/admin/agreements/${agreement.id}/delete`).expect(409);
+      expect(codeOf(blocked)).toBe('FA105');
+      await call('post', `/admin/customers/agreements/${detail.agreements[0].id}/remove`).expect(200);
+      await call('post', `/admin/agreements/${agreement.id}/delete`).expect(200);
+    });
+
+    it.each([
+      ['limite com três decimais', { creditLimit: 1.234 }, 'FA005'],
+      ['limite em texto', { creditLimit: 'mil' }, 'FA005'],
+      ['limite negativo', { creditLimit: -1 }, 'FA911'],
+    ])('recusa %s', async (_label, body, code) => {
+      const agreement = (await call('post', '/admin/agreements').send({ name: `C ${randomInt(1e9)}` }).expect(201)).body as { id: string };
+      const { id } = (await create().expect(201)).body as { id: string };
+      const response = await call('post', `/admin/customers/${id}/agreements`)
+        .send({ agreementId: agreement.id, registration: 'M-1', creditLimit: 10, ...body })
+        .expect(422);
+      expect(codeOf(response)).toBe(code);
+    });
+
+    it('Gerente não cria convênio nem vincula', async () => {
+      const response = await call('post', '/admin/agreements', MANAGER).send({ name: 'Do gerente' }).expect(403);
+      expect(codeOf(response)).toBe('FA002');
+    });
+
+    it('a consulta de CNPJ recusa número inválido antes de sair do sistema', async () => {
+      const response = await call('get', '/admin/customers/cnpj/11.111.111.1111-11').expect(422);
+      expect(codeOf(response)).toBe('FA902');
+    });
+
+    it('a consulta de CNPJ exige a permissão de cadastrar clientes', async () => {
+      const response = await call('get', '/admin/customers/cnpj/11222333000181', OPERATOR).expect(403);
+      expect(codeOf(response)).toBe('FA002');
+    });
+  });
+
   describe('permissões', () => {
     it('Gerente de uma filial cadastra e atende clientes da rede', async () => {
       const { id } = (await create({}, MANAGER).expect(201)).body as { id: string };

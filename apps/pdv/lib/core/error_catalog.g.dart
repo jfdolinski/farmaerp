@@ -688,4 +688,40 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Escolha a finalidade, a decisão e o canal da lista.',
     retryable: false,
   ),
+  'FA906': ErrorCatalogEntry(
+    code: 'FA906',
+    message: 'Não foi possível consultar o CNPJ agora.',
+    action: 'Preencha os dados manualmente ou tente de novo em alguns minutos.',
+    retryable: true,
+  ),
+  'FA907': ErrorCatalogEntry(
+    code: 'FA907',
+    message: 'CNPJ não encontrado nos serviços de consulta.',
+    action: 'Confira os números ou preencha os dados manualmente.',
+    retryable: false,
+  ),
+  'FA908': ErrorCatalogEntry(
+    code: 'FA908',
+    message: 'A inscrição estadual não confere com o estado.',
+    action: 'Confira os dígitos e o estado do endereço, ou informe ISENTO.',
+    retryable: false,
+  ),
+  'FA909': ErrorCatalogEntry(
+    code: 'FA909',
+    message: 'Este cliente já está neste convênio.',
+    action: 'Edite o vínculo que já existe.',
+    retryable: false,
+  ),
+  'FA910': ErrorCatalogEntry(
+    code: 'FA910',
+    message: 'Esta matrícula já está em uso neste convênio.',
+    action: 'Confira a matrícula informada.',
+    retryable: false,
+  ),
+  'FA911': ErrorCatalogEntry(
+    code: 'FA911',
+    message: 'Os dados do convênio são inválidos.',
+    action: 'Informe a matrícula e um limite igual ou maior que zero.',
+    retryable: false,
+  ),
 };

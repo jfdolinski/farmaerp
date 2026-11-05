@@ -171,6 +171,10 @@ Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda.
 
 Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda. O Gerente passa a ver e cadastrar clientes. Em homologação, o seed cria um cliente fictício.
 
+## Atualizar para convênios e consulta de CNPJ
+
+Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda. A API passa a consultar `brasilapi.com.br`, `receitaws.com.br` e `open.cnpja.com` quando alguém pede a consulta de um CNPJ: se a VPS bloquear saída para a internet, a consulta avisa e o cadastro segue manual.
+
 ## Antes de publicar a produção
 
 A produção usa os mesmos passos, em um projeto próprio e com segredos próprios, mas depende destes itens:

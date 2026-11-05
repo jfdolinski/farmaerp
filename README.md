@@ -237,4 +237,7 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - **Dados pessoais:** mensagens e detalhes de erro do banco levam só identificadores. A API descarta o detalhe do Postgres no log, que traria o valor da chave. A lista mostra o documento mascarado, e a ficha mostra completo.
 - **Consentimento:** cada concessão ou revogação é uma linha que nunca muda. A mais recente vale. Repetir a decisão atual não gera registro.
 - **Reconhecimento facial:** só a decisão é registrada. O sistema não guarda imagem nem biometria.
+- **Consulta de CNPJ:** em cascata, BrasilAPI, ReceitaWS e CNPJá, com 5 segundos por serviço. Só preenche a tela, e a pessoa confere antes de salvar. Os serviços devolvem também os sócios, e isso nunca é repassado nem gravado em log.
+- **Inscrição estadual:** confere o tamanho esperado em cada estado, ou ISENTO. O dígito verificador entra com o Fiscal.
+- **Convênios:** cadastro e vínculo com matrícula e limite, com `agreements.manage` em todas as filiais, porque o limite é crédito da rede.
 - **Exclusão a pedido do titular:** ainda não existe. A proposta é anonimizar, mantendo só o que a lei fiscal exige.
