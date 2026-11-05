@@ -13,11 +13,12 @@ beforeAll(async () => {
 afterAll(closePools);
 
 const ALL = [
-  'audit.view', 'branches.view_all', 'roles.assign', 'roles.manage', 'structure.manage',
+  'audit.view', 'branches.view_all', 'products.manage', 'products.price', 'products.reactivate',
+  'products.status', 'products.view', 'roles.assign', 'roles.manage', 'structure.manage',
   'terminals.approve', 'terminals.block', 'terminals.request', 'terminals.revoke', 'terminals.view',
   'users.manage', 'users.reset_password', 'users.view',
 ];
-const MANAGER = ['terminals.block', 'terminals.request', 'terminals.view', 'users.reset_password', 'users.view'];
+const MANAGER = ['products.view', 'terminals.block', 'terminals.request', 'terminals.view', 'users.reset_password', 'users.view'];
 
 const has = async (client, code, branchId = null) =>
   (await client.query('SELECT app.has_permission($1, $2) AS ok', [code, branchId])).rows[0].ok;

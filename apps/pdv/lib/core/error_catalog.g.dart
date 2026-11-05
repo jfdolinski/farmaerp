@@ -436,4 +436,58 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Atualize a tela e selecione o perfil novamente.',
     retryable: false,
   ),
+  'FA601': ErrorCatalogEntry(
+    code: 'FA601',
+    message: 'Este código de barras já está em outro produto.',
+    action: 'Confira o código digitado ou abra o produto que já usa este código.',
+    retryable: false,
+  ),
+  'FA602': ErrorCatalogEntry(
+    code: 'FA602',
+    message: 'O código de barras é inválido.',
+    action: 'Confira os dígitos. Se o código for da própria loja, marque como código interno.',
+    retryable: false,
+  ),
+  'FA603': ErrorCatalogEntry(
+    code: 'FA603',
+    message: 'O produto precisa ter um código de barras principal.',
+    action: 'Informe um código principal ou escolha outro antes de remover este.',
+    retryable: false,
+  ),
+  'FA604': ErrorCatalogEntry(
+    code: 'FA604',
+    message: 'Este item do Catálogo já está cadastrado na loja.',
+    action: 'Abra o produto que já está vinculado a este item.',
+    retryable: false,
+  ),
+  'FA605': ErrorCatalogEntry(
+    code: 'FA605',
+    message: 'Selecione uma subcategoria ativa.',
+    action: 'Escolha uma subcategoria da lista ou deixe em branco.',
+    retryable: false,
+  ),
+  'FA606': ErrorCatalogEntry(
+    code: 'FA606',
+    message: 'O código principal precisa estar ativo na leitura do PDV.',
+    action: 'Ative a leitura ou escolha outro código como principal.',
+    retryable: false,
+  ),
+  'FA607': ErrorCatalogEntry(
+    code: 'FA607',
+    message: 'A estrutura de categorias é inválida.',
+    action: 'Atualize a tela e tente novamente.',
+    retryable: false,
+  ),
+  'FA608': ErrorCatalogEntry(
+    code: 'FA608',
+    message: 'Os dados do Catálogo são inválidos.',
+    action: 'Confira o arquivo de importação e tente novamente.',
+    retryable: false,
+  ),
+  'FA609': ErrorCatalogEntry(
+    code: 'FA609',
+    message: 'Os dados do produto são inválidos.',
+    action: 'Confira os dados e tente novamente.',
+    retryable: false,
+  ),
 };

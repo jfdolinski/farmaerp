@@ -40,6 +40,7 @@ npm run db:seed
 | `npm run test:integration` | Testa a API contra o banco real, em um banco próprio recriado a cada execução |
 | `npm run test:catalog` | Testa o catálogo de erros |
 | `npm run catalog:generate` | Gera o catálogo em Dart para o PDV depois de alterar o JSON |
+| `npm run catalog:import -- arquivo.json` | Importa itens do Catálogo de produtos, que não é o catálogo de erros |
 | `npm run test:images` | Constrói as imagens Docker e testa um ambiente publicado de ponta a ponta |
 | `npm run test:outage` | Derruba o PostgreSQL local e confere se a API sobrevive (requer o build da API) |
 | `npm run dev:api` | Sobe a API em http://localhost:3001 (`GET /health`) |
@@ -159,3 +160,33 @@ O UUID é a identidade do registro. O código humano serve para tela, cupom e at
 2. Use `app.has_permission('modulo.acao', filial)` nas políticas e funções do banco. Quem decide é sempre o banco.
 3. Na retaguarda, use `can(user, 'modulo.acao')` só para mostrar ou esconder botões.
 4. Acrescente aos testes de `db/tests/permissions.test.mjs`.
+
+## Produtos
+
+- **Catálogo:** tabelas globais `catalog_*`, sem grupo econômico. A API só lê; quem escreve é `npm run catalog:import`, com o papel dono das tabelas.
+- **Produto da loja:** único na rede. Pode existir sem Catálogo, marcado como tal, até ser vinculado.
+- **Código de barras:** não se repete no grupo. Todo produto ativo termina a transação com um principal, que precisa estar ativo na leitura do PDV. Códigos fora do padrão GTIN são marcados como internos.
+- **Fracionamento:** o do código de barras prevalece sobre o do produto. Use `app.effective_fraction`.
+- **Escrita:** toda alteração passa por funções `app.*`, que conferem `products.manage`. Produto e estrutura são da rede, então um perfil de uma filial só não os altera.
+
+**Importar o Catálogo**
+
+O arquivo é uma lista JSON, e `sourceKey` identifica o item na origem. Importar de novo atualiza o que mudou. Se um item for recusado, nada é gravado e o erro aponta qual foi.
+
+```json
+[
+  {
+    "sourceKey": "origem-123",
+    "name": "Nome padrão do produto",
+    "activeIngredient": "Princípio ativo",
+    "manufacturer": "Fabricante",
+    "msRegistration": "1234567890123",
+    "controlledClass": "B1",
+    "ncm": "30049099",
+    "cest": "1300100",
+    "barcodes": ["7890000000017"]
+  }
+]
+```
+
+Em `controlledClass`, deixe vazio para não controlado ou use `A1`, `A2`, `A3`, `B1`, `B2`, `C1` a `C5`, `D1` ou `antimicrobial`.

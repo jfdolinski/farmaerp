@@ -147,6 +147,10 @@ Os terminais já aprovados continuam funcionando.
 
 Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda. A migration dá o perfil Administrador a quem era administrador, e os demais usuários ficam sem perfil, até um administrador atribuir.
 
+## Atualizar para o cadastro de produtos
+
+Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda. A migration ativa as extensões `pg_trgm` e `unaccent`, que já vêm na imagem oficial do PostgreSQL, e o Gerente passa a ver produtos. Em homologação, o seed cria um Catálogo fictício.
+
 ## Antes de publicar a produção
 
 A produção usa os mesmos passos, em um projeto próprio e com segredos próprios, mas depende destes itens:

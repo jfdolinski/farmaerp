@@ -8,6 +8,9 @@ export function AppHeader({ user }: { user: CurrentUser }) {
     <header className={styles.appHeader}>
       <nav className={styles.nav} aria-label="Principal">
         <strong>FarmaERP</strong>
+        {(can(user, "products.view") || can(user, "products.manage")) && (
+          <Link href="/produtos">Produtos</Link>
+        )}
         {(can(user, "terminals.view") || can(user, "terminals.request")) && (
           <Link href="/terminais">Terminais</Link>
         )}

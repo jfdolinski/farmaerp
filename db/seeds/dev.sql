@@ -68,4 +68,45 @@ SELECT seed.id, seed.user_id, r.id, seed.branch_id
  )
  AND NOT EXISTS (SELECT 1 FROM user_role ur WHERE ur.id = seed.id);
 
+-- Catálogo e produtos fictícios, para demonstração. Os códigos de barras têm dígito válido, mas não são reais.
+SELECT app.upsert_catalog_product(item) FROM jsonb_array_elements('[
+  {"sourceKey": "demo-1", "name": "Dipirona Demonstração 500 mg 20 comprimidos", "activeIngredient": "Dipirona", "manufacturer": "Laboratório Demonstração", "msRegistration": "1000000000001", "ncm": "30049099", "barcodes": ["7890000000017", "7890000000024"]},
+  {"sourceKey": "demo-2", "name": "Paracetamol Demonstração 750 mg 20 comprimidos", "activeIngredient": "Paracetamol", "manufacturer": "Laboratório Demonstração", "msRegistration": "1000000000002", "ncm": "30049099", "barcodes": ["7890000000031"]},
+  {"sourceKey": "demo-3", "name": "Amoxicilina Demonstração 500 mg 21 cápsulas", "activeIngredient": "Amoxicilina", "manufacturer": "Indústria Fictícia", "msRegistration": "1000000000003", "controlledClass": "antimicrobial", "ncm": "30041019", "barcodes": ["7890000000048"]},
+  {"sourceKey": "demo-4", "name": "Clonazepam Demonstração 2 mg 30 comprimidos", "activeIngredient": "Clonazepam", "manufacturer": "Indústria Fictícia", "msRegistration": "1000000000004", "controlledClass": "B1", "ncm": "30049069", "barcodes": ["7890000000055"]},
+  {"sourceKey": "demo-5", "name": "Protetor Solar Demonstração FPS 50", "manufacturer": "Cosméticos Fictícios", "ncm": "33049910", "cest": "2003000", "barcodes": ["7890000000062"]}
+]'::jsonb) AS item;
+
+INSERT INTO product_category (id, economic_group_id, parent_id, level, name) VALUES
+  ('019a0000-0000-7000-8000-000000000020', '019a0000-0000-7000-8000-000000000001', NULL, 1, 'Medicamentos'),
+  ('019a0000-0000-7000-8000-000000000021', '019a0000-0000-7000-8000-000000000001', '019a0000-0000-7000-8000-000000000020', 2, 'Analgésicos'),
+  ('019a0000-0000-7000-8000-000000000022', '019a0000-0000-7000-8000-000000000001', '019a0000-0000-7000-8000-000000000021', 3, 'Comprimidos')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO product_group (id, economic_group_id, kind, name) VALUES
+  ('019a0000-0000-7000-8000-000000000023', '019a0000-0000-7000-8000-000000000001', 'commission', 'Comissão padrão'),
+  ('019a0000-0000-7000-8000-000000000024', '019a0000-0000-7000-8000-000000000001', 'pricing', 'Genéricos'),
+  ('019a0000-0000-7000-8000-000000000025', '019a0000-0000-7000-8000-000000000001', 'price_family', 'Dipironas')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO sales_channel (id, economic_group_id, name) VALUES
+  ('019a0000-0000-7000-8000-000000000026', '019a0000-0000-7000-8000-000000000001', 'Marketplace demonstração')
+ON CONFLICT (id) DO NOTHING;
+
+-- Confere antes de incluir: com ON CONFLICT, o trigger consumiria um código a cada execução.
+INSERT INTO product (id, economic_group_id, catalog_product_id, display_name, category_id, pricing_group_id, price_family_id, commission_group_id)
+SELECT '019a0000-0000-7000-8000-000000000027'::uuid, '019a0000-0000-7000-8000-000000000001'::uuid, cp.id, cp.name,
+       '019a0000-0000-7000-8000-000000000022'::uuid, '019a0000-0000-7000-8000-000000000024'::uuid,
+       '019a0000-0000-7000-8000-000000000025'::uuid, '019a0000-0000-7000-8000-000000000023'::uuid
+  FROM catalog_product cp
+ WHERE cp.source_key = 'demo-1' AND cp.deleted_at IS NULL
+   AND NOT EXISTS (SELECT 1 FROM product p WHERE p.id = '019a0000-0000-7000-8000-000000000027');
+
+INSERT INTO product_barcode (id, economic_group_id, product_id, code, is_primary) VALUES
+  ('019a0000-0000-7000-8000-000000000028', '019a0000-0000-7000-8000-000000000001',
+   '019a0000-0000-7000-8000-000000000027', '7890000000017', true),
+  ('019a0000-0000-7000-8000-000000000029', '019a0000-0000-7000-8000-000000000001',
+   '019a0000-0000-7000-8000-000000000027', '7890000000024', false)
+ON CONFLICT (id) DO NOTHING;
+
 COMMIT;

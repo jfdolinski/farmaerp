@@ -78,7 +78,12 @@
       "user_session_token_hash_active_key",
       "permission_code_active_key",
       "role_permission_active_key",
-      "role_system_key_active_key"
+      "role_system_key_active_key",
+      "product_barcode_primary_active_key",
+      "product_barcode_channel_active_key",
+      "catalog_manufacturer_name_active_key",
+      "catalog_product_source_key_active_key",
+      "catalog_product_barcode_code_active_key"
     ]
   },
   "FA009": {
@@ -162,7 +167,16 @@
       "permission_id_uuid_v7_check",
       "role_id_uuid_v7_check",
       "role_permission_id_uuid_v7_check",
-      "user_role_id_uuid_v7_check"
+      "user_role_id_uuid_v7_check",
+      "catalog_manufacturer_id_uuid_v7_check",
+      "catalog_product_id_uuid_v7_check",
+      "catalog_product_barcode_id_uuid_v7_check",
+      "product_category_id_uuid_v7_check",
+      "product_group_id_uuid_v7_check",
+      "sales_channel_id_uuid_v7_check",
+      "product_id_uuid_v7_check",
+      "product_barcode_id_uuid_v7_check",
+      "product_barcode_channel_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -314,7 +328,10 @@
       "branch_group_name_active_key",
       "branch_name_active_key",
       "region_name_active_key",
-      "terminal_name_active_key"
+      "terminal_name_active_key",
+      "product_category_name_active_key",
+      "product_group_name_active_key",
+      "sales_channel_name_active_key"
     ]
   },
   "FA216": {
@@ -332,7 +349,11 @@
       "region_name_check",
       "terminal_name_check",
       "user_account_name_check",
-      "role_name_check"
+      "role_name_check",
+      "product_category_name_check",
+      "product_group_name_check",
+      "sales_channel_name_check",
+      "product_display_name_check"
     ]
   },
   "FA217": {
@@ -658,5 +679,102 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": []
+  },
+  "FA601": {
+    "message": "Este código de barras já está em outro produto.",
+    "action": "Confira o código digitado ou abra o produto que já usa este código.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "product_barcode_code_active_key"
+    ]
+  },
+  "FA602": {
+    "message": "O código de barras é inválido.",
+    "action": "Confira os dígitos. Se o código for da própria loja, marque como código interno.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "product_barcode_code_check",
+      "product_barcode_gtin_check"
+    ]
+  },
+  "FA603": {
+    "message": "O produto precisa ter um código de barras principal.",
+    "action": "Informe um código principal ou escolha outro antes de remover este.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA604": {
+    "message": "Este item do Catálogo já está cadastrado na loja.",
+    "action": "Abra o produto que já está vinculado a este item.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "product_catalog_active_key"
+    ]
+  },
+  "FA605": {
+    "message": "Selecione uma subcategoria ativa.",
+    "action": "Escolha uma subcategoria da lista ou deixe em branco.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA606": {
+    "message": "O código principal precisa estar ativo na leitura do PDV.",
+    "action": "Ative a leitura ou escolha outro código como principal.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "product_barcode_primary_scan_check"
+    ]
+  },
+  "FA607": {
+    "message": "A estrutura de categorias é inválida.",
+    "action": "Atualize a tela e tente novamente.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "product_category_level_check"
+    ]
+  },
+  "FA608": {
+    "message": "Os dados do Catálogo são inválidos.",
+    "action": "Confira o arquivo de importação e tente novamente.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": [
+      "catalog_manufacturer_name_check",
+      "catalog_product_source_key_check",
+      "catalog_product_name_check",
+      "catalog_product_ms_registration_check",
+      "catalog_product_controlled_class_check",
+      "catalog_product_ncm_check",
+      "catalog_product_cest_check",
+      "catalog_product_barcode_gtin_check"
+    ]
+  },
+  "FA609": {
+    "message": "Os dados do produto são inválidos.",
+    "action": "Confira os dados e tente novamente.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "product_fraction_quantity_check",
+      "product_barcode_fraction_quantity_check",
+      "product_group_kind_check",
+      "product_manufacturer_source_check"
+    ]
   }
 }
