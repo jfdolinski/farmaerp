@@ -77,11 +77,18 @@ SELECT app.upsert_catalog_product(item) FROM jsonb_array_elements('[
   {"sourceKey": "demo-5", "name": "Protetor Solar Demonstração FPS 50", "manufacturer": "Cosméticos Fictícios", "ncm": "33049910", "cest": "2003000", "barcodes": ["7890000000062"]}
 ]'::jsonb) AS item;
 
-INSERT INTO product_category (id, economic_group_id, parent_id, level, name) VALUES
-  ('019a0000-0000-7000-8000-000000000020', '019a0000-0000-7000-8000-000000000001', NULL, 1, 'Medicamentos'),
-  ('019a0000-0000-7000-8000-000000000021', '019a0000-0000-7000-8000-000000000001', '019a0000-0000-7000-8000-000000000020', 2, 'Analgésicos'),
-  ('019a0000-0000-7000-8000-000000000022', '019a0000-0000-7000-8000-000000000001', '019a0000-0000-7000-8000-000000000021', 3, 'Comprimidos')
-ON CONFLICT (id) DO NOTHING;
+-- Daqui em diante, tabelas com trigger de validação conferem antes de incluir: o trigger roda
+-- antes do ON CONFLICT e, se alguém mudou os dados na tela, derrubaria o deploy.
+-- Um nível por instrução: dentro de uma só, a ordem das linhas não é garantida, e o filho precisa do pai.
+INSERT INTO product_category (id, economic_group_id, parent_id, level, name)
+SELECT '019a0000-0000-7000-8000-000000000020'::uuid, '019a0000-0000-7000-8000-000000000001'::uuid, NULL::uuid, 1, 'Medicamentos'
+ WHERE NOT EXISTS (SELECT 1 FROM product_category c WHERE c.id = '019a0000-0000-7000-8000-000000000020');
+INSERT INTO product_category (id, economic_group_id, parent_id, level, name)
+SELECT '019a0000-0000-7000-8000-000000000021'::uuid, '019a0000-0000-7000-8000-000000000001'::uuid, '019a0000-0000-7000-8000-000000000020'::uuid, 2, 'Analgésicos'
+ WHERE NOT EXISTS (SELECT 1 FROM product_category c WHERE c.id = '019a0000-0000-7000-8000-000000000021');
+INSERT INTO product_category (id, economic_group_id, parent_id, level, name)
+SELECT '019a0000-0000-7000-8000-000000000022'::uuid, '019a0000-0000-7000-8000-000000000001'::uuid, '019a0000-0000-7000-8000-000000000021'::uuid, 3, 'Comprimidos'
+ WHERE NOT EXISTS (SELECT 1 FROM product_category c WHERE c.id = '019a0000-0000-7000-8000-000000000022');
 
 INSERT INTO product_group (id, economic_group_id, kind, name) VALUES
   ('019a0000-0000-7000-8000-000000000023', '019a0000-0000-7000-8000-000000000001', 'commission', 'Comissão padrão'),
@@ -132,6 +139,27 @@ SELECT seed.id, '019a0000-0000-7000-8000-000000000001'::uuid, t.id, seed.level, 
     ('019a0000-0000-7000-8000-00000000002e'::uuid, 'cashback', 'price_family', NULL::uuid, '019a0000-0000-7000-8000-000000000025'::uuid, 2.0)
   ) AS seed (id, type_code, level, category_id, product_group_id, value)
   JOIN rule_type t ON t.code = seed.type_code
+ WHERE NOT EXISTS (SELECT 1 FROM product_rule r WHERE r.id = seed.id);
+
+-- Estoque de demonstração: a Loja Centro controla lote deste produto, e a Loja Sul não.
+-- Confere pela movimentação do seed: se ela já existe, alguém pode ter mudado o parâmetro depois.
+UPDATE product_branch_status SET tracks_batches = true
+ WHERE product_id = '019a0000-0000-7000-8000-000000000027'
+   AND branch_id = '019a0000-0000-7000-8000-000000000005'
+   AND NOT EXISTS (SELECT 1 FROM stock_movement WHERE id = '019a0000-0000-7000-8000-000000000030');
+
+INSERT INTO product_batch (id, economic_group_id, branch_id, product_id, batch_number, expires_on, ms_registration, ms_original) VALUES
+  ('019a0000-0000-7000-8000-00000000002f', '019a0000-0000-7000-8000-000000000001', '019a0000-0000-7000-8000-000000000005',
+   '019a0000-0000-7000-8000-000000000027', 'DEMO1', '2030-06-30', '1000000000001', '1000000000001')
 ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO stock_movement (id, economic_group_id, branch_id, product_id, batch_id, movement_type, quantity, reason)
+SELECT seed.id, '019a0000-0000-7000-8000-000000000001'::uuid, seed.branch_id, '019a0000-0000-7000-8000-000000000027'::uuid,
+       seed.batch_id, 'adjustment', seed.quantity, 'Saldo de demonstração'
+  FROM (VALUES
+    ('019a0000-0000-7000-8000-000000000030'::uuid, '019a0000-0000-7000-8000-000000000005'::uuid, '019a0000-0000-7000-8000-00000000002f'::uuid, 50::numeric),
+    ('019a0000-0000-7000-8000-000000000031'::uuid, '019a0000-0000-7000-8000-000000000006'::uuid, NULL::uuid, 20::numeric)
+  ) AS seed (id, branch_id, batch_id, quantity)
+ WHERE NOT EXISTS (SELECT 1 FROM stock_movement m WHERE m.id = seed.id);
 
 COMMIT;

@@ -24,6 +24,8 @@ import {
   ProductStructure,
   ProductValues,
 } from "../ui";
+import { BatchTrackingRow, TrackingRow } from "../../estoque/ui";
+import { BalanceRow, dayText, quantityText } from "../../estoque/format";
 import styles from "../../terminais/page.module.css";
 
 export const metadata: Metadata = { title: "Produto · FarmaERP" };
@@ -86,6 +88,8 @@ async function ProductContent({
   const user = await requireUser(path);
   const canManage = can(user, "products.manage");
   const canPrice = can(user, "products.price");
+  const canSeeStock = can(user, "stock.view");
+  const canTrack = can(user, "stock.batch");
 
   if (!can(user, "products.view") && !canManage) {
     return (
@@ -116,6 +120,12 @@ async function ProductContent({
   }
   const product = productResult.data;
   const structure = structureResult.ok ? structureResult.data : EMPTY_STRUCTURE;
+
+  const stock = canSeeStock
+    ? await apiFetch<{ balances: BalanceRow[]; tracking: TrackingRow[] }>(
+        `/admin/products/${encodeURIComponent(id)}/stock`,
+      )
+    : null;
 
   const { catalogo, vincular } = await searchParams;
   const query = typeof catalogo === "string" ? catalogo.trim() : "";
@@ -308,6 +318,48 @@ async function ProductContent({
           </div>
         </details>
       </section>
+
+      {stock && !stock.ok && <ErrorNotice error={stock.error} />}
+      {stock?.ok && (
+        <section className={styles.card}>
+          <div className={styles.header}>
+            <h2>Estoque</h2>
+            <Link href={`/estoque?q=${encodeURIComponent(product.code)}`}>Ver no estoque</Link>
+          </div>
+          {stock.data.balances.length === 0 && <p className={styles.hint}>Sem saldo neste produto.</p>}
+          {stock.data.balances.length > 0 && (
+            <div className={styles.tableWrap}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Filial</th>
+                    <th>Lote</th>
+                    <th>Validade</th>
+                    <th>Saldo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stock.data.balances.map((row) => (
+                    <tr key={row.balance_id}>
+                      <td>{row.branch_name}</td>
+                      <td>{row.batch_number ?? "Sem lote"}</td>
+                      <td>
+                        {dayText(row.expires_on)}
+                        {row.is_expired && <small className={styles.warning}>Vencido</small>}
+                      </td>
+                      <td>{quantityText(row.quantity)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <h3>Controle de lote</h3>
+          {stock.data.tracking.map((row) => (
+            <BatchTrackingRow key={row.branch_id} productId={product.id} row={row} canManage={canTrack} />
+          ))}
+        </section>
+      )}
 
       <section className={styles.card}>
         <h2>PMC</h2>
