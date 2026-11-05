@@ -5,8 +5,10 @@ import { asOwner, closePools, connectionConfig, ownerPool } from './helpers.mjs'
 afterAll(closePools);
 
 const EXPECTED_TABLES = [
-  'auth_event', 'branch', 'branch_group', 'code_counter', 'company', 'economic_group',
-  'permission', 'region', 'role', 'role_permission', 'terminal', 'terminal_event', 'terminal_pairing_request',
+  'auth_event', 'branch', 'branch_group', 'catalog_manufacturer', 'catalog_product', 'catalog_product_barcode',
+  'code_counter', 'company', 'economic_group', 'permission', 'product', 'product_barcode', 'product_barcode_channel',
+  'product_category', 'product_group', 'region', 'role', 'role_permission', 'sales_channel',
+  'terminal', 'terminal_event', 'terminal_pairing_request',
   'terminal_status', 'user_account', 'user_branch', 'user_credential', 'user_role', 'user_session',
 ];
 
@@ -40,6 +42,7 @@ describe('migrations', () => {
       '0007_human_codes',
       '0008_authentication',
       '0009_roles_and_permissions',
+      '0010_products',
     ]);
   });
 });

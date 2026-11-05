@@ -240,3 +240,13 @@ button.danger {
   padding: 0 4px;
   font-weight: bold;
 }
+
+/* Campos largos não podem passar da tela do celular. */
+.inline label {
+  max-width: 100%;
+}
+
+.inline input:not([type="checkbox"]),
+.inline select {
+  max-width: 100%;
+}

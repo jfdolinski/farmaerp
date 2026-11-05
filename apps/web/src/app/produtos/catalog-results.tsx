@@ -1,0 +1,66 @@
+import Link from "next/link";
+import styles from "../terminais/page.module.css";
+
+export interface CatalogRow {
+  id: string;
+  name: string;
+  active_ingredient: string | null;
+  manufacturer: string | null;
+  ms_registration: string | null;
+  controlled_class: string | null;
+  ncm: string | null;
+  cest: string | null;
+  barcodes: string[];
+  product_id: string | null;
+}
+
+export const controlledLabel = (value: string) =>
+  value === "antimicrobial" ? "Antimicrobiano" : `Controlado ${value}`;
+
+/** Resultado da consulta ao Catálogo. A ação de cada item muda conforme a tela. */
+export function CatalogResults({
+  items,
+  actionLabel,
+  hrefFor,
+}: {
+  items: CatalogRow[];
+  actionLabel: string;
+  hrefFor: (item: CatalogRow) => string;
+}) {
+  return (
+    <div className={styles.tableWrap}>
+      <table>
+        <thead>
+          <tr>
+            <th>Item do Catálogo</th>
+            <th>Fabricante</th>
+            <th>Código de barras</th>
+            <th>Ação</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => (
+            <tr key={item.id}>
+              <td>
+                {item.name}
+                {item.active_ingredient && <small>{item.active_ingredient}</small>}
+                {item.controlled_class && (
+                  <small className={styles.warning}>{controlledLabel(item.controlled_class)}</small>
+                )}
+              </td>
+              <td>{item.manufacturer ?? "Não informado"}</td>
+              <td>{item.barcodes.join(", ")}</td>
+              <td>
+                {item.product_id ? (
+                  <Link href={`/produtos/${item.product_id}`}>Já cadastrado: abrir</Link>
+                ) : (
+                  <Link href={hrefFor(item)}>{actionLabel}</Link>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}

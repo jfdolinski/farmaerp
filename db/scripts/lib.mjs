@@ -88,6 +88,36 @@ export async function runSeed(config = migratorConfig(), environment = process.e
 }
 
 /**
+ * Carrega os itens do Catálogo. Ou entra o arquivo inteiro, ou nada: um item recusado desfaz
+ * a importação, e o erro diz qual foi. Roda como dono das tabelas, porque a API não escreve aqui.
+ */
+export async function importCatalog(config, items) {
+  if (!Array.isArray(items)) {
+    throw new Error('O arquivo do Catálogo precisa ter uma lista de itens.');
+  }
+  return withClient(config, async (client) => {
+    await client.query('BEGIN');
+    try {
+      for (const [index, item] of items.entries()) {
+        try {
+          await client.query('SELECT app.upsert_catalog_product($1::jsonb)', [JSON.stringify(item)]);
+        } catch (error) {
+          throw new Error(
+            `Item ${index + 1} (${item?.sourceKey ?? 'sem sourceKey'}) recusado: ${error.message}`,
+            { cause: error },
+          );
+        }
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
+    return items.length;
+  });
+}
+
+/**
  * Cria o primeiro administrador, com troca obrigatória de senha.
  * Se o e-mail já tiver acesso, não faz nada: a senha nunca é sobrescrita.
  */
