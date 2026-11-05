@@ -538,4 +538,28 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Selecione um estado e uma região da lista.',
     retryable: false,
   ),
+  'FA701': ErrorCatalogEntry(
+    code: 'FA701',
+    message: 'O valor da regra está fora da faixa permitida.',
+    action: 'Confira o valor informado para este tipo de regra.',
+    retryable: false,
+  ),
+  'FA702': ErrorCatalogEntry(
+    code: 'FA702',
+    message: 'O alvo da regra não é válido.',
+    action: 'Selecione de novo o que esta regra atinge.',
+    retryable: false,
+  ),
+  'FA703': ErrorCatalogEntry(
+    code: 'FA703',
+    message: 'A validade da regra é inválida.',
+    action: 'A data final precisa ser depois da data inicial.',
+    retryable: false,
+  ),
+  'FA704': ErrorCatalogEntry(
+    code: 'FA704',
+    message: 'Os dados da regra são inválidos.',
+    action: 'Atualize a tela e tente novamente.',
+    retryable: false,
+  ),
 };

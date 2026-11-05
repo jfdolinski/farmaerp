@@ -123,4 +123,15 @@ INSERT INTO product_pmc (id, economic_group_id, product_id, state, value) VALUES
    '019a0000-0000-7000-8000-000000000027', 'SP', 15.00)
 ON CONFLICT (id) DO NOTHING;
 
+-- Regras fictícias, para o simulador ter o que mostrar. Em produção, os valores são decisão de cada rede.
+INSERT INTO product_rule (id, economic_group_id, rule_type_id, level, category_id, product_group_id, value, reason)
+SELECT seed.id, '019a0000-0000-7000-8000-000000000001'::uuid, t.id, seed.level, seed.category_id, seed.product_group_id, seed.value, 'Exemplo de demonstração'
+  FROM (VALUES
+    ('019a0000-0000-7000-8000-00000000002c'::uuid, 'cost_tolerance', 'store_default', NULL::uuid, NULL::uuid, 5.0),
+    ('019a0000-0000-7000-8000-00000000002d'::uuid, 'commission', 'subcategory', '019a0000-0000-7000-8000-000000000022'::uuid, NULL::uuid, 3.0),
+    ('019a0000-0000-7000-8000-00000000002e'::uuid, 'cashback', 'price_family', NULL::uuid, '019a0000-0000-7000-8000-000000000025'::uuid, 2.0)
+  ) AS seed (id, type_code, level, category_id, product_group_id, value)
+  JOIN rule_type t ON t.code = seed.type_code
+ON CONFLICT (id) DO NOTHING;
+
 COMMIT;

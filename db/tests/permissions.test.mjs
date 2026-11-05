@@ -14,7 +14,7 @@ afterAll(closePools);
 
 const ALL = [
   'audit.view', 'branches.view_all', 'products.manage', 'products.price', 'products.reactivate',
-  'products.status', 'products.view', 'roles.assign', 'roles.manage', 'structure.manage',
+  'products.status', 'products.view', 'roles.assign', 'roles.manage', 'rules.manage', 'rules.view', 'structure.manage',
   'terminals.approve', 'terminals.block', 'terminals.request', 'terminals.revoke', 'terminals.view',
   'users.manage', 'users.reset_password', 'users.view',
 ];
