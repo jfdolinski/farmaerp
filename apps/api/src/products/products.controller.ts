@@ -10,6 +10,8 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+import { verifyPassword } from '../auth/password.js';
 import { SessionGuard } from '../auth/session.guard.js';
 import {
   asBody,
@@ -61,6 +63,29 @@ function uuidList(body: Body, field: string): string[] {
   return value.map((item) => requireUuid(item));
 }
 
+const MAX_MONEY = 9_999_999_999.99;
+
+/** Mais de dois decimais seria arredondado em silêncio pelo banco, então é recusado aqui. */
+function money(value: unknown): number {
+  if (
+    typeof value !== 'number' ||
+    !Number.isFinite(value) ||
+    Math.abs(value) > MAX_MONEY ||
+    Number(value.toFixed(2)) !== value
+  ) {
+    throw new AppError('FA005');
+  }
+  return value;
+}
+
+function branchList(body: Body): string[] {
+  const list = uuidList(body, 'branchIds');
+  if (list.length === 0) {
+    throw new AppError('FA005');
+  }
+  return list;
+}
+
 const productData = (body: Body) => ({
   catalogProductId: optionalUuid(body, 'catalogProductId'),
   displayName: requireText(body, 'displayName', 200),
@@ -104,14 +129,14 @@ export class ProductsController {
   }
 
   @Get('products')
-  search(@Query('q') query?: string) {
+  search(@Query('q') query?: string, @Query('inativos') inactive?: string) {
     if (query !== undefined && (typeof query !== 'string' || query.length > 200)) {
       throw new AppError('FA005');
     }
     return this.database.withContext(async (client) => {
       const { rows } = await client.query(
-        'SELECT * FROM app.search_products($1)',
-        [query ?? ''],
+        'SELECT * FROM app.search_products($1, 50, $2)',
+        [query ?? '', inactive === '1'],
       );
       return rows;
     });
@@ -151,8 +176,130 @@ export class ProductsController {
           ORDER BY b.is_primary DESC, b.code`,
         [productId],
       );
-      return { ...rows[0], barcodes: barcodes.rows };
+      const grid = await client.query(
+        'SELECT * FROM app.product_branch_grid($1)',
+        [productId],
+      );
+      const pmc = await client.query(
+        `SELECT pm.state, pm.pmc_region, pm.value, pm.source, pm.created_at, u.name AS author
+           FROM v_product_pmc pm
+           LEFT JOIN v_user_account u ON u.id = pm.updated_by
+          WHERE pm.product_id = $1
+         UNION ALL
+         SELECT cm.state, cm.pmc_region, cm.value, 'catalog', cm.created_at, NULL
+           FROM v_catalog_product_pmc cm
+           JOIN v_product p ON p.catalog_product_id = cm.catalog_product_id
+          WHERE p.id = $1
+          ORDER BY created_at DESC
+          LIMIT 50`,
+        [productId],
+      );
+      const prices = await client.query(
+        `SELECT pp.branch_id, b.name AS branch_name, pp.price, pp.reason, pp.created_at, u.name AS author
+           FROM v_product_price pp
+           LEFT JOIN v_branch b ON b.id = pp.branch_id
+           LEFT JOIN v_user_account u ON u.id = pp.updated_by
+          WHERE pp.product_id = $1
+          ORDER BY pp.created_at DESC, pp.id DESC
+          LIMIT 50`,
+        [productId],
+      );
+      const events = await client.query(
+        `SELECT b.name AS branch_name, e.old_status, e.new_status, e.reason, e.created_at, u.name AS author
+           FROM v_product_status_event e
+           JOIN v_product_branch_status s ON s.id = e.product_branch_status_id
+           LEFT JOIN v_branch b ON b.id = e.branch_id
+           LEFT JOIN v_user_account u ON u.id = e.updated_by
+          WHERE s.product_id = $1
+          ORDER BY e.created_at DESC, e.id DESC
+          LIMIT 50`,
+        [productId],
+      );
+      return {
+        ...rows[0],
+        barcodes: barcodes.rows,
+        grid: grid.rows,
+        pmc: pmc.rows,
+        prices: prices.rows,
+        status_events: events.rows,
+      };
     });
+  }
+
+  /** Preço da rede, sem filial, ou exceção da filial. Preço vazio encerra a exceção. */
+  @Post('products/:id/prices')
+  setPrice(@Param('id') id: string, @RequestBody() rawBody: unknown) {
+    const body = asBody(rawBody);
+    const price = body.price === null ? null : money(body.price);
+    return this.create('SELECT app.set_product_price($1, $2, $3, $4) AS id', [
+      requireUuid(id),
+      optionalUuid(body, 'branchId'),
+      price,
+      optionalText(body, 'reason', 500),
+    ]);
+  }
+
+  @Post('products/:id/pmc')
+  addPmc(@Param('id') id: string, @RequestBody() rawBody: unknown) {
+    const body = asBody(rawBody);
+    return this.create('SELECT app.add_product_pmc($1, $2, $3, $4) AS id', [
+      requireUuid(id),
+      requireText(body, 'state', 2),
+      optionalText(body, 'region', 30),
+      money(body.value),
+    ]);
+  }
+
+  @Post('products/:id/status')
+  @HttpCode(200)
+  setStatus(@Param('id') id: string, @RequestBody() rawBody: unknown) {
+    const body = asBody(rawBody);
+    return this.call('SELECT app.set_product_status($1, $2, $3, $4)', [
+      requireUuid(id),
+      branchList(body),
+      requireText(body, 'status', 20),
+      optionalText(body, 'reason', 500),
+    ]);
+  }
+
+  /** O banco confere a permissão; a senha só a API consegue conferir, porque o Argon2 fica aqui. */
+  @Post('products/:id/reactivate')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  async reactivate(@Param('id') id: string, @RequestBody() rawBody: unknown) {
+    const body = asBody(rawBody);
+    const productId = requireUuid(id);
+    const branchIds = branchList(body);
+    const status = requireText(body, 'status', 20);
+    const reason = optionalText(body, 'reason', 500);
+    const password = requireText(body, 'password', 200);
+
+    const currentHash = await this.database.withContext(async (client) => {
+      const { rows } = await client.query<{ hash: string | null }>(
+        'SELECT app.current_password_hash() AS hash',
+      );
+      return rows[0].hash;
+    });
+    if (!currentHash || !(await verifyPassword(currentHash, password))) {
+      throw new AppError('FA409');
+    }
+    return this.call('SELECT app.reactivate_product($1, $2, $3, $4)', [
+      productId,
+      branchIds,
+      status,
+      reason,
+    ]);
+  }
+
+  @Post('branches/:id/location')
+  @HttpCode(200)
+  setBranchLocation(@Param('id') id: string, @RequestBody() rawBody: unknown) {
+    const body = asBody(rawBody);
+    return this.call('SELECT app.set_branch_location($1, $2, $3)', [
+      requireUuid(id),
+      optionalText(body, 'state', 2),
+      optionalText(body, 'region', 30),
+    ]);
   }
 
   @Post('products')

@@ -83,7 +83,8 @@
       "product_barcode_channel_active_key",
       "catalog_manufacturer_name_active_key",
       "catalog_product_source_key_active_key",
-      "catalog_product_barcode_code_active_key"
+      "catalog_product_barcode_code_active_key",
+      "product_branch_status_active_key"
     ]
   },
   "FA009": {
@@ -176,7 +177,12 @@
       "sales_channel_id_uuid_v7_check",
       "product_id_uuid_v7_check",
       "product_barcode_id_uuid_v7_check",
-      "product_barcode_channel_id_uuid_v7_check"
+      "product_barcode_channel_id_uuid_v7_check",
+      "product_price_id_uuid_v7_check",
+      "product_pmc_id_uuid_v7_check",
+      "catalog_product_pmc_id_uuid_v7_check",
+      "product_branch_status_id_uuid_v7_check",
+      "product_status_event_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -430,7 +436,9 @@
     "httpStatus": 422,
     "severity": "warning",
     "retryable": false,
-    "dbConstraints": []
+    "dbConstraints": [
+      "product_status_event_reason_check"
+    ]
   },
   "FA303": {
     "message": "Esta mudança de situação não é permitida para o terminal.",
@@ -775,6 +783,88 @@
       "product_barcode_fraction_quantity_check",
       "product_group_kind_check",
       "product_manufacturer_source_check"
+    ]
+  },
+  "FA610": {
+    "message": "O preço está acima do PMC desta filial.",
+    "action": "Informe um preço até o PMC ou confira o PMC do produto.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA611": {
+    "message": "Este produto está inativo nesta filial.",
+    "action": "Use a opção de reativar, que pede sua senha.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA612": {
+    "message": "O estado da filial não foi informado.",
+    "action": "Informe o estado da filial na tela de estrutura de produtos.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA613": {
+    "message": "O preço informado é inválido.",
+    "action": "Informe um valor maior que zero.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "product_price_price_check",
+      "product_price_network_check"
+    ]
+  },
+  "FA614": {
+    "message": "Os dados do PMC são inválidos.",
+    "action": "Confira o estado, a região e o valor.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "product_pmc_state_check",
+      "product_pmc_region_check",
+      "product_pmc_value_check",
+      "product_pmc_source_check",
+      "catalog_product_pmc_state_check",
+      "catalog_product_pmc_region_check",
+      "catalog_product_pmc_value_check"
+    ]
+  },
+  "FA615": {
+    "message": "O status informado é inválido.",
+    "action": "Selecione um status da lista.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "product_branch_status_status_check",
+      "product_status_event_old_status_check",
+      "product_status_event_new_status_check"
+    ]
+  },
+  "FA616": {
+    "message": "Só produto inativo pode ser reativado.",
+    "action": "Atualize a tela para ver o status atual.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA617": {
+    "message": "O estado da filial é inválido.",
+    "action": "Selecione um estado e uma região da lista.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "branch_state_check",
+      "branch_pmc_region_check"
     ]
   }
 }

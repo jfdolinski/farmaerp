@@ -168,6 +168,11 @@ O UUID é a identidade do registro. O código humano serve para tela, cupom e at
 - **Código de barras:** não se repete no grupo. Todo produto ativo termina a transação com um principal, que precisa estar ativo na leitura do PDV. Códigos fora do padrão GTIN são marcados como internos.
 - **Fracionamento:** o do código de barras prevalece sobre o do produto. Use `app.effective_fraction`.
 - **Escrita:** toda alteração passa por funções `app.*`, que conferem `products.manage`. Produto e estrutura são da rede, então um perfil de uma filial só não os altera.
+- **Preço:** só é incluído, e a última linha vale. Use `app.effective_price`: a exceção da filial prevalece sobre a rede, e preço vazio em filial encerra a exceção.
+- **PMC:** por estado e região especial. Use `app.effective_pmc`: o valor mais recente vale, da loja ou do Catálogo, e sem valor para a região especial vale o do estado.
+- **Limite de PMC:** com a flag ligada, salvar preço acima do PMC é bloqueado. Um PMC novo, menor que o preço já salvo, só avisa na grade.
+- **Status por filial:** ativo, somente encomenda, bloqueado ou inativo, com motivo obrigatório e histórico. Toda filial tem uma linha, que nasce ativa. Sair de inativo exige `products.reactivate` e a senha de quem reativa.
+- **Busca:** esconde o produto inativo em todas as filiais que o usuário enxerga, até marcar "Mostrar inativos".
 
 **Importar o Catálogo**
 
@@ -184,9 +189,10 @@ O arquivo é uma lista JSON, e `sourceKey` identifica o item na origem. Importar
     "controlledClass": "B1",
     "ncm": "30049099",
     "cest": "1300100",
-    "barcodes": ["7890000000017"]
+    "barcodes": ["7890000000017"],
+    "pmc": [{ "state": "SP", "value": 15.5 }, { "state": "AM", "region": "manaus_free_zone", "value": 12 }]
   }
 ]
 ```
 
-Em `controlledClass`, deixe vazio para não controlado ou use `A1`, `A2`, `A3`, `B1`, `B2`, `C1` a `C5`, `D1` ou `antimicrobial`.
+Em `controlledClass`, deixe vazio para não controlado ou use `A1`, `A2`, `A3`, `B1`, `B2`, `C1` a `C5`, `D1` ou `antimicrobial`. Em `region`, use `free_trade_area` ou `manaus_free_zone`.

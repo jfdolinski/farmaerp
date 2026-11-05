@@ -122,6 +122,102 @@ export async function changeBarcode(
   return { done: true };
 }
 
+/** Aceita 1.234,56 e 12,5. O que não for número segue como texto para a API recusar. */
+function moneyValue(raw: string): number | string {
+  const value = raw.includes(",") ? raw.replaceAll(".", "").replace(",", ".") : raw;
+  const parsed = Number(value);
+  return value === "" || Number.isNaN(parsed) ? raw : parsed;
+}
+
+export async function setPrice(
+  _previous: ProductFormState,
+  form: FormData,
+): Promise<ProductFormState> {
+  const id = encodeURIComponent(text(form, "productId"));
+  const removing = text(form, "intent") === "remove";
+  const result = await apiFetch(`/admin/products/${id}/prices`, {
+    method: "POST",
+    body: {
+      branchId: optional(form, "branchId"),
+      price: removing ? null : moneyValue(text(form, "price")),
+      reason: optional(form, "reason"),
+    },
+  });
+  if (!result.ok) return handleFailure(result.error, `/produtos/${id}`);
+  refresh();
+  return { done: true };
+}
+
+export async function addPmc(
+  _previous: ProductFormState,
+  form: FormData,
+): Promise<ProductFormState> {
+  const id = encodeURIComponent(text(form, "productId"));
+  const result = await apiFetch(`/admin/products/${id}/pmc`, {
+    method: "POST",
+    body: {
+      state: text(form, "state"),
+      region: optional(form, "region"),
+      value: moneyValue(text(form, "value")),
+    },
+  });
+  if (!result.ok) return handleFailure(result.error, `/produtos/${id}`);
+  refresh();
+  return { done: true };
+}
+
+export async function setStatus(
+  _previous: ProductFormState,
+  form: FormData,
+): Promise<ProductFormState> {
+  const id = encodeURIComponent(text(form, "productId"));
+  const result = await apiFetch(`/admin/products/${id}/status`, {
+    method: "POST",
+    body: {
+      branchIds: form.getAll("branchIds").map(String),
+      status: text(form, "status"),
+      reason: optional(form, "reason"),
+    },
+  });
+  if (!result.ok) return handleFailure(result.error, `/produtos/${id}`);
+  refresh();
+  return { done: true };
+}
+
+export async function reactivateProduct(
+  _previous: ProductFormState,
+  form: FormData,
+): Promise<ProductFormState> {
+  const id = encodeURIComponent(text(form, "productId"));
+  const result = await apiFetch(`/admin/products/${id}/reactivate`, {
+    method: "POST",
+    body: {
+      branchIds: form.getAll("branchIds").map(String),
+      status: text(form, "status"),
+      reason: optional(form, "reason"),
+      // A senha não recebe trim: espaço pode fazer parte dela.
+      password: String(form.get("password") ?? ""),
+    },
+  });
+  if (!result.ok) return handleFailure(result.error, `/produtos/${id}`);
+  refresh();
+  return { done: true };
+}
+
+export async function setBranchLocation(
+  _previous: ProductFormState,
+  form: FormData,
+): Promise<ProductFormState> {
+  const id = encodeURIComponent(text(form, "id"));
+  const result = await apiFetch(`/admin/branches/${id}/location`, {
+    method: "POST",
+    body: { state: optional(form, "state"), region: optional(form, "region") },
+  });
+  if (!result.ok) return handleFailure(result.error, "/produtos/estrutura");
+  refresh();
+  return { done: true };
+}
+
 const ENTITY_PATHS: Record<string, string> = {
   category: "product-categories",
   group: "product-groups",

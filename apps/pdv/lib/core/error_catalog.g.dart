@@ -490,4 +490,52 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Confira os dados e tente novamente.',
     retryable: false,
   ),
+  'FA610': ErrorCatalogEntry(
+    code: 'FA610',
+    message: 'O preço está acima do PMC desta filial.',
+    action: 'Informe um preço até o PMC ou confira o PMC do produto.',
+    retryable: false,
+  ),
+  'FA611': ErrorCatalogEntry(
+    code: 'FA611',
+    message: 'Este produto está inativo nesta filial.',
+    action: 'Use a opção de reativar, que pede sua senha.',
+    retryable: false,
+  ),
+  'FA612': ErrorCatalogEntry(
+    code: 'FA612',
+    message: 'O estado da filial não foi informado.',
+    action: 'Informe o estado da filial na tela de estrutura de produtos.',
+    retryable: false,
+  ),
+  'FA613': ErrorCatalogEntry(
+    code: 'FA613',
+    message: 'O preço informado é inválido.',
+    action: 'Informe um valor maior que zero.',
+    retryable: false,
+  ),
+  'FA614': ErrorCatalogEntry(
+    code: 'FA614',
+    message: 'Os dados do PMC são inválidos.',
+    action: 'Confira o estado, a região e o valor.',
+    retryable: false,
+  ),
+  'FA615': ErrorCatalogEntry(
+    code: 'FA615',
+    message: 'O status informado é inválido.',
+    action: 'Selecione um status da lista.',
+    retryable: false,
+  ),
+  'FA616': ErrorCatalogEntry(
+    code: 'FA616',
+    message: 'Só produto inativo pode ser reativado.',
+    action: 'Atualize a tela para ver o status atual.',
+    retryable: false,
+  ),
+  'FA617': ErrorCatalogEntry(
+    code: 'FA617',
+    message: 'O estado da filial é inválido.',
+    action: 'Selecione um estado e uma região da lista.',
+    retryable: false,
+  ),
 };

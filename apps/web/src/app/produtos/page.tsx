@@ -19,9 +19,10 @@ interface ProductRow {
   manufacturer: string | null;
   primary_barcode: string | null;
   online_sale_blocked: boolean;
+  all_inactive: boolean;
 }
 
-type SearchParams = Promise<{ q?: string | string[] }>;
+type SearchParams = Promise<{ q?: string | string[]; inativos?: string | string[] }>;
 
 export default function ProductsPage({ searchParams }: { searchParams: SearchParams }) {
   return (
@@ -49,10 +50,11 @@ async function ProductsContent({ searchParams }: { searchParams: SearchParams })
     );
   }
 
-  const { q } = await searchParams;
+  const { q, inativos } = await searchParams;
   const query = typeof q === "string" ? q.trim() : "";
+  const showInactive = inativos === "1";
   const products = await apiFetch<ProductRow[]>(
-    `/admin/products?q=${encodeURIComponent(query)}`,
+    `/admin/products?q=${encodeURIComponent(query)}${showInactive ? "&inativos=1" : ""}`,
   );
   if (!products.ok) redirectIfNeeded(products.error, "/produtos");
 
@@ -78,6 +80,10 @@ async function ProductsContent({ searchParams }: { searchParams: SearchParams })
               defaultValue={query}
               placeholder="Nome, código, código de barras, princípio ativo ou fabricante"
             />
+          </label>
+          <label className={styles.check}>
+            <input type="checkbox" name="inativos" value="1" defaultChecked={showInactive} />
+            Mostrar inativos
           </label>
           <button type="submit">Buscar</button>
         </form>
@@ -107,6 +113,9 @@ async function ProductsContent({ searchParams }: { searchParams: SearchParams })
                       {product.active_ingredient && <small>{product.active_ingredient}</small>}
                       {!product.catalog_product_id && (
                         <small className={styles.warning}>Sem Catálogo</small>
+                      )}
+                      {product.all_inactive && (
+                        <small className={styles.warning}>Inativo em todas as filiais</small>
                       )}
                     </td>
                     <td>{product.manufacturer ?? "Não informado"}</td>

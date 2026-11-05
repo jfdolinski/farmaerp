@@ -30,6 +30,9 @@ function gtin(): string {
   return `${base}${(10 - (total % 10)) % 10}`;
 }
 
+const BRANCH_CENTRO = '019a0000-0000-7000-8000-000000000005';
+const BRANCH_SUL = '019a0000-0000-7000-8000-000000000006';
+
 describe('produtos contra o banco real', () => {
   let app: INestApplication<App>;
   const sessions = new Map<string, string>();
@@ -273,6 +276,165 @@ describe('produtos contra o banco real', () => {
       const channel = (await call('post', '/admin/sales-channels').send({ name: name() }).expect(201)).body as { id: string };
       await call('patch', `/admin/sales-channels/${channel.id}`).send({ name: name() }).expect(200);
       await call('post', `/admin/sales-channels/${channel.id}/delete`).expect(200);
+    });
+  });
+
+  describe('preço', () => {
+    const gridRow = async (id: string, branch: string) =>
+      ((await detail(id)).grid as Json[]).find((row) => row.branch_id === branch) as Json;
+
+    it('rede, exceção e fim da exceção aparecem na grade e no histórico', async () => {
+      const { id } = await newProduct();
+      await call('post', `/admin/products/${id}/prices`).send({ price: 10.5 }).expect(201);
+      await call('post', `/admin/products/${id}/prices`).send({ branchId: BRANCH_CENTRO, price: 9, reason: 'Ação local' }).expect(201);
+      expect(Number((await gridRow(id, BRANCH_CENTRO)).effective_price)).toBe(9);
+      expect(Number((await gridRow(id, BRANCH_SUL)).effective_price)).toBe(10.5);
+
+      await call('post', `/admin/products/${id}/prices`).send({ branchId: BRANCH_CENTRO, price: null }).expect(201);
+      expect(Number((await gridRow(id, BRANCH_CENTRO)).effective_price)).toBe(10.5);
+
+      const { prices } = await detail(id);
+      expect(prices).toHaveLength(3);
+      expect(prices[1]).toMatchObject({ reason: 'Ação local', author: 'Administrador' });
+    });
+
+    it.each([
+      ['três decimais', { price: 1.234 }],
+      ['texto', { price: 'abc' }],
+      ['muito alto', { price: 99999999999 }],
+      ['sem preço', {}],
+    ])('recusa %s com FA005, antes do banco', async (_label, body) => {
+      const { id } = await newProduct();
+      const response = await call('post', `/admin/products/${id}/prices`).send(body).expect(422);
+      expect(codeOf(response)).toBe('FA005');
+    });
+
+    it('com a flag, bloqueia acima do PMC e só avisa quando o PMC cai depois', async () => {
+      const { id } = await newProduct({ usesPmc: true });
+      await call('post', `/admin/products/${id}/pmc`).send({ state: 'SP', value: 10 }).expect(201);
+      const blocked = await call('post', `/admin/products/${id}/prices`).send({ price: 11 }).expect(422);
+      expect(codeOf(blocked)).toBe('FA610');
+
+      await call('post', `/admin/products/${id}/prices`).send({ price: 10 }).expect(201);
+      await call('post', `/admin/products/${id}/pmc`).send({ state: 'SP', value: 8 }).expect(201);
+      expect(await gridRow(id, BRANCH_CENTRO)).toMatchObject({ above_pmc: true });
+    });
+
+    it('Gerente não altera preço', async () => {
+      const response = await call('post', `/admin/products/${SEED_PRODUCT}/prices`, MANAGER)
+        .send({ branchId: BRANCH_CENTRO, price: 1 })
+        .expect(403);
+      expect(codeOf(response)).toBe('FA002');
+    });
+  });
+
+  describe('status e reativação', () => {
+    const statusOf = async (id: string, branch: string) =>
+      (((await detail(id)).grid as Json[]).find((row) => row.branch_id === branch) as Json).status as string;
+    const inactivate = (id: string) =>
+      call('post', `/admin/products/${id}/status`)
+        .send({ branchIds: [BRANCH_CENTRO, BRANCH_SUL], status: 'inactive', reason: 'Saiu do mix' })
+        .expect(200);
+
+    it('ação em massa muda as filiais marcadas e registra', async () => {
+      const { id } = await newProduct();
+      await call('post', `/admin/products/${id}/status`)
+        .send({ branchIds: [BRANCH_CENTRO, BRANCH_SUL], status: 'blocked', reason: 'Falta' })
+        .expect(200);
+      expect(await statusOf(id, BRANCH_SUL)).toBe('blocked');
+      const { status_events: events } = await detail(id);
+      expect(events).toHaveLength(2);
+      expect(events[0]).toMatchObject({ new_status: 'blocked', reason: 'Falta', author: 'Administrador' });
+    });
+
+    it('sem filial é recusado', async () => {
+      const { id } = await newProduct();
+      const response = await call('post', `/admin/products/${id}/status`)
+        .send({ branchIds: [], status: 'blocked', reason: 'Falta' })
+        .expect(422);
+      expect(codeOf(response)).toBe('FA005');
+    });
+
+    it('sem motivo é recusado com FA302', async () => {
+      const { id } = await newProduct();
+      const response = await call('post', `/admin/products/${id}/status`)
+        .send({ branchIds: [BRANCH_CENTRO], status: 'blocked' })
+        .expect(422);
+      expect(codeOf(response)).toBe('FA302');
+    });
+
+    it('inativo some da busca e volta com o filtro', async () => {
+      const displayName = name();
+      const { id } = await newProduct({ displayName });
+      await inactivate(id);
+      const path = `/admin/products?q=${encodeURIComponent(displayName)}`;
+      expect((await call('get', path).expect(200)).body).toEqual([]);
+      const found = (await call('get', `${path}&inativos=1`).expect(200)).body as Json[];
+      expect(found[0]).toMatchObject({ id, all_inactive: true });
+    });
+
+    it('senha errada não reativa, e o status continua inativo', async () => {
+      const { id } = await newProduct();
+      await inactivate(id);
+      const response = await call('post', `/admin/products/${id}/reactivate`)
+        .send({ branchIds: [BRANCH_CENTRO], status: 'active', reason: 'Voltou', password: 'senha-errada-123' })
+        .expect(422);
+      expect(codeOf(response)).toBe('FA409');
+      expect(await statusOf(id, BRANCH_CENTRO)).toBe('inactive');
+    });
+
+    it('sem senha é recusado', async () => {
+      const { id } = await newProduct();
+      await inactivate(id);
+      const response = await call('post', `/admin/products/${id}/reactivate`)
+        .send({ branchIds: [BRANCH_CENTRO], status: 'active', reason: 'Voltou' })
+        .expect(422);
+      expect(codeOf(response)).toBe('FA005');
+    });
+
+    it('com a senha certa reativa', async () => {
+      const { id } = await newProduct();
+      await inactivate(id);
+      await call('post', `/admin/products/${id}/reactivate`)
+        .send({ branchIds: [BRANCH_CENTRO], status: 'active', reason: 'Voltou', password: PASSWORD })
+        .expect(200);
+      expect(await statusOf(id, BRANCH_CENTRO)).toBe('active');
+      expect(await statusOf(id, BRANCH_SUL)).toBe('inactive');
+    });
+
+    it('a senha certa não supre a falta de permissão', async () => {
+      const { id } = await newProduct();
+      await inactivate(id);
+      const response = await call('post', `/admin/products/${id}/reactivate`, MANAGER)
+        .send({ branchIds: [BRANCH_CENTRO], status: 'active', reason: 'Voltou', password: PASSWORD })
+        .expect(403);
+      expect(codeOf(response)).toBe('FA002');
+    });
+
+    it('a senha nunca volta nas respostas', async () => {
+      const { id } = await newProduct();
+      await inactivate(id);
+      const response = await call('post', `/admin/products/${id}/reactivate`)
+        .send({ branchIds: [BRANCH_CENTRO], status: 'active', reason: 'Voltou', password: 'senha-errada-123' });
+      expect(JSON.stringify(response.body)).not.toContain('senha-errada-123');
+    });
+  });
+
+  describe('estado da filial', () => {
+    it('a lista de filiais traz o estado, e Gerente não altera', async () => {
+      const branches = (await call('get', '/admin/branches').expect(200)).body as Json[];
+      expect(branches.find((row) => row.id === BRANCH_CENTRO)).toMatchObject({ state: 'SP' });
+      const response = await call('post', `/admin/branches/${BRANCH_CENTRO}/location`, MANAGER)
+        .send({ state: 'RJ' })
+        .expect(403);
+      expect(codeOf(response)).toBe('FA002');
+    });
+
+    it('recusa estado inválido', async () => {
+      const response = await call('post', `/admin/branches/${BRANCH_CENTRO}/location`)
+        .send({ state: 'ZZ' })
+        .expect(422);
+      expect(codeOf(response)).toBe('FA617');
     });
   });
 
