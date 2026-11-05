@@ -167,6 +167,10 @@ Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda.
 
 Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda.
 
+## Atualizar para o cadastro de clientes
+
+Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda. O Gerente passa a ver e cadastrar clientes. Em homologação, o seed cria um cliente fictício.
+
 ## Antes de publicar a produção
 
 A produção usa os mesmos passos, em um projeto próprio e com segredos próprios, mas depende destes itens:

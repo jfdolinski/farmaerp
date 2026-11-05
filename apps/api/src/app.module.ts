@@ -5,6 +5,7 @@ import { AuthController } from './auth/auth.controller.js';
 import { RolesController } from './auth/roles.controller.js';
 import { SessionGuard } from './auth/session.guard.js';
 import { UsersController } from './auth/users.controller.js';
+import { CustomersController } from './customers/customers.controller.js';
 import { DatabaseService } from './database.service.js';
 import { HealthController } from './health.controller.js';
 import { AllExceptionsFilter } from './observability/all-exceptions.filter.js';
@@ -30,6 +31,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     ProductsController,
     RulesController,
     StockController,
+    CustomersController,
     TerminalDeviceController,
     TerminalAdminController,
   ],

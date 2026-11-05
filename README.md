@@ -230,3 +230,11 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - **Inventário simples:** a diferença entre o contado e o saldo vira movimentação do tipo `inventory`. Contagem igual não gera nada.
 - **Status e saldo:** `app.product_availability` diz se o produto vende e se entra na compra automática em cada filial, e o aviso para o vendedor. Lote vencido não conta como saldo vendável.
 - **Seed:** em tabela com trigger de validação, confira com `NOT EXISTS` antes de incluir. O trigger roda antes do `ON CONFLICT`, e o seed roda a cada deploy de homologação.
+
+## Clientes
+
+- **Cadastro:** único na rede, com código humano. Pessoa física com CPF ou jurídica com CNPJ, ambos com dígito validado e sem repetir no grupo. Só nome e documento são obrigatórios.
+- **Dados pessoais:** mensagens e detalhes de erro do banco levam só identificadores. A API descarta o detalhe do Postgres no log, que traria o valor da chave. A lista mostra o documento mascarado, e a ficha mostra completo.
+- **Consentimento:** cada concessão ou revogação é uma linha que nunca muda. A mais recente vale. Repetir a decisão atual não gera registro.
+- **Reconhecimento facial:** só a decisão é registrada. O sistema não guarda imagem nem biometria.
+- **Exclusão a pedido do titular:** ainda não existe. A proposta é anonimizar, mantendo só o que a lei fiscal exige.
