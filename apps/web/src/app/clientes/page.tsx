@@ -59,7 +59,10 @@ async function CustomersContent({ searchParams }: { searchParams: SearchParams }
       <AppHeader user={user} />
       <div className={styles.header}>
         <h1>Clientes</h1>
-        {canManage && <Link href="/clientes/novo">Novo cliente</Link>}
+        <div className={styles.nav}>
+          {can(user, "agreements.manage") && <Link href="/convenios">Convênios</Link>}
+          {canManage && <Link href="/clientes/novo">Novo cliente</Link>}
+        </div>
       </div>
       <section className={styles.card}>
         <form action="/clientes" className={styles.inline}>

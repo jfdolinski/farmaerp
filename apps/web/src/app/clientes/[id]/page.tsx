@@ -6,8 +6,11 @@ import { AppHeader } from "../../app-header";
 import { ErrorNotice } from "../../error-notice";
 import { CHANNELS, documentText, PURPOSES } from "../format";
 import {
+  AgreementRow,
   ConsentForm,
   ConsentRow,
+  CustomerAgreementForm,
+  CustomerAgreementRow,
   CustomerValues,
   DependentForm,
   DependentRow,
@@ -24,6 +27,7 @@ interface CustomerDetail extends CustomerValues {
   document: string;
   name: string;
   dependents: DependentRow[];
+  agreements: CustomerAgreementRow[];
   consents: ConsentRow[];
   consent_history: {
     purpose: string;
@@ -84,6 +88,11 @@ async function CustomerContent({ params }: { params: Params }) {
     );
   }
   const customer = result.data;
+  const canAgree = can(user, "agreements.manage");
+  const agreements = canAgree ? await apiFetch<AgreementRow[]>("/admin/agreements") : null;
+  const available = agreements?.ok
+    ? agreements.data.filter((agreement) => !customer.agreements.some((link) => link.agreement_id === agreement.id))
+    : [];
 
   return (
     <>
@@ -111,6 +120,22 @@ async function CustomerContent({ params }: { params: Params }) {
           <DependentForm key={dependent.id} customerId={customer.id} dependent={dependent} canManage={canManage} />
         ))}
         {canManage && <DependentForm customerId={customer.id} canManage={canManage} />}
+      </section>
+
+      <section className={styles.card}>
+        <h2>Convênios</h2>
+        {customer.agreements.length === 0 && <p className={styles.hint}>Sem convênio.</p>}
+        {customer.agreements.map((link) => (
+          <CustomerAgreementForm key={link.id} customerId={customer.id} link={link} agreements={[]} canManage={canAgree} />
+        ))}
+        {canAgree && available.length > 0 && (
+          <CustomerAgreementForm customerId={customer.id} agreements={available} canManage={canAgree} />
+        )}
+        {canAgree && agreements?.ok && agreements.data.length === 0 && (
+          <p className={styles.hint}>
+            Nenhum convênio cadastrado. <Link href="/convenios">Cadastrar convênios</Link>.
+          </p>
+        )}
       </section>
 
       <section className={styles.card}>

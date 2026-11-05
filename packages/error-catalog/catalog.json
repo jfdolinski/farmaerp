@@ -193,7 +193,9 @@
       "stock_balance_id_uuid_v7_check",
       "customer_id_uuid_v7_check",
       "customer_dependent_id_uuid_v7_check",
-      "customer_consent_event_id_uuid_v7_check"
+      "customer_consent_event_id_uuid_v7_check",
+      "agreement_id_uuid_v7_check",
+      "customer_agreement_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -348,7 +350,8 @@
       "terminal_name_active_key",
       "product_category_name_active_key",
       "product_group_name_active_key",
-      "sales_channel_name_active_key"
+      "sales_channel_name_active_key",
+      "agreement_name_active_key"
     ]
   },
   "FA216": {
@@ -372,7 +375,8 @@
       "sales_channel_name_check",
       "product_display_name_check",
       "customer_name_check",
-      "customer_dependent_name_check"
+      "customer_dependent_name_check",
+      "agreement_name_check"
     ]
   },
   "FA217": {
@@ -1081,7 +1085,8 @@
     "retryable": false,
     "dbConstraints": [
       "customer_document_check",
-      "customer_dependent_cpf_check"
+      "customer_dependent_cpf_check",
+      "agreement_cnpj_check"
     ]
   },
   "FA903": {
@@ -1127,6 +1132,63 @@
     "dbConstraints": [
       "customer_consent_event_purpose_check",
       "customer_consent_event_channel_check"
+    ]
+  },
+  "FA906": {
+    "message": "Não foi possível consultar o CNPJ agora.",
+    "action": "Preencha os dados manualmente ou tente de novo em alguns minutos.",
+    "httpStatus": 503,
+    "severity": "warning",
+    "retryable": true,
+    "dbConstraints": []
+  },
+  "FA907": {
+    "message": "CNPJ não encontrado nos serviços de consulta.",
+    "action": "Confira os números ou preencha os dados manualmente.",
+    "httpStatus": 404,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA908": {
+    "message": "A inscrição estadual não confere com o estado.",
+    "action": "Confira os dígitos e o estado do endereço, ou informe ISENTO.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "customer_state_registration_check"
+    ]
+  },
+  "FA909": {
+    "message": "Este cliente já está neste convênio.",
+    "action": "Edite o vínculo que já existe.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "customer_agreement_active_key"
+    ]
+  },
+  "FA910": {
+    "message": "Esta matrícula já está em uso neste convênio.",
+    "action": "Confira a matrícula informada.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "customer_agreement_registration_active_key"
+    ]
+  },
+  "FA911": {
+    "message": "Os dados do convênio são inválidos.",
+    "action": "Informe a matrícula e um limite igual ou maior que zero.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "customer_agreement_registration_check",
+      "customer_agreement_credit_limit_check"
     ]
   }
 }
