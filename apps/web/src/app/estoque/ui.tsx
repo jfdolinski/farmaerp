@@ -25,31 +25,36 @@ export interface TrackingRow {
   is_controlled: boolean;
 }
 
+const ITEM_FIELDS = ["productLookup", "quantity", "batchNumber", "expiresOn", "msRegistration", "reason"];
+
 export function MovementForm({
   branches,
   canAdjust,
   canLoss,
+  canTransfer,
+  destinations,
 }: {
   branches: BranchOption[];
+  destinations: BranchOption[];
   canAdjust: boolean;
   canLoss: boolean;
+  canTransfer: boolean;
 }) {
-  const initialKind = canAdjust ? "in" : "loss";
+  const initialKind = canAdjust ? "in" : canLoss ? "loss" : "transfer";
   const [state, action, pending] = useActionState<StockFormState, FormData>(registerMovement, {});
   const [kind, setKind] = useState(initialKind);
   const form = useRef<HTMLFormElement>(null);
+  // Limpa só os dados do item: operação e filiais ficam, para lançar vários seguidos.
   useEffect(() => {
-    if (state.done) form.current?.reset();
+    if (!state.done || !form.current) return;
+    for (const field of ITEM_FIELDS) {
+      const input = form.current.elements.namedItem(field);
+      if (input instanceof HTMLInputElement) input.value = "";
+    }
   }, [state]);
 
   return (
-    <form
-      ref={form}
-      action={action}
-      onSubmit={keepValues(action)}
-      onReset={() => setKind(initialKind)}
-      className={styles.stack}
-    >
+    <form ref={form} action={action} onSubmit={keepValues(action)} className={styles.stack}>
       <div className={styles.inline}>
         <label>
           Operação
@@ -57,6 +62,8 @@ export function MovementForm({
             {canAdjust && <option value="in">Ajuste de entrada</option>}
             {canAdjust && <option value="out">Ajuste de saída</option>}
             {canLoss && <option value="loss">Perda</option>}
+            {canTransfer && <option value="transfer">Transferência</option>}
+            {canAdjust && <option value="count">Inventário (contagem)</option>}
           </select>
         </label>
         <label>
@@ -64,7 +71,7 @@ export function MovementForm({
           <input name="productLookup" required maxLength={30} />
         </label>
         <label>
-          Filial
+          {kind === "transfer" ? "Filial de origem" : "Filial"}
           <select name="branchId" required defaultValue="">
             <option value="" disabled>
               Selecione
@@ -76,17 +83,36 @@ export function MovementForm({
             ))}
           </select>
         </label>
+        {kind === "transfer" && (
+          <label>
+            Filial de destino
+            <select name="toBranchId" required defaultValue="">
+              <option value="" disabled>
+                Selecione
+              </option>
+              {destinations.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label>
-          Quantidade
+          {kind === "count" ? "Quantidade contada" : "Quantidade"}
           <input name="quantity" inputMode="decimal" required size={8} />
         </label>
       </div>
       <div className={styles.inline}>
         <label>
           Lote
-          <input name="batchNumber" maxLength={40} placeholder="Se o produto controla" />
+          <input
+            name="batchNumber"
+            maxLength={40}
+            placeholder={kind === "transfer" ? "Vazio: vence antes, sai antes" : "Se o produto controla"}
+          />
         </label>
-        {kind === "in" && (
+        {(kind === "in" || kind === "count") && (
           <>
             <label>
               Validade do lote
@@ -107,9 +133,14 @@ export function MovementForm({
         </button>
       </div>
       <ErrorNotice error={state.error} />
-      {state.done && (
+      {state.done && !state.unchanged && (
         <p className={styles.success} role="status">
           Movimentação registrada.
+        </p>
+      )}
+      {state.done && state.unchanged && (
+        <p className={styles.success} role="status">
+          A contagem é igual ao saldo: nada foi lançado.
         </p>
       )}
     </form>

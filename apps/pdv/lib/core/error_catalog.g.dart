@@ -634,4 +634,28 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Atualize a tela para ver as movimentações atuais.',
     retryable: false,
   ),
+  'FA813': ErrorCatalogEntry(
+    code: 'FA813',
+    message: 'Lote vencido só sai como perda.',
+    action: 'Registre a saída deste lote como perda e escolha outro lote.',
+    retryable: false,
+  ),
+  'FA814': ErrorCatalogEntry(
+    code: 'FA814',
+    message: 'Este lote fura a ordem de vencimento.',
+    action: 'Deixe o lote em branco para o sistema escolher, ou peça a quem tem a permissão.',
+    retryable: false,
+  ),
+  'FA815': ErrorCatalogEntry(
+    code: 'FA815',
+    message: 'A filial de destino precisa ser diferente da origem.',
+    action: 'Selecione outra filial de destino.',
+    retryable: false,
+  ),
+  'FA817': ErrorCatalogEntry(
+    code: 'FA817',
+    message: 'Sem lote na origem, o produto não entra onde o lote é obrigatório.',
+    action: 'Ligue o controle de lote na origem ou registre a entrada no destino com o lote.',
+    retryable: false,
+  ),
 };

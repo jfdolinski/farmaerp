@@ -10,7 +10,7 @@ import {
   setPrice,
   setStatus,
 } from "./actions";
-import { moneyText, REGION_LABELS, STATUS_LABELS, statusLabel } from "./commercial-format";
+import { moneyText, noticeText, REGION_LABELS, STATUS_LABELS, statusLabel } from "./commercial-format";
 import { keepValues } from "./ui";
 import styles from "../terminais/page.module.css";
 
@@ -24,6 +24,8 @@ export interface BranchRow {
   effective_price: string | null;
   pmc: string | null;
   above_pmc: boolean;
+  sellable: boolean | null;
+  notice: string | null;
 }
 
 export interface PmcRow {
@@ -129,6 +131,7 @@ export function StatusForm({ productId, grid }: { productId: string; grid: Branc
               <th>Status</th>
               <th>Preço em vigor</th>
               <th>PMC</th>
+              <th>Na venda</th>
             </tr>
           </thead>
           <tbody>
@@ -158,6 +161,10 @@ export function StatusForm({ productId, grid }: { productId: string; grid: Branc
                   {row.above_pmc && <small className={styles.warning}>Acima do PMC</small>}
                 </td>
                 <td>{moneyText(row.pmc)}</td>
+                <td>
+                  {row.sellable ? "Vende" : "Não vende"}
+                  {row.notice && <small className={styles.warning}>{noticeText(row.notice)}</small>}
+                </td>
               </tr>
             ))}
           </tbody>

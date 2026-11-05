@@ -47,6 +47,7 @@ describe('migrations', () => {
       '0011_product_prices_and_status',
       '0012_product_rules',
       '0013_stock',
+      '0014_stock_operations',
     ]);
   });
 });

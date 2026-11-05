@@ -177,7 +177,9 @@ export class ProductsController {
         [productId],
       );
       const grid = await client.query(
-        'SELECT * FROM app.product_branch_grid($1)',
+        `SELECT g.*, a.sellable, a.auto_purchase, a.notice, a.sellable_quantity
+           FROM app.product_branch_grid($1) g
+           LEFT JOIN LATERAL app.product_availability($1, g.branch_id) a ON true`,
         [productId],
       );
       const pmc = await client.query(
