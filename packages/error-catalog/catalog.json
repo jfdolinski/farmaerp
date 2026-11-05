@@ -86,7 +86,9 @@
       "catalog_product_barcode_code_active_key",
       "product_branch_status_active_key",
       "rule_type_code_active_key",
-      "stock_balance_active_key"
+      "stock_balance_active_key",
+      "branch_certificate_active_key",
+      "branch_csc_active_key"
     ]
   },
   "FA009": {
@@ -195,7 +197,9 @@
       "customer_dependent_id_uuid_v7_check",
       "customer_consent_event_id_uuid_v7_check",
       "agreement_id_uuid_v7_check",
-      "customer_agreement_id_uuid_v7_check"
+      "customer_agreement_id_uuid_v7_check",
+      "branch_certificate_id_uuid_v7_check",
+      "branch_csc_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -1157,7 +1161,8 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": [
-      "customer_state_registration_check"
+      "customer_state_registration_check",
+      "branch_state_registration_check"
     ]
   },
   "FA909": {
@@ -1189,6 +1194,63 @@
     "dbConstraints": [
       "customer_agreement_registration_check",
       "customer_agreement_credit_limit_check"
+    ]
+  },
+  "FA912": {
+    "message": "Não foi possível abrir o certificado.",
+    "action": "Confira se o arquivo é o .pfx do certificado A1 e se a senha está correta.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "branch_certificate_subject_check",
+      "branch_certificate_cnpj_check",
+      "branch_certificate_fingerprint_check",
+      "branch_certificate_validity_check"
+    ]
+  },
+  "FA913": {
+    "message": "O certificado é de outra empresa.",
+    "action": "Use o certificado A1 emitido para o CNPJ desta empresa.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA914": {
+    "message": "O certificado está vencido.",
+    "action": "Renove o certificado A1 com a certificadora e envie o arquivo novo.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA915": {
+    "message": "A guarda de certificados não está configurada no servidor.",
+    "action": "Informe o suporte: falta a chave de criptografia do servidor.",
+    "httpStatus": 503,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA916": {
+    "message": "O CSC informado é inválido.",
+    "action": "Informe o identificador (só números, até 6 dígitos) e o código CSC que a Sefaz forneceu.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "branch_csc_id_check"
+    ]
+  },
+  "FA917": {
+    "message": "O regime tributário informado é inválido.",
+    "action": "Escolha o regime na lista.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "company_tax_regime_check"
     ]
   }
 }
