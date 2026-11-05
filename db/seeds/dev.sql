@@ -162,4 +162,10 @@ SELECT seed.id, '019a0000-0000-7000-8000-000000000001'::uuid, seed.branch_id, '0
   ) AS seed (id, branch_id, batch_id, quantity)
  WHERE NOT EXISTS (SELECT 1 FROM stock_movement m WHERE m.id = seed.id);
 
+-- Cliente fictício. O CPF é o exemplo de dígito válido usado em documentação.
+INSERT INTO customer (id, economic_group_id, person_type, document, name, phone, city, state)
+SELECT '019a0000-0000-7000-8000-000000000032'::uuid, '019a0000-0000-7000-8000-000000000001'::uuid,
+       'individual', '11144477735', 'Cliente Demonstração', '11999990000', 'São Paulo', 'SP'
+ WHERE NOT EXISTS (SELECT 1 FROM customer WHERE id = '019a0000-0000-7000-8000-000000000032');
+
 COMMIT;

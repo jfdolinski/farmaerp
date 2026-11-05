@@ -658,4 +658,34 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Ligue o controle de lote na origem ou registre a entrada no destino com o lote.',
     retryable: false,
   ),
+  'FA901': ErrorCatalogEntry(
+    code: 'FA901',
+    message: 'Já existe um cliente com este documento.',
+    action: 'Busque o cliente pelo CPF ou CNPJ e abra o cadastro dele.',
+    retryable: false,
+  ),
+  'FA902': ErrorCatalogEntry(
+    code: 'FA902',
+    message: 'O CPF ou CNPJ é inválido.',
+    action: 'Confira os números digitados.',
+    retryable: false,
+  ),
+  'FA903': ErrorCatalogEntry(
+    code: 'FA903',
+    message: 'Este titular já tem um dependente com este CPF.',
+    action: 'Confira o CPF ou edite o dependente que já existe.',
+    retryable: false,
+  ),
+  'FA904': ErrorCatalogEntry(
+    code: 'FA904',
+    message: 'Os dados do cliente são inválidos.',
+    action: 'Confira telefone, e-mail, CEP, estado, município e nascimento.',
+    retryable: false,
+  ),
+  'FA905': ErrorCatalogEntry(
+    code: 'FA905',
+    message: 'Os dados do consentimento são inválidos.',
+    action: 'Escolha a finalidade, a decisão e o canal da lista.',
+    retryable: false,
+  ),
 };
