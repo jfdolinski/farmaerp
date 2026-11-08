@@ -61,10 +61,10 @@ describe('inscrição estadual', () => {
     ['110042490114', 'SP', true],
     ['11004249011', 'SP', false],
     ['1234567', 'RJ', false],
-    ['12345678', 'RJ', true],
-    ['12345678', 'BA', true],
-    ['123456789', 'BA', true],
-    ['1234567890123', 'MG', true],
+    ['99999993', 'RJ', true],
+    ['12345663', 'BA', true],
+    ['100000306', 'BA', true],
+    ['0623079040081', 'MG', true],
     ['ISENTO', 'SP', true],
     ['12A456789', 'SC', false],
     ['123456789', 'XX', false],
@@ -91,8 +91,8 @@ describe('inscrição estadual', () => {
     await asUser(a.admin.id, async (client) => {
       const document = cpf();
       const id = await customer(client, { document });
-      await client.query('SELECT app.update_customer($1, $2::jsonb)', [id, JSON.stringify({ document, name: 'X', state: 'RJ', stateRegistration: '12345678' })]);
-      expect((await client.query('SELECT state_registration FROM v_customer WHERE id = $1', [id])).rows[0].state_registration).toBe('12345678');
+      await client.query('SELECT app.update_customer($1, $2::jsonb)', [id, JSON.stringify({ document, name: 'X', state: 'RJ', stateRegistration: '99999993' })]);
+      expect((await client.query('SELECT state_registration FROM v_customer WHERE id = $1', [id])).rows[0].state_registration).toBe('99999993');
     });
   });
 });

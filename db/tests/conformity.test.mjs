@@ -5,7 +5,7 @@ import { asOwner, closePools, connectionConfig, ownerPool } from './helpers.mjs'
 afterAll(closePools);
 
 const EXPECTED_TABLES = [
-  'agreement', 'auth_event', 'branch', 'branch_group', 'catalog_manufacturer', 'catalog_product', 'catalog_product_barcode',
+  'agreement', 'auth_event', 'branch', 'branch_certificate', 'branch_csc', 'branch_group', 'catalog_manufacturer', 'catalog_product', 'catalog_product_barcode',
   'catalog_product_pmc', 'code_counter', 'company', 'customer', 'customer_agreement', 'customer_consent_event', 'customer_dependent', 'economic_group', 'permission', 'product', 'product_barcode',
   'product_barcode_channel', 'product_batch', 'product_batch_event', 'product_branch_status', 'product_category', 'product_group', 'product_pmc',
   'product_price', 'product_rule', 'product_status_event', 'region', 'role', 'role_permission', 'rule_type', 'sales_channel', 'stock_balance', 'stock_movement',
@@ -50,6 +50,7 @@ describe('migrations', () => {
       '0014_stock_operations',
       '0015_customers',
       '0016_agreements',
+      '0017_fiscal_setup',
     ]);
   });
 });
