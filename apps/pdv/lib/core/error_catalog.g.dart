@@ -772,4 +772,28 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Escolha o regime na lista.',
     retryable: false,
   ),
+  'FA918': ErrorCatalogEntry(
+    code: 'FA918',
+    message: 'Esta série já existe nesta filial.',
+    action: 'Escolha outro número. A série de um terminal revogado não volta a ser usada.',
+    retryable: false,
+  ),
+  'FA919': ErrorCatalogEntry(
+    code: 'FA919',
+    message: 'A série ou o número inicial é inválido.',
+    action: 'Informe a série de 1 a 889 e o número inicial de 1 a 999.999.999.',
+    retryable: false,
+  ),
+  'FA920': ErrorCatalogEntry(
+    code: 'FA920',
+    message: 'Esta série já foi usada e não pode mais mudar.',
+    action: 'Mantenha a série e o número inicial atuais.',
+    retryable: false,
+  ),
+  'FA921': ErrorCatalogEntry(
+    code: 'FA921',
+    message: 'Esta filial não tem mais série livre.',
+    action: 'Informe o suporte: todas as séries de 1 a 889 já foram usadas nesta filial.',
+    retryable: false,
+  ),
 };

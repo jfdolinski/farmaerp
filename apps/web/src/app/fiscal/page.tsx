@@ -10,6 +10,8 @@ import {
   CscForm,
   FiscalRow,
   RegimeForm,
+  SeriesForm,
+  SeriesRow,
   StateRegistrationForm,
 } from "./ui";
 
@@ -43,6 +45,7 @@ async function FiscalContent() {
   const result = await apiFetch<FiscalRow[]>("/admin/fiscal");
   if (!result.ok) redirectIfNeeded(result.error, "/fiscal");
   const rows = result.ok ? result.data : [];
+  const series = await apiFetch<SeriesRow[]>("/admin/fiscal/series");
   const companies = [...new Set(rows.map((row) => row.company_id))];
 
   return (
@@ -81,6 +84,12 @@ async function FiscalContent() {
                 />
                 <h3>CSC da NFC-e</h3>
                 <CscForm row={row} />
+                <h3>Séries</h3>
+                {series.ok ? (
+                  <BranchSeries rows={series.data.filter((item) => item.branch_id === row.branch_id)} />
+                ) : (
+                  <ErrorNotice error={series.error} />
+                )}
               </section>
             ))}
           </div>
@@ -88,6 +97,26 @@ async function FiscalContent() {
       })}
       <p className={styles.hint}>
         O arquivo, a senha e o código CSC ficam criptografados no servidor e não voltam para a tela.
+      </p>
+    </>
+  );
+}
+
+function BranchSeries({ rows }: { rows: SeriesRow[] }) {
+  if (rows.length === 0) {
+    return (
+      <p className={styles.hint}>
+        Nenhum terminal emissor nesta filial. As séries são criadas quando um terminal de caixa ou autoatendimento é aprovado.
+      </p>
+    );
+  }
+  return (
+    <>
+      {rows.map((row) => (
+        <SeriesForm key={row.id} row={row} />
+      ))}
+      <p className={styles.hint}>
+        Se a filial veio de outro sistema, informe o próximo número da série antiga. Depois da primeira nota, a série não muda mais.
       </p>
     </>
   );

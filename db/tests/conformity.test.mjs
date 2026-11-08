@@ -9,7 +9,7 @@ const EXPECTED_TABLES = [
   'catalog_product_pmc', 'code_counter', 'company', 'customer', 'customer_agreement', 'customer_consent_event', 'customer_dependent', 'economic_group', 'permission', 'product', 'product_barcode',
   'product_barcode_channel', 'product_batch', 'product_batch_event', 'product_branch_status', 'product_category', 'product_group', 'product_pmc',
   'product_price', 'product_rule', 'product_status_event', 'region', 'role', 'role_permission', 'rule_type', 'sales_channel', 'stock_balance', 'stock_movement',
-  'terminal', 'terminal_event', 'terminal_pairing_request',
+  'terminal', 'terminal_event', 'terminal_fiscal_series', 'terminal_fiscal_series_event', 'terminal_pairing_request',
   'terminal_status', 'user_account', 'user_branch', 'user_credential', 'user_role', 'user_session',
 ];
 
@@ -53,6 +53,7 @@ describe('migrations', () => {
       '0017_fiscal_setup',
       '0018_branch_cnpj_root',
       '0019_company_branch_admin',
+      '0020_terminal_fiscal_series',
     ]);
   });
 });

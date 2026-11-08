@@ -176,6 +176,10 @@ Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda.
 
 Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda. A API passa a consultar `brasilapi.com.br`, `receitaws.com.br` e `open.cnpja.com` quando alguém pede a consulta de um CNPJ: se a VPS bloquear saída para a internet, a consulta avisa e o cadastro segue manual.
 
+## Atualizar para as séries por terminal
+
+Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda. Os terminais de caixa e de autoatendimento já aprovados recebem as séries automaticamente, e elas aparecem em **Fiscal**.
+
 ## Atualizar para o cadastro de empresas e filiais
 
 Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda. Numa produção nova, a primeira empresa é cadastrada em **Empresas**, logo depois do primeiro acesso.
