@@ -95,7 +95,7 @@ export function RegimeForm({ row }: { row: FiscalRow }) {
 export function StateRegistrationForm({ row }: { row: FiscalRow }) {
   const [state, action, pending] = useActionState<FiscalFormState, FormData>(setStateRegistration, {});
   if (!row.state) {
-    return <p className={styles.hint}>Inscrição estadual: cadastre antes o estado da filial, em Produtos, Estrutura.</p>;
+    return <p className={styles.hint}>Inscrição estadual: cadastre antes o estado da filial, em Empresas.</p>;
   }
   return (
     <form action={action} onSubmit={keepValues(action)} className={styles.stack}>

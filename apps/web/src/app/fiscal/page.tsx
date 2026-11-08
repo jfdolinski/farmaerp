@@ -73,7 +73,10 @@ async function FiscalContent() {
                 <CopyCertificateForm
                   row={row}
                   targets={branches.filter(
-                    (target) => target.branch_id !== row.branch_id && target.can_certificate,
+                    (target) =>
+                      target.branch_id !== row.branch_id &&
+                      target.can_certificate &&
+                      target.branch_cnpj.slice(0, 8) === row.certificate_cnpj?.slice(0, 8),
                   )}
                 />
                 <h3>CSC da NFC-e</h3>

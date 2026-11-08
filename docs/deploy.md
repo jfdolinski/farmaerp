@@ -176,6 +176,10 @@ Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda.
 
 Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda. A API passa a consultar `brasilapi.com.br`, `receitaws.com.br` e `open.cnpja.com` quando alguém pede a consulta de um CNPJ: se a VPS bloquear saída para a internet, a consulta avisa e o cadastro segue manual.
 
+## Atualizar para o cadastro de empresas e filiais
+
+Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda. Numa produção nova, a primeira empresa é cadastrada em **Empresas**, logo depois do primeiro acesso.
+
 ## Atualizar para a configuração fiscal
 
 Esta atualização tem **uma variável nova**, então crie a variável antes de implantar:

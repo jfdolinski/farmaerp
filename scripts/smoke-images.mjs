@@ -169,6 +169,18 @@ async function production() {
   await post('/auth/change-password', { currentPassword: OWNER.password, newPassword: NEW_PASSWORD }, first.token);
   const terminals = await (await api('/admin/terminals', { token: first.token })).json();
   check('produção começa sem dados de demonstração', Array.isArray(terminals) && terminals.length === 0);
+
+  const empty = await (await api('/admin/structure', { token: first.token })).json();
+  check('produção começa sem empresa, e o administrador pode cadastrar', empty.canManage === true && empty.companies.length === 0);
+  // Só para o banco descartável deste teste; nada sai daqui.
+  const created = await post('/admin/structure/companies', {
+    cnpj: '12345678000195',
+    legalName: 'Empresa de Teste Ltda',
+    tradeName: 'Empresa de Teste',
+    branch: { name: 'Matriz', state: 'SP' },
+  }, first.token);
+  const structure = await (await api('/admin/structure', { token: first.token })).json();
+  check('a primeira empresa e a primeira filial são criadas pela API', created.status === 201 && structure.companies.length === 1 && structure.branches.length === 1);
 }
 
 let failed = false;
