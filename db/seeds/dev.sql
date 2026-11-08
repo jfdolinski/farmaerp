@@ -69,8 +69,12 @@ SELECT seed.id, seed.user_id, r.id, seed.branch_id
  AND NOT EXISTS (SELECT 1 FROM user_role ur WHERE ur.id = seed.id);
 
 -- Catálogo e produtos fictícios, para demonstração. Os códigos de barras têm dígito válido, mas não são reais.
+-- A tributação também é fictícia: serve para ver a tela, não para emitir nota.
 SELECT app.upsert_catalog_product(item) FROM jsonb_array_elements('[
-  {"sourceKey": "demo-1", "name": "Dipirona Demonstração 500 mg 20 comprimidos", "activeIngredient": "Dipirona", "manufacturer": "Laboratório Demonstração", "msRegistration": "1000000000001", "ncm": "30049099", "barcodes": ["7890000000017", "7890000000024"]},
+  {"sourceKey": "demo-1", "name": "Dipirona Demonstração 500 mg 20 comprimidos", "activeIngredient": "Dipirona", "manufacturer": "Laboratório Demonstração", "msRegistration": "1000000000001", "ncm": "30049099", "barcodes": ["7890000000017", "7890000000024"], "taxes": [
+    {"regimes": [1, 4], "states": ["SP", "PR"], "validFrom": "2026-01-01", "cfop": "5405", "origin": 0, "icmsCsosn": "500", "pisCst": "49", "cofinsCst": "49"},
+    {"regimes": [2, 3], "states": ["SP", "PR"], "validFrom": "2026-01-01", "cfop": "5102", "origin": 0, "icmsCst": "00", "icmsRate": 18, "pisCst": "01", "pisRate": 1.65, "cofinsCst": "01", "cofinsRate": 7.6, "ibsCbsCst": "000", "classTrib": "000001", "ibsStateRate": 0.1, "ibsCityRate": 0, "cbsRate": 0.9}
+  ]},
   {"sourceKey": "demo-2", "name": "Paracetamol Demonstração 750 mg 20 comprimidos", "activeIngredient": "Paracetamol", "manufacturer": "Laboratório Demonstração", "msRegistration": "1000000000002", "ncm": "30049099", "barcodes": ["7890000000031"]},
   {"sourceKey": "demo-3", "name": "Amoxicilina Demonstração 500 mg 21 cápsulas", "activeIngredient": "Amoxicilina", "manufacturer": "Indústria Fictícia", "msRegistration": "1000000000003", "controlledClass": "antimicrobial", "ncm": "30041019", "barcodes": ["7890000000048"]},
   {"sourceKey": "demo-4", "name": "Clonazepam Demonstração 2 mg 30 comprimidos", "activeIngredient": "Clonazepam", "manufacturer": "Indústria Fictícia", "msRegistration": "1000000000004", "controlledClass": "B1", "ncm": "30049069", "barcodes": ["7890000000055"]},

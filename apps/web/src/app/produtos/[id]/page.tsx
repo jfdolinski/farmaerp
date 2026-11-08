@@ -26,6 +26,7 @@ import {
 } from "../ui";
 import { BatchTrackingRow, TrackingRow } from "../../estoque/ui";
 import { BalanceRow, dayText, quantityText } from "../../estoque/format";
+import { ProductTax, TaxRow } from "../tax";
 import styles from "../../terminais/page.module.css";
 
 export const metadata: Metadata = { title: "Produto · FarmaERP" };
@@ -103,9 +104,10 @@ async function ProductContent({
     );
   }
 
-  const [productResult, structureResult] = await Promise.all([
+  const [productResult, structureResult, taxResult] = await Promise.all([
     apiFetch<ProductDetail>(`/admin/products/${encodeURIComponent(id)}`),
     apiFetch<ProductStructure>("/admin/product-structure"),
+    apiFetch<TaxRow[]>(`/admin/products/${encodeURIComponent(id)}/tax`),
   ]);
   if (!productResult.ok) {
     redirectIfNeeded(productResult.error, path);
@@ -202,6 +204,12 @@ async function ProductContent({
             )}
           </>
         )}
+      </section>
+
+      <section className={styles.card}>
+        <h2>Tributação</h2>
+        {taxResult.ok ? <ProductTax rows={taxResult.data} /> : <ErrorNotice error={taxResult.error} />}
+        <p className={styles.hint}>A tributação vem do Catálogo e não é editada pela loja.</p>
       </section>
 
       <section className={styles.card}>

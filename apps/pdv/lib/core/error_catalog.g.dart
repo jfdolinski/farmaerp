@@ -796,4 +796,10 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Informe o suporte: todas as séries de 1 a 889 já foram usadas nesta filial.',
     retryable: false,
   ),
+  'FA922': ErrorCatalogEntry(
+    code: 'FA922',
+    message: 'A tributação do Catálogo tem dados inválidos.',
+    action: 'Corrija o arquivo do Catálogo e importe de novo. Nada foi gravado.',
+    retryable: false,
+  ),
 };

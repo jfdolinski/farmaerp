@@ -203,7 +203,8 @@
       "branch_csc_id_uuid_v7_check",
       "branch_company_event_id_uuid_v7_check",
       "terminal_fiscal_series_id_uuid_v7_check",
-      "terminal_fiscal_series_event_id_uuid_v7_check"
+      "terminal_fiscal_series_event_id_uuid_v7_check",
+      "catalog_product_tax_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -1320,5 +1321,49 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": []
+  },
+  "FA922": {
+    "message": "A tributação do Catálogo tem dados inválidos.",
+    "action": "Corrija o arquivo do Catálogo e importe de novo. Nada foi gravado.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "catalog_product_tax_regime_check",
+      "catalog_product_tax_state_check",
+      "catalog_product_tax_cfop_check",
+      "catalog_product_tax_origin_check",
+      "catalog_product_tax_benefit_code_check",
+      "catalog_product_tax_icms_cst_check",
+      "catalog_product_tax_icms_csosn_check",
+      "catalog_product_tax_icms_rate_range_check",
+      "catalog_product_tax_icms_base_reduction_check",
+      "catalog_product_tax_fcp_rate_check",
+      "catalog_product_tax_st_base_mode_check",
+      "catalog_product_tax_st_mva_check",
+      "catalog_product_tax_st_rate_check",
+      "catalog_product_tax_st_base_reduction_check",
+      "catalog_product_tax_st_fcp_rate_check",
+      "catalog_product_tax_pis_cst_check",
+      "catalog_product_tax_pis_rate_range_check",
+      "catalog_product_tax_cofins_cst_check",
+      "catalog_product_tax_cofins_rate_range_check",
+      "catalog_product_tax_ibs_cbs_cst_check",
+      "catalog_product_tax_class_trib_check",
+      "catalog_product_tax_ibs_state_rate_check",
+      "catalog_product_tax_ibs_city_rate_check",
+      "catalog_product_tax_cbs_rate_check",
+      "catalog_product_tax_ibs_cbs_reduction_range_check",
+      "catalog_product_tax_icms_code_check",
+      "catalog_product_tax_icms_rate_check",
+      "catalog_product_tax_st_required_check",
+      "catalog_product_tax_st_allowed_check",
+      "catalog_product_tax_st_mva_required_check",
+      "catalog_product_tax_pis_rate_check",
+      "catalog_product_tax_cofins_rate_check",
+      "catalog_product_tax_ibs_cbs_group_check",
+      "catalog_product_tax_ibs_cbs_reduction_check",
+      "catalog_product_tax_active_key"
+    ]
   }
 }

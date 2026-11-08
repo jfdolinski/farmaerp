@@ -42,6 +42,14 @@ export class FiscalController {
     });
   }
 
+  @Get('tax-coverage')
+  taxCoverage() {
+    return this.database.withContext(async (client) => {
+      const { rows } = await client.query('SELECT * FROM app.tax_coverage()');
+      return rows;
+    });
+  }
+
   @Get('series')
   series() {
     return this.database.withContext(async (client) => {

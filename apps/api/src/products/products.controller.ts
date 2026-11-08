@@ -228,6 +228,26 @@ export class ProductsController {
     });
   }
 
+  /** Regra em vigor em cada filial que o usuário enxerga. A regra de escolha fica no banco. */
+  @Get('products/:id/tax')
+  tax(@Param('id') id: string) {
+    const productId = requireUuid(id);
+    return this.database.withContext(async (client) => {
+      const { rows } = await client.query(
+        // A última coluna de mesmo nome vence: a data sai como texto, sem passar por fuso.
+        `SELECT b.id AS branch_id, b.name AS branch_name, r.*, r.valid_from::text AS valid_from
+           FROM v_branch b
+           CROSS JOIN LATERAL app.resolve_product_tax($1, b.id) r
+          ORDER BY b.name`,
+        [productId],
+      );
+      if (rows.length === 0) {
+        throw new AppError('FA006');
+      }
+      return rows;
+    });
+  }
+
   /** Preço da rede, sem filial, ou exceção da filial. Preço vazio encerra a exceção. */
   @Post('products/:id/prices')
   setPrice(@Param('id') id: string, @RequestBody() rawBody: unknown) {

@@ -5,6 +5,7 @@ import { FormEvent, useActionState, useEffect, useRef, useState } from "react";
 import type { ApiError } from "@/lib/api";
 import { ErrorNotice } from "../error-notice";
 import { keepValues } from "../produtos/ui";
+import { REGIMES } from "./regimes";
 import styles from "../terminais/page.module.css";
 import {
   copyCertificate,
@@ -54,13 +55,6 @@ export interface SeriesRow {
 
 // Um A1 tem poucos KB; acima disso não é um certificado, e nem vale a pena enviar.
 const MAX_PFX_BYTES = 48_000;
-
-const REGIMES: [number, string][] = [
-  [1, "Simples Nacional"],
-  [2, "Simples Nacional, excesso de sublimite"],
-  [3, "Regime Normal"],
-  [4, "MEI"],
-];
 
 const dateText = (value: string) =>
   new Date(value).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
