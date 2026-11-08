@@ -58,7 +58,7 @@ Filiais:     Grupo econômico > Grupo de filial > Região > Filial
 ```
 
 Todo estabelecimento, inclusive a matriz, é uma filial com CNPJ completo.
-A empresa guarda só a raiz de 8 caracteres.
+A empresa guarda a raiz de 8 caracteres do CNPJ principal, mas a filial pode ter um CNPJ de outra raiz. O certificado A1 é conferido com o CNPJ da própria filial.
 
 **Criar uma tabela nova**
 

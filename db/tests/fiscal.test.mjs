@@ -181,6 +181,32 @@ describe('certificado A1', () => {
   });
 });
 
+describe('filial com raiz de CNPJ diferente da empresa', () => {
+  const otherRootBranch = async (client) => {
+    const root = randomRoot();
+    await client.query('UPDATE branch SET cnpj = $2 WHERE id = $1', [a.branch2.id, branchCnpj(root, 1)]);
+    return root;
+  };
+
+  it('o certificado é conferido com o CNPJ da filial, não com a raiz da empresa', async () => {
+    await asOwner(async (client) => {
+      const root = await otherRootBranch(client);
+      await setUser(client, a.admin.id);
+      await setCertificate(client, a.branch2, meta(a, { cnpj: branchCnpj(root, 1) }));
+      await expectCode(client, () => setCertificate(client, a.branch2, meta(a)), 'FA913');
+    });
+  });
+
+  it('não copia certificado para filial de outra raiz, mesmo na mesma empresa', async () => {
+    await asOwner(async (client) => {
+      await otherRootBranch(client);
+      await setUser(client, a.admin.id);
+      await setCertificate(client, a.branch1, meta(a));
+      await expectCode(client, () => client.query('SELECT app.copy_branch_certificate($1, $2)', [a.branch1.id, [a.branch2.id]]), 'FA913');
+    });
+  });
+});
+
 describe('CSC da NFC-e', () => {
   it('troca o CSC guardando o anterior', async () => {
     await asUser(a.admin.id, async (client) => {
