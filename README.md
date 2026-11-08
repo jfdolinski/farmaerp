@@ -191,12 +191,43 @@ O arquivo é uma lista JSON, e `sourceKey` identifica o item na origem. Importar
     "ncm": "30049099",
     "cest": "1300100",
     "barcodes": ["7890000000017"],
-    "pmc": [{ "state": "SP", "value": 15.5 }, { "state": "AM", "region": "manaus_free_zone", "value": 12 }]
+    "pmc": [{ "state": "SP", "value": 15.5 }, { "state": "AM", "region": "manaus_free_zone", "value": 12 }],
+    "taxes": [
+      {
+        "regimes": [1, 4],
+        "states": ["SP", "PR"],
+        "validFrom": "2026-12-01",
+        "cfop": "5405",
+        "origin": 0,
+        "icmsCsosn": "500",
+        "pisCst": "49",
+        "cofinsCst": "49"
+      }
+    ]
   }
 ]
 ```
 
 Em `controlledClass`, deixe vazio para não controlado ou use `A1`, `A2`, `A3`, `B1`, `B2`, `C1` a `C5`, `D1` ou `antimicrobial`. Em `region`, use `free_trade_area` ou `manaus_free_zone`.
+
+**Tributação (`taxes`)**
+
+Cobre a venda interna. Cada entrada vale para os regimes (`1` Simples Nacional, `2` Simples com excesso de sublimite, `3` Regime Normal, `4` MEI) e UFs da lista, a partir de `validFrom`.
+
+| Campos | Observação |
+|---|---|
+| `regimes`, `states`, `validFrom`, `cfop`, `origin`, `pisCst`, `cofinsCst` | Obrigatórios. CFOP de venda interna (5xxx) |
+| `icmsCsosn` ou `icmsCst` | Regimes 1 e 4 usam CSOSN; 2 e 3 usam CST |
+| `icmsRate`, `icmsBaseReduction`, `fcpRate`, `benefitCode` | Alíquota obrigatória nos CST 00, 10, 20 e 70 |
+| `stBaseMode`, `stMva`, `stRate`, `stBaseReduction`, `stFcpRate` | Modalidade e alíquota obrigatórias nos códigos com ST; recusados nos códigos sem ST |
+| `pisRate`, `cofinsRate` | Obrigatórios nos CST 01 e 02 |
+| `ibsCbsCst`, `classTrib`, `ibsStateRate`, `ibsCityRate`, `cbsRate` | Todos juntos ou nenhum. `ibsCbsReduction` é opcional dentro do grupo |
+
+- **Sem repetir linha:** valor igual ao vigente não gera linha nova.
+- **Correção:** a mesma vigência com outro valor substitui a anterior, que continua guardada.
+- **Item sem `taxes`:** mantém as regras que já tem.
+- **Recusas:** campo desconhecido, combinação repetida e alíquota com mais de quatro casas cancelam a importação inteira.
+- **Dados reais:** os valores do seed são fictícios. A tributação real precisa vir do contador ou de um fornecedor de dados fiscais.
 
 ## Motor de regras
 
