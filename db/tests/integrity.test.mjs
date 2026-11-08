@@ -75,11 +75,19 @@ describe('filial', () => {
     });
   });
 
-  it('rejeita CNPJ com raiz diferente da empresa', async () => {
+  it('aceita CNPJ com raiz diferente da empresa', async () => {
     await asOwner(async (client) => {
-      await expect(
-        insertBranch(client, a.company.id, null, branchCnpj(b.root, 60)),
-      ).rejects.toSatisfy(hasCode('FA203'));
+      const { rowCount } = await insertBranch(client, a.company.id, null, branchCnpj(b.root, 60));
+      expect(rowCount).toBe(1);
+    });
+  });
+
+  it('um CNPJ de filial ativa existente pode mudar para outra raiz', async () => {
+    await asOwner(async (client) => {
+      const cnpj = branchCnpj(randomRoot(), 61);
+      await client.query('UPDATE branch SET cnpj = $2 WHERE id = $1', [a.branch1.id, cnpj]);
+      const { rows } = await client.query('SELECT cnpj FROM branch WHERE id = $1', [a.branch1.id]);
+      expect(rows[0].cnpj).toBe(cnpj);
     });
   });
 

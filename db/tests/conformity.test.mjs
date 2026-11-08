@@ -51,6 +51,7 @@ describe('migrations', () => {
       '0015_customers',
       '0016_agreements',
       '0017_fiscal_setup',
+      '0018_branch_cnpj_root',
     ]);
   });
 });
