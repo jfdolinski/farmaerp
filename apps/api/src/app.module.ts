@@ -8,6 +8,7 @@ import { UsersController } from './auth/users.controller.js';
 import { AgreementsController } from './customers/agreements.controller.js';
 import { CustomersController } from './customers/customers.controller.js';
 import { DatabaseService } from './database.service.js';
+import { FiscalController } from './fiscal/fiscal.controller.js';
 import { HealthController } from './health.controller.js';
 import { AllExceptionsFilter } from './observability/all-exceptions.filter.js';
 import { AppLogger, createPinoLogger } from './observability/app-logger.js';
@@ -34,6 +35,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     StockController,
     CustomersController,
     AgreementsController,
+    FiscalController,
     TerminalDeviceController,
     TerminalAdminController,
   ],

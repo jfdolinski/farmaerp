@@ -115,6 +115,7 @@ O aparelho guarda uma chave Ed25519, responde a um desafio assinado e recebe um 
 **Variáveis de ambiente da API**
 
 - `TERMINAL_TOKEN_SECRET`: assina desafios e tokens, com ao menos 32 caracteres. Sem ela, a API não inicia.
+- `FISCAL_ENCRYPTION_KEY`: 32 bytes em base64, criptografa certificado A1 e CSC. Sem ela, a API sobe, mas o envio de certificado e de CSC responde FA915.
 - `TRUST_PROXY=true`: usar atrás do proxy do EasyPanel, para o limite de tentativas ver o IP real.
 
 ## Código humano

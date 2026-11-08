@@ -244,6 +244,7 @@ describe('quem lê e quem altera', () => {
       expect(rows.map((r) => r.branch_id)).toEqual([a.branch1.id]);
       expect(rows[0].certificate_days_left).toBeGreaterThanOrEqual(29);
       expect(rows[0].certificate_days_left).toBeLessThanOrEqual(31);
+      expect(rows[0].can_regime).toBe(false);
       expect(rows[0].can_manage).toBe(false);
       expect(rows[0].can_certificate).toBe(false);
       expect(rows[0].certificate_author).toBe(a.admin.name);

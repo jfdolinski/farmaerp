@@ -556,7 +556,7 @@ RETURNS TABLE (
   company_id uuid, company_name text, cnpj_root text, tax_regime smallint, branch_id uuid, branch_name text,
   branch_cnpj text, state text, state_registration text, certificate_subject text, certificate_cnpj text,
   certificate_valid_to timestamptz, certificate_days_left integer, certificate_updated_at timestamptz,
-  certificate_author text, csc_id text, csc_updated_at timestamptz, can_manage boolean, can_certificate boolean
+  certificate_author text, csc_id text, csc_updated_at timestamptz, can_regime boolean, can_manage boolean, can_certificate boolean
 )
 LANGUAGE sql STABLE
 SET search_path = ''
@@ -566,7 +566,7 @@ AS $$
          CASE WHEN bc.valid_to IS NULL THEN NULL
               ELSE (bc.valid_to::date - app.local_today())::integer END,
          bc.created_at, u.name, cs.csc_id, cs.created_at,
-         app.has_permission('fiscal.manage', b.id), app.has_permission('fiscal.certificate', b.id)
+         app.company_has_permission(c.id, 'fiscal.manage'), app.has_permission('fiscal.manage', b.id), app.has_permission('fiscal.certificate', b.id)
     FROM public.branch b
     JOIN public.company c ON c.id = b.company_id AND c.deleted_at IS NULL
     LEFT JOIN public.v_branch_certificate bc ON bc.branch_id = b.id
@@ -582,6 +582,7 @@ REVOKE ALL ON ALL FUNCTIONS IN SCHEMA app FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION
   app.is_valid_state_registration(text, text),
   app.clean_state_registration(text),
+  app.require_branch_permission(text, uuid),
   app.set_company_tax_regime(uuid, smallint),
   app.set_branch_state_registration(uuid, text),
   app.set_branch_certificate(uuid, jsonb, bytea, bytea),

@@ -11,6 +11,7 @@ export default defineConfig({
     env: {
       APP_ENV: 'development',
       TERMINAL_TOKEN_SECRET: 'segredo-de-teste-com-mais-de-32-caracteres',
+      FISCAL_ENCRYPTION_KEY: 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=',
     },
   },
 });

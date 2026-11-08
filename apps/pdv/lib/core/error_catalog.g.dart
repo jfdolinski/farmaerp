@@ -724,4 +724,40 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Informe a matrícula e um limite igual ou maior que zero.',
     retryable: false,
   ),
+  'FA912': ErrorCatalogEntry(
+    code: 'FA912',
+    message: 'Não foi possível abrir o certificado.',
+    action: 'Confira se o arquivo é o .pfx do certificado A1 e se a senha está correta.',
+    retryable: false,
+  ),
+  'FA913': ErrorCatalogEntry(
+    code: 'FA913',
+    message: 'O certificado é de outra empresa.',
+    action: 'Use o certificado A1 emitido para o CNPJ desta empresa.',
+    retryable: false,
+  ),
+  'FA914': ErrorCatalogEntry(
+    code: 'FA914',
+    message: 'O certificado está vencido.',
+    action: 'Renove o certificado A1 com a certificadora e envie o arquivo novo.',
+    retryable: false,
+  ),
+  'FA915': ErrorCatalogEntry(
+    code: 'FA915',
+    message: 'A guarda de certificados não está configurada no servidor.',
+    action: 'Informe o suporte: falta a chave de criptografia do servidor.',
+    retryable: false,
+  ),
+  'FA916': ErrorCatalogEntry(
+    code: 'FA916',
+    message: 'O CSC informado é inválido.',
+    action: 'Informe o identificador (só números, até 6 dígitos) e o código CSC que a Sefaz forneceu.',
+    retryable: false,
+  ),
+  'FA917': ErrorCatalogEntry(
+    code: 'FA917',
+    message: 'O regime tributário informado é inválido.',
+    action: 'Escolha o regime na lista.',
+    retryable: false,
+  ),
 };

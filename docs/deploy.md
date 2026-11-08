@@ -62,6 +62,7 @@ Variáveis:
 | `FARMAERP_MIGRATOR_PASSWORD` | Segredo gerado |
 | `FARMAERP_APP_PASSWORD` | Segredo gerado |
 | `TERMINAL_TOKEN_SECRET` | Segredo gerado |
+| `FISCAL_ENCRYPTION_KEY` | Chave gerada, 32 bytes em base64 (veja "Atualizar para a configuração fiscal") |
 | `POSTGRES_ADMIN_PASSWORD` | Senha do banco (passo 2). **Só no primeiro deploy** |
 | `BOOTSTRAP_ADMIN_EMAIL` | E-mail do primeiro administrador. **Só no primeiro deploy** |
 | `BOOTSTRAP_ADMIN_PASSWORD` | Senha inicial, com ao menos 10 caracteres. **Só no primeiro deploy** |
@@ -175,6 +176,27 @@ Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda.
 
 Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda. A API passa a consultar `brasilapi.com.br`, `receitaws.com.br` e `open.cnpja.com` quando alguém pede a consulta de um CNPJ: se a VPS bloquear saída para a internet, a consulta avisa e o cadastro segue manual.
 
+## Atualizar para a configuração fiscal
+
+Esta atualização tem **uma variável nova**, então crie a variável antes de implantar:
+
+1. Gere a chave no seu computador. O valor aparece só no seu terminal:
+
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+   ```
+
+2. No serviço `api`, em **Ambiente**, inclua `FISCAL_ENCRYPTION_KEY` com esse valor e salve.
+3. Implante a API, confira e implante a retaguarda.
+
+Cuidados com a chave:
+
+- Use uma chave diferente em cada ambiente, e nunca a versione.
+- Guarde uma cópia fora da VPS, como as outras senhas. O backup do banco não traz a chave: sem ela, o que está guardado não abre, e cada filial precisa enviar de novo o certificado e o CSC.
+- Trocar a chave tem o mesmo efeito. Só troque se ela tiver vazado, e peça o reenvio em todas as filiais.
+
+Sem a variável, a API sobe normalmente: só o envio de certificado e de CSC fica indisponível, com o código FA915.
+
 ## Antes de publicar a produção
 
 A produção usa os mesmos passos, em um projeto próprio e com segredos próprios, mas depende destes itens:
@@ -184,6 +206,7 @@ A produção usa os mesmos passos, em um projeto próprio e com segredos própri
 - [ ] [Backup diário do banco](https://easypanel.io/docs/backups/database), com destino fora da VPS.
 - [ ] Restauração testada: recupere um backup em um banco separado e confira os dados. Backup sem restauração testada não é garantia.
 - [ ] Prazo de retenção do IP nos logins (90 dias hoje) confirmado com o jurídico ou a contabilidade.
+- [ ] `FISCAL_ENCRYPTION_KEY` própria da produção, com cópia guardada fora da VPS.
 
 O seed se recusa a rodar em produção, e a senha de exemplo existe só em desenvolvimento.
 
