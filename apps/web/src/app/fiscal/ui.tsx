@@ -11,6 +11,7 @@ import {
   FiscalFormState,
   setCsc,
   setRegime,
+  setSeries,
   setStateRegistration,
   uploadCertificate,
 } from "./actions";
@@ -36,6 +37,19 @@ export interface FiscalRow {
   can_regime: boolean;
   can_manage: boolean;
   can_certificate: boolean;
+}
+
+export interface SeriesRow {
+  id: string;
+  branch_id: string;
+  terminal_id: string;
+  terminal_number: number;
+  terminal_name: string;
+  model: "55" | "65";
+  series: number;
+  initial_number: string;
+  last_used_number: string | null;
+  can_manage: boolean;
 }
 
 // Um A1 tem poucos KB; acima disso não é um certificado, e nem vale a pena enviar.
@@ -263,5 +277,47 @@ export function CscForm({ row }: { row: FiscalRow }) {
         </form>
       )}
     </>
+  );
+}
+
+export function SeriesForm({ row }: { row: SeriesRow }) {
+  const [state, action, pending] = useActionState<FiscalFormState, FormData>(setSeries, {});
+  const locked = row.last_used_number !== null;
+  const editable = row.can_manage && !locked;
+  return (
+    <form action={action} onSubmit={keepValues(action)} className={styles.device}>
+      <input type="hidden" name="id" value={row.id} />
+      <p>
+        <strong>
+          {row.terminal_number} · {row.terminal_name}
+        </strong>{" "}
+        · {row.model === "65" ? "NFC-e (65)" : "NF-e (55)"}
+      </p>
+      <div className={styles.inline}>
+        <label>
+          Série
+          <input name="series" required inputMode="numeric" maxLength={3} defaultValue={row.series} disabled={!editable} />
+        </label>
+        <label>
+          Número inicial
+          <input
+            name="initialNumber"
+            required
+            inputMode="numeric"
+            maxLength={11}
+            defaultValue={row.initial_number}
+            disabled={!editable}
+          />
+        </label>
+        {editable && (
+          <button type="submit" disabled={pending}>
+            Salvar série
+          </button>
+        )}
+      </div>
+      {locked && <p className={styles.hint}>Já em uso, até o número {row.last_used_number}. Não pode mais mudar.</p>}
+      <ErrorNotice error={state.error} />
+      <Saved state={state} text="Série salva." />
+    </form>
   );
 }

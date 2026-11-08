@@ -87,3 +87,18 @@ export async function setCsc(_previous: FiscalFormState, form: FormData): Promis
     }),
   );
 }
+
+export async function setSeries(_previous: FiscalFormState, form: FormData): Promise<FiscalFormState> {
+  const id = encodeURIComponent(text(form, "id"));
+  // Só dígitos: "1.234" é mil duzentos e trinta e quatro. Vazio vira um valor que o banco recusa com clareza.
+  const whole = (name: string) => {
+    const digits = text(form, name).replace(/\D/g, "");
+    return digits === "" ? 0 : Number(digits);
+  };
+  return finish(
+    await apiFetch(`/admin/fiscal/series/${id}`, {
+      method: "PATCH",
+      body: { series: whole("series"), initialNumber: whole("initialNumber") },
+    }),
+  );
+}

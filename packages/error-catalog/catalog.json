@@ -88,7 +88,8 @@
       "rule_type_code_active_key",
       "stock_balance_active_key",
       "branch_certificate_active_key",
-      "branch_csc_active_key"
+      "branch_csc_active_key",
+      "terminal_fiscal_series_terminal_active_key"
     ]
   },
   "FA009": {
@@ -200,7 +201,9 @@
       "customer_agreement_id_uuid_v7_check",
       "branch_certificate_id_uuid_v7_check",
       "branch_csc_id_uuid_v7_check",
-      "branch_company_event_id_uuid_v7_check"
+      "branch_company_event_id_uuid_v7_check",
+      "terminal_fiscal_series_id_uuid_v7_check",
+      "terminal_fiscal_series_event_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -1278,5 +1281,44 @@
     "dbConstraints": [
       "company_tax_regime_check"
     ]
+  },
+  "FA918": {
+    "message": "Esta série já existe nesta filial.",
+    "action": "Escolha outro número. A série de um terminal revogado não volta a ser usada.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "terminal_fiscal_series_branch_series_key"
+    ]
+  },
+  "FA919": {
+    "message": "A série ou o número inicial é inválido.",
+    "action": "Informe a série de 1 a 889 e o número inicial de 1 a 999.999.999.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "terminal_fiscal_series_model_check",
+      "terminal_fiscal_series_series_check",
+      "terminal_fiscal_series_initial_number_check",
+      "terminal_fiscal_series_last_used_check"
+    ]
+  },
+  "FA920": {
+    "message": "Esta série já foi usada e não pode mais mudar.",
+    "action": "Mantenha a série e o número inicial atuais.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA921": {
+    "message": "Esta filial não tem mais série livre.",
+    "action": "Informe o suporte: todas as séries de 1 a 889 já foram usadas nesta filial.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
   }
 }

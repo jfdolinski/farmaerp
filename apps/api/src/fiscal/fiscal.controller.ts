@@ -23,6 +23,9 @@ const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 const CSC_TOKEN = /^[0-9A-Za-z-]{1,36}$/;
 const MAX_COPY_TARGETS = 500;
 
+const isWholeNumber = (value: unknown, limit: number): value is number =>
+  typeof value === 'number' && Number.isInteger(value) && Math.abs(value) <= limit;
+
 /** Configuração fiscal. Quem altera o quê é decidido no banco, filial por filial. */
 @Controller('admin/fiscal')
 @UseGuards(SessionGuard)
@@ -37,6 +40,28 @@ export class FiscalController {
       const { rows } = await client.query('SELECT * FROM app.fiscal_overview()');
       return rows;
     });
+  }
+
+  @Get('series')
+  series() {
+    return this.database.withContext(async (client) => {
+      const { rows } = await client.query('SELECT * FROM app.list_terminal_series()');
+      return rows;
+    });
+  }
+
+  @Patch('series/:id')
+  async setSeries(@Param('id') id: string, @RequestBody() rawBody: unknown) {
+    const seriesId = requireUuid(id);
+    const { series, initialNumber } = asBody(rawBody);
+    // Valor fora dos limites do tipo nem chega ao banco; os limites da regra ficam lá.
+    if (!isWholeNumber(series, 2_147_483_647) || !isWholeNumber(initialNumber, 9_999_999_999)) {
+      throw new AppError('FA919');
+    }
+    await this.database.withContext((client) =>
+      client.query('SELECT app.set_terminal_series($1, $2, $3)', [seriesId, series, initialNumber]),
+    );
+    return { status: 'ok' };
   }
 
   @Patch('companies/:id/regime')

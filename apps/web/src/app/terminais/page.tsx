@@ -14,6 +14,12 @@ import styles from "./page.module.css";
 
 export const metadata: Metadata = { title: "Terminais · FarmaERP" };
 
+interface TerminalSeries {
+  terminal_id: string;
+  model: "55" | "65";
+  series: number;
+}
+
 interface MonitorRow {
   id: string;
   number: number | null;
@@ -69,6 +75,12 @@ async function TerminalsContent() {
   const user = await requireUser("/terminais");
   const canView = can(user, "terminals.view");
   const canRequest = can(user, "terminals.request");
+  const series = await apiFetch<TerminalSeries[]>("/admin/fiscal/series");
+  const seriesOf = (id: string) =>
+    (series.ok ? series.data : [])
+      .filter((item) => item.terminal_id === id)
+      .map((item) => `${item.model === "65" ? "NFC-e" : "NF-e"} série ${item.series}`)
+      .join(" · ");
   const canApprove = can(user, "terminals.approve");
   const canBlock = can(user, "terminals.block");
   const canRevoke = can(user, "terminals.revoke");
@@ -126,6 +138,7 @@ async function TerminalsContent() {
                         {terminal.profile && terminal.device_name && " · "}
                         {terminal.device_name}
                       </small>
+                      {seriesOf(terminal.id) && <small>{seriesOf(terminal.id)}</small>}
                       {terminal.key_storage === "file" && (
                         <small className={styles.warning}>
                           Chave em arquivo (proteção menor)
