@@ -262,6 +262,18 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Atualize a tela para ver os vínculos atuais.',
     retryable: false,
   ),
+  'FA223': ErrorCatalogEntry(
+    code: 'FA223',
+    message: 'O endereço da filial é inválido.',
+    action: 'Confira o CEP (8 dígitos), o código IBGE do município (7 dígitos), o telefone com DDD e o tamanho dos campos.',
+    retryable: false,
+  ),
+  'FA224': ErrorCatalogEntry(
+    code: 'FA224',
+    message: 'A filial ainda tem terminal em uso ou saldo em estoque.',
+    action: 'Revogue os terminais e zere o estoque antes de encerrar a filial.',
+    retryable: false,
+  ),
   'FA301': ErrorCatalogEntry(
     code: 'FA301',
     message: 'Código não encontrado ou expirado.',

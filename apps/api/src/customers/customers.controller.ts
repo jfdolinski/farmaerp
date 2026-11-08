@@ -110,7 +110,7 @@ export class CustomersController {
   ) {}
 
   /**
-   * Preenche o cadastro de pessoa jurídica pelos serviços públicos. Só quem cadastra clientes usa,
+   * Preenche o cadastro de pessoa jurídica pelos serviços públicos. Só quem cadastra clientes ou a estrutura usa,
    * e nada da resposta vai para o log.
    */
   @Get('cnpj/:cnpj')
@@ -122,7 +122,7 @@ export class CustomersController {
     }
     const allowed = await this.database.withContext(async (client) => {
       const { rows } = await client.query<{ ok: boolean }>(
-        `SELECT app.has_permission_anywhere('customers.manage') AS ok`,
+        `SELECT app.has_permission_anywhere('customers.manage') OR app.has_permission_anywhere('structure.manage') AS ok`,
       );
       return rows[0].ok;
     });

@@ -4,7 +4,6 @@ import { Suspense } from "react";
 import { apiFetch, can, redirectIfNeeded, requireUser } from "@/lib/api";
 import { AppHeader } from "../../app-header";
 import { ErrorNotice } from "../../error-notice";
-import { BranchLocationRow, BranchLocationValues } from "../commercial-ui";
 import { AddEntryForm, CategoryRow, EntryRow, GroupRow, ProductStructure } from "../ui";
 import styles from "../../terminais/page.module.css";
 
@@ -69,12 +68,8 @@ async function StructureContent() {
     );
   }
 
-  const [result, branches] = await Promise.all([
-    apiFetch<ProductStructure>("/admin/product-structure"),
-    apiFetch<BranchLocationValues[]>("/admin/branches"),
-  ]);
+  const result = await apiFetch<ProductStructure>("/admin/product-structure");
   if (!result.ok) redirectIfNeeded(result.error, "/produtos/estrutura");
-  const canLocate = can(user, "structure.manage");
 
   return (
     <>
@@ -111,15 +106,6 @@ async function StructureContent() {
               {canManage && <AddEntryForm entity="group" kind={kind} label={add} />}
             </section>
           ))}
-          {branches.ok && branches.data.length > 0 && (
-            <section className={styles.card}>
-              <h2>Estado das filiais</h2>
-              <p className={styles.hint}>É o estado que define qual PMC vale em cada filial.</p>
-              {branches.data.map((branch) => (
-                <BranchLocationRow key={branch.id} branch={branch} canManage={canLocate} />
-              ))}
-            </section>
-          )}
           <section className={styles.card}>
             <h2>Canais de venda</h2>
             {result.data.channels.map((channel) => (

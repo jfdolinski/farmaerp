@@ -204,20 +204,6 @@ export async function reactivateProduct(
   return { done: true };
 }
 
-export async function setBranchLocation(
-  _previous: ProductFormState,
-  form: FormData,
-): Promise<ProductFormState> {
-  const id = encodeURIComponent(text(form, "id"));
-  const result = await apiFetch(`/admin/branches/${id}/location`, {
-    method: "POST",
-    body: { state: optional(form, "state"), region: optional(form, "region") },
-  });
-  if (!result.ok) return handleFailure(result.error, "/produtos/estrutura");
-  refresh();
-  return { done: true };
-}
-
 const ENTITY_PATHS: Record<string, string> = {
   category: "product-categories",
   group: "product-groups",

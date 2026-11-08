@@ -6,7 +6,6 @@ import {
   addPmc,
   ProductFormState,
   reactivateProduct,
-  setBranchLocation,
   setPrice,
   setStatus,
 } from "./actions";
@@ -55,13 +54,6 @@ export interface StatusEvent {
   author: string | null;
 }
 
-export interface BranchLocationValues {
-  id: string;
-  name: string;
-  state: string | null;
-  pmc_region: string | null;
-}
-
 const STATUS_STYLES: Record<string, string> = {
   active: styles.active,
   on_order: styles.pending,
@@ -74,7 +66,7 @@ const STATES = [
   "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO",
 ];
 
-function RegionSelect({ value, disabled }: { value?: string | null; disabled?: boolean }) {
+export function RegionSelect({ value, disabled }: { value?: string | null; disabled?: boolean }) {
   return (
     <label>
       Região especial
@@ -90,7 +82,7 @@ function RegionSelect({ value, disabled }: { value?: string | null; disabled?: b
   );
 }
 
-function StateSelect({ value, disabled, required }: { value?: string | null; disabled?: boolean; required?: boolean }) {
+export function StateSelect({ value, disabled, required }: { value?: string | null; disabled?: boolean; required?: boolean }) {
   return (
     <label>
       Estado
@@ -332,34 +324,3 @@ export function AddPmcForm({ productId }: { productId: string }) {
   );
 }
 
-export function BranchLocationRow({
-  branch,
-  canManage,
-}: {
-  branch: BranchLocationValues;
-  canManage: boolean;
-}) {
-  const [state, action, pending] = useActionState<ProductFormState, FormData>(setBranchLocation, {});
-
-  return (
-    <form action={action} onSubmit={keepValues(action)} className={styles.stack}>
-      <input type="hidden" name="id" value={branch.id} />
-      <div className={styles.inline}>
-        <strong>{branch.name}</strong>
-        <StateSelect value={branch.state} disabled={!canManage} />
-        <RegionSelect value={branch.pmc_region} disabled={!canManage} />
-        {canManage && (
-          <button type="submit" disabled={pending}>
-            Salvar
-          </button>
-        )}
-      </div>
-      <ErrorNotice error={state.error} />
-      {state.done && (
-        <p className={styles.success} role="status">
-          Filial salva.
-        </p>
-      )}
-    </form>
-  );
-}
