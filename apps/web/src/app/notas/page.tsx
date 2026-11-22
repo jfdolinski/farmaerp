@@ -5,8 +5,8 @@ import { apiFetch, can, redirectIfNeeded, requireUser } from "@/lib/api";
 import { AppHeader } from "../app-header";
 import { ErrorNotice } from "../error-notice";
 import styles from "../terminais/page.module.css";
-import { dateText, moneyText, STATUS_LABELS } from "./format";
-import { UploadForm } from "./ui";
+import { CONFIRMATION_LABELS, dateText, moneyText, STATUS_LABELS } from "./format";
+import { AwarenessList, SummaryRow, UploadForm } from "./ui";
 
 export const metadata: Metadata = { title: "Notas de compra · FarmaERP" };
 
@@ -22,7 +22,13 @@ interface InvoiceListRow {
   environment: number;
   item_count: string;
   pending_count: string;
+  source: string;
+  confirmation: string;
+  confirmation_required: boolean;
+  cancelled_at: string | null;
 }
+
+const STATUSES = ["review", "posted", "not_postable", "cancelled"];
 
 type SearchParams = Promise<{ situacao?: string | string[] }>;
 
@@ -53,8 +59,11 @@ async function InvoicesContent({ searchParams }: { searchParams: SearchParams })
   }
 
   const { situacao } = await searchParams;
-  const status = situacao === "review" || situacao === "not_postable" || situacao === "posted" ? situacao : "";
-  const invoices = await apiFetch<InvoiceListRow[]>(`/admin/purchase-invoices?status=${status}`);
+  const status = typeof situacao === "string" && STATUSES.includes(situacao) ? situacao : "";
+  const [invoices, summaries] = await Promise.all([
+    apiFetch<InvoiceListRow[]>(`/admin/purchase-invoices?status=${status}`),
+    apiFetch<SummaryRow[]>("/admin/purchase-summaries"),
+  ]);
   if (!invoices.ok) redirectIfNeeded(invoices.error, "/notas");
 
   return (
@@ -70,6 +79,13 @@ async function InvoicesContent({ searchParams }: { searchParams: SearchParams })
           <UploadForm />
         </section>
       )}
+      {!summaries.ok && <ErrorNotice error={summaries.error} />}
+      {summaries.ok && summaries.data.length > 0 && (
+        <section className={styles.card}>
+          <h2>Aguardando ciência</h2>
+          <AwarenessList rows={summaries.data} />
+        </section>
+      )}
       <section className={styles.card}>
         <form action="/notas" className={styles.inline}>
           <label>
@@ -79,6 +95,7 @@ async function InvoicesContent({ searchParams }: { searchParams: SearchParams })
               <option value="review">Em conferência</option>
               <option value="posted">Lançada no estoque</option>
               <option value="not_postable">Não vai para o estoque</option>
+              <option value="cancelled">Cancelada pelo emitente</option>
             </select>
           </label>
           <button type="submit">Filtrar</button>
@@ -121,6 +138,15 @@ async function InvoicesContent({ searchParams }: { searchParams: SearchParams })
                       {invoice.status === "review" && Number(invoice.pending_count) === 0 && (
                         <small>Todos os itens ligados</small>
                       )}
+                      {invoice.cancelled_at && invoice.status === "posted" && (
+                        <small className={styles.warning}>Cancelada pelo emitente depois do lançamento</small>
+                      )}
+                      {invoice.status !== "cancelled" && (
+                        <small className={invoice.confirmation === "confirmed" ? undefined : styles.hint}>
+                          {CONFIRMATION_LABELS[invoice.confirmation] ?? invoice.confirmation}
+                          {invoice.source === "download" && " · baixada da Sefaz"}
+                        </small>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -128,9 +154,6 @@ async function InvoicesContent({ searchParams }: { searchParams: SearchParams })
             </table>
           </div>
         )}
-        <p className={styles.hint}>
-          Nesta etapa a nota é só conferida: o lançamento no estoque chega no próximo passo.
-        </p>
       </section>
     </>
   );

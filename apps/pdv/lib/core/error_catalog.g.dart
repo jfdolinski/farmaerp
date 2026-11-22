@@ -916,4 +916,40 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Atualize a página para ver a situação atual do item.',
     retryable: false,
   ),
+  'FA942': ErrorCatalogEntry(
+    code: 'FA942',
+    message: 'Esta nota ainda não foi confirmada pela Sefaz.',
+    action: 'Ligue o download automático da filial em Fiscal. A confirmação acontece sozinha em alguns minutos; depois, lance de novo.',
+    retryable: false,
+  ),
+  'FA943': ErrorCatalogEntry(
+    code: 'FA943',
+    message: 'A filial não tem certificado digital válido.',
+    action: 'Envie o certificado A1 da filial na tela Fiscal.',
+    retryable: false,
+  ),
+  'FA944': ErrorCatalogEntry(
+    code: 'FA944',
+    message: 'A Sefaz não respondeu.',
+    action: 'Tente de novo em alguns minutos. Se continuar, confira se a Sefaz está no ar.',
+    retryable: true,
+  ),
+  'FA945': ErrorCatalogEntry(
+    code: 'FA945',
+    message: 'A Sefaz recusou a ciência desta nota.',
+    action: 'Tente de novo mais tarde. Se continuar, informe o suporte com o código abaixo.',
+    retryable: false,
+  ),
+  'FA946': ErrorCatalogEntry(
+    code: 'FA946',
+    message: 'Esta nota não está mais aguardando ciência.',
+    action: 'Atualize a página para ver a situação atual da nota.',
+    retryable: false,
+  ),
+  'FA947': ErrorCatalogEntry(
+    code: 'FA947',
+    message: 'A filial está sem estado (UF) cadastrado.',
+    action: 'Informe o estado da filial na tela Empresas para o download das notas funcionar.',
+    retryable: false,
+  ),
 };

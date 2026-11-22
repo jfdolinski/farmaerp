@@ -36,10 +36,12 @@ export class DatabaseService implements OnModuleDestroy {
    */
   async withContext<T>(
     fn: (client: DbClient) => Promise<T>,
-    options: { userId?: string } = {},
+    options: { userId?: string; worker?: string } = {},
   ): Promise<T> {
     const context = currentContext();
-    const userId = options.userId ?? context?.userId ?? '';
+    // A rotina de fundo roda sem usuário: o contexto dela libera só as funções feitas para ela.
+    const userId = options.worker ? '' : (options.userId ?? context?.userId ?? '');
+    const worker = options.worker ?? '';
     const terminalId = context?.terminalId ?? '';
     const traceId = context?.traceId ?? '';
 
@@ -51,8 +53,9 @@ export class DatabaseService implements OnModuleDestroy {
         `SELECT set_config('app.user_id', $1, true),
                 set_config('app.trace_id', $2, true),
                 set_config('app.terminal_id', $3, true),
-                set_config('application_name', $4, true)`,
-        [userId, traceId, terminalId, traceId ? `api:${traceId}` : 'api'],
+                set_config('application_name', $4, true),
+                set_config('app.worker', $5, true)`,
+        [userId, traceId, terminalId, traceId ? `api:${traceId}` : 'api', worker],
       );
       const result = await fn(client);
       await client.query('COMMIT');

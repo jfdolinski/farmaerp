@@ -12,6 +12,8 @@ import { DatabaseService } from './database.service.js';
 import { FiscalController } from './fiscal/fiscal.controller.js';
 import { HealthController } from './health.controller.js';
 import { PurchaseInvoicesController } from './purchases/purchase-invoices.controller.js';
+import { DfeController } from './sefaz/dfe.controller.js';
+import { DfeService } from './sefaz/dfe.service.js';
 import { SuppliersController } from './purchases/suppliers.controller.js';
 import { AllExceptionsFilter } from './observability/all-exceptions.filter.js';
 import { AppLogger, createPinoLogger } from './observability/app-logger.js';
@@ -41,6 +43,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     AgreementsController,
     SuppliersController,
     PurchaseInvoicesController,
+    DfeController,
     FiscalController,
     StructureController,
     TerminalDeviceController,
@@ -48,6 +51,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
   ],
   providers: [
     DatabaseService,
+    DfeService,
     SessionGuard,
     TerminalGuard,
     { provide: APP_GUARD, useClass: ThrottlerGuard },

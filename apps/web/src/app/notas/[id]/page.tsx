@@ -17,6 +17,7 @@ import {
   REASON_LABELS,
   SOURCE_LABELS,
   STATUS_LABELS,
+  CONFIRMATION_LABELS,
 } from "../format";
 import { BatchForm, DiscardForm, ItemActions, PostForm, ReleaseCostForm, ReverseForm } from "../ui";
 
@@ -100,6 +101,12 @@ interface InvoiceDetail {
   can_manage: boolean;
   can_post: boolean;
   can_override_cost: boolean;
+  source: string;
+  confirmation: string;
+  confirmation_required: boolean;
+  confirmed_at: string | null;
+  confirmation_message: string | null;
+  cancelled_at: string | null;
   items: InvoiceItem[];
   events: InvoiceEvent[];
 }
@@ -148,7 +155,16 @@ async function InvoiceContent({ params }: { params: Params }) {
   const invoice = result.data;
   const reviewing = invoice.status === "review" && invoice.can_manage;
   const pending = invoice.items.filter((item) => !item.product_id).length;
-  const blockers = invoice.items.flatMap((item) => postingBlockers(item));
+  const blockers = [
+    ...(invoice.confirmation_required && invoice.confirmation !== "confirmed"
+      ? [
+          invoice.confirmation === "pending"
+            ? "A nota ainda não foi confirmada pela Sefaz. Com o download automático ligado na filial, a confirmação chega sozinha em alguns minutos."
+            : `A Sefaz não confirmou esta nota: ${invoice.confirmation_message ?? "o XML é diferente do autorizado"}`,
+        ]
+      : []),
+    ...invoice.items.flatMap((item) => postingBlockers(item)),
+  ];
   const totals: [string, string][] = [
     ["Produtos", invoice.products_total],
     ["Desconto", invoice.discount_total],
@@ -196,6 +212,24 @@ async function InvoiceContent({ params }: { params: Params }) {
               </li>
             ))}
           </ul>
+        )}
+        {invoice.cancelled_at && (
+          <p className={styles.warning} role="alert">
+            {invoice.status === "posted"
+              ? `O emitente cancelou esta nota em ${dateTimeText(invoice.cancelled_at)}, depois do lançamento. Confira com o fornecedor e, se for o caso, estorne o lançamento.`
+              : `O emitente cancelou esta nota em ${dateTimeText(invoice.cancelled_at)}. Ela não pode mais ser lançada.`}
+          </p>
+        )}
+        {invoice.status !== "cancelled" && (
+          <p className={invoice.confirmation === "confirmed" ? styles.success : invoice.confirmation === "pending" ? styles.hint : styles.warning}>
+            {invoice.confirmation_message
+              ? invoice.confirmation_message.replace(/\.$/, "")
+              : (CONFIRMATION_LABELS[invoice.confirmation] ?? invoice.confirmation)}
+            {invoice.confirmed_at && ` em ${dateTimeText(invoice.confirmed_at)}`}
+            {invoice.source === "download" && ". O XML veio do download da Sefaz"}
+            {invoice.confirmation === "pending" && !invoice.confirmation_required && ". Fora da produção, a confirmação não é exigida para lançar"}
+            .
+          </p>
         )}
         {invoice.not_postable_reason && (
           <p className={styles.warning}>{REASON_LABELS[invoice.not_postable_reason] ?? invoice.not_postable_reason}</p>

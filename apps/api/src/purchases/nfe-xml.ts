@@ -64,6 +64,8 @@ export interface ParsedInvoice {
   environment: number;
   protocolNumber: string;
   authorizedAt: string;
+  /** Resumo assinado da infNFe (DigestValue): é o que a Sefaz informa como digVal. */
+  digest: string;
   destCnpj: string;
   emitter: {
     cnpj: string;
@@ -339,6 +341,7 @@ export function readAuthorizedNfe(xml: string): ParsedInvoice {
     environment: Number(environment),
     protocolNumber,
     authorizedAt: instant(infProt, 'dhRecbto'),
+    digest: digestValue,
     destCnpj,
     emitter: {
       cnpj: emitterCnpj,

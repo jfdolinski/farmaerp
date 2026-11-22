@@ -89,7 +89,10 @@
       "stock_balance_active_key",
       "branch_certificate_active_key",
       "branch_csc_active_key",
-      "terminal_fiscal_series_terminal_active_key"
+      "terminal_fiscal_series_terminal_active_key",
+      "branch_dfe_sync_branch_key",
+      "dfe_document_nsu_key",
+      "purchase_invoice_summary_key"
     ]
   },
   "FA009": {
@@ -213,7 +216,10 @@
       "purchase_invoice_item_batch_id_uuid_v7_check",
       "product_cost_id_uuid_v7_check",
       "purchase_invoice_item_cost_release_id_uuid_v7_check",
-      "purchase_invoice_event_id_uuid_v7_check"
+      "purchase_invoice_event_id_uuid_v7_check",
+      "branch_dfe_sync_id_uuid_v7_check",
+      "dfe_document_id_uuid_v7_check",
+      "purchase_invoice_summary_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -1532,7 +1538,32 @@
       "product_cost_entry_cost_check",
       "product_cost_reversal_check",
       "purchase_invoice_event_kind_check",
-      "purchase_invoice_event_kind_reason_check"
+      "purchase_invoice_event_kind_reason_check",
+      "purchase_invoice_digest_check",
+      "purchase_invoice_source_check",
+      "purchase_invoice_confirmation_check",
+      "purchase_invoice_confirmation_message_check",
+      "purchase_invoice_confirmed_check",
+      "branch_dfe_sync_last_nsu_check",
+      "branch_dfe_sync_max_nsu_check",
+      "branch_dfe_sync_last_status_check",
+      "branch_dfe_sync_last_message_check",
+      "branch_dfe_sync_last_error_check",
+      "branch_dfe_sync_query_count_check",
+      "dfe_document_nsu_check",
+      "dfe_document_schema_check",
+      "dfe_document_access_key_check",
+      "dfe_document_xml_check",
+      "purchase_invoice_summary_access_key_check",
+      "purchase_invoice_summary_emitter_document_check",
+      "purchase_invoice_summary_emitter_name_check",
+      "purchase_invoice_summary_operation_type_check",
+      "purchase_invoice_summary_total_check",
+      "purchase_invoice_summary_digest_check",
+      "purchase_invoice_summary_protocol_check",
+      "purchase_invoice_summary_situation_check",
+      "purchase_invoice_summary_awareness_protocol_check",
+      "purchase_invoice_summary_awareness_check"
     ]
   },
   "FA932": {
@@ -1618,5 +1649,53 @@
     "dbConstraints": [
       "purchase_invoice_item_cost_release_active_key"
     ]
+  },
+  "FA942": {
+    "message": "Esta nota ainda não foi confirmada pela Sefaz.",
+    "action": "Ligue o download automático da filial em Fiscal. A confirmação acontece sozinha em alguns minutos; depois, lance de novo.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA943": {
+    "message": "A filial não tem certificado digital válido.",
+    "action": "Envie o certificado A1 da filial na tela Fiscal.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA944": {
+    "message": "A Sefaz não respondeu.",
+    "action": "Tente de novo em alguns minutos. Se continuar, confira se a Sefaz está no ar.",
+    "httpStatus": 503,
+    "severity": "error",
+    "retryable": true,
+    "dbConstraints": []
+  },
+  "FA945": {
+    "message": "A Sefaz recusou a ciência desta nota.",
+    "action": "Tente de novo mais tarde. Se continuar, informe o suporte com o código abaixo.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA946": {
+    "message": "Esta nota não está mais aguardando ciência.",
+    "action": "Atualize a página para ver a situação atual da nota.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA947": {
+    "message": "A filial está sem estado (UF) cadastrado.",
+    "action": "Informe o estado da filial na tela Empresas para o download das notas funcionar.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
   }
 }

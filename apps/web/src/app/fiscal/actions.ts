@@ -26,6 +26,13 @@ function finish(result: { ok: true } | { ok: false; error: ApiError }): FiscalFo
   return { done: true };
 }
 
+export async function setDfe(_previous: FiscalFormState, form: FormData): Promise<FiscalFormState> {
+  const id = encodeURIComponent(text(form, "branchId"));
+  return finish(
+    await apiFetch(`/admin/branches/${id}/dfe`, { method: "POST", body: { enabled: text(form, "enabled") === "true" } }),
+  );
+}
+
 export async function setRegime(_previous: FiscalFormState, form: FormData): Promise<FiscalFormState> {
   const id = encodeURIComponent(text(form, "companyId"));
   return finish(

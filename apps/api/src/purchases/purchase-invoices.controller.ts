@@ -18,7 +18,7 @@ import { DatabaseService } from '../database.service.js';
 import { AppError } from '../observability/app-error.js';
 import { readAuthorizedNfe, sha256 } from './nfe-xml.js';
 
-const STATUSES = new Set(['review', 'not_postable', 'posted']);
+const STATUSES = new Set(['review', 'not_postable', 'posted', 'cancelled']);
 const MAX_BATCHES = 50;
 
 function optionalUuid(body: Body, field: string): string | null {
@@ -111,6 +111,7 @@ export class PurchaseInvoicesController {
                 i.access_key, i.series, i.number, i.issued_at, i.authorized_at, i.protocol_number, i.environment,
                 i.operation_type, i.purpose, i.products_total, i.discount_total, i.freight_total, i.insurance_total,
                 i.other_total, i.ipi_total, i.st_total, i.invoice_total, i.status, i.not_postable_reason, i.created_at,
+                i.source, i.confirmation, i.confirmation_required, i.confirmed_at, i.confirmation_message, i.cancelled_at,
                 u.name AS author, app.has_permission('purchases.manage', i.branch_id) AS can_manage,
                 app.has_permission('purchases.post', i.branch_id) AS can_post,
                 app.has_permission('purchases.cost_override', i.branch_id) AS can_override_cost

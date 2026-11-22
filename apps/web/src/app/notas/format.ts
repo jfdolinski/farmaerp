@@ -4,6 +4,15 @@ export const STATUS_LABELS: Record<string, string> = {
   review: "Em conferência",
   not_postable: "Não vai para o estoque",
   posted: "Lançada no estoque",
+  cancelled: "Cancelada pelo emitente",
+};
+
+/** Confirmação pela Sefaz: o resumo da assinatura bate com o que a Sefaz autorizou. */
+export const CONFIRMATION_LABELS: Record<string, string> = {
+  pending: "Aguardando confirmação da Sefaz",
+  confirmed: "Confirmada pela Sefaz",
+  mismatch: "Diferente do que a Sefaz autorizou",
+  unavailable: "A Sefaz não confirmou",
 };
 
 /** Custo unitário com até quatro casas: o custo fracionado costuma ter centavos quebrados. */

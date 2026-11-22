@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getError } from "@farmaerp/error-catalog";
 import Link from "next/link";
 import { Suspense } from "react";
 import { apiFetch, can, redirectIfNeeded, requireUser } from "@/lib/api";
@@ -9,6 +10,7 @@ import {
   CertificateForm,
   CopyCertificateForm,
   CscForm,
+  DfeToggle,
   FiscalRow,
   RegimeForm,
   SeriesForm,
@@ -46,9 +48,10 @@ async function FiscalContent() {
   const result = await apiFetch<FiscalRow[]>("/admin/fiscal");
   if (!result.ok) redirectIfNeeded(result.error, "/fiscal");
   const rows = result.ok ? result.data : [];
-  const [series, coverage] = await Promise.all([
+  const [series, coverage, dfe] = await Promise.all([
     apiFetch<SeriesRow[]>("/admin/fiscal/series"),
     apiFetch<CoverageRow[]>("/admin/fiscal/tax-coverage"),
+    apiFetch<DfeRow[]>("/admin/dfe/status"),
   ]);
   const companies = [...new Set(rows.map((row) => row.company_id))];
 
@@ -86,6 +89,12 @@ async function FiscalContent() {
                       target.branch_cnpj.slice(0, 8) === row.certificate_cnpj?.slice(0, 8),
                   )}
                 />
+                <h3>Download automático das notas de compra</h3>
+                {dfe.ok ? (
+                  <DfeStatus row={dfe.data.find((item) => item.branch_id === row.branch_id)} branchId={row.branch_id} />
+                ) : (
+                  <ErrorNotice error={dfe.error} />
+                )}
                 <h3>CSC da NFC-e</h3>
                 <CscForm row={row} />
                 <h3>Tributação</h3>
@@ -108,6 +117,67 @@ async function FiscalContent() {
       <p className={styles.hint}>
         O arquivo, a senha e o código CSC ficam criptografados no servidor e não voltam para a tela.
       </p>
+    </>
+  );
+}
+
+interface DfeRow {
+  branch_id: string;
+  enabled: boolean;
+  has_certificate: boolean;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  last_status: string | null;
+  last_message: string | null;
+  last_error: string | null;
+  waiting_awareness: string;
+  can_manage: boolean;
+}
+
+const dateTimeText = (value: string) =>
+  new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" });
+
+/** Situação do download da filial: o que aconteceu na última busca e quando vem a próxima. */
+function DfeStatus({ row, branchId }: { row?: DfeRow; branchId: string }) {
+  if (!row) return null;
+  const waiting = Number(row.waiting_awareness);
+  return (
+    <>
+      <p className={styles.hint}>
+        A cada hora, a filial busca na Sefaz as notas emitidas para o CNPJ dela. As notas chegam primeiro como resumo, em
+        Notas, esperando a ciência; depois da ciência, o XML completo chega sozinho. Em produção, uma nota só é lançada
+        depois de confirmada pela Sefaz.
+      </p>
+      {!row.has_certificate && (
+        <p className={styles.warning}>Sem certificado digital válido: o download não funciona até enviar um.</p>
+      )}
+      {row.enabled ? (
+        <p>
+          <strong>Ligado.</strong>{" "}
+          {row.last_run_at ? `Última busca em ${dateTimeText(row.last_run_at)}.` : "A primeira busca começa em até um minuto."}{" "}
+          {row.last_run_at && row.next_run_at && `Próxima a partir de ${dateTimeText(row.next_run_at)}.`}
+        </p>
+      ) : (
+        <p>
+          <strong>Desligado.</strong>
+        </p>
+      )}
+      {row.enabled && row.last_error && (
+        <p className={styles.warning}>
+          {getError(row.last_error).message} {row.last_message ? `Sefaz: ${row.last_message}` : getError(row.last_error).action}
+        </p>
+      )}
+      {row.enabled && !row.last_error && row.last_message && (
+        <p className={styles.hint}>Resposta da Sefaz: {row.last_message}</p>
+      )}
+      {waiting > 0 && (
+        <p>
+          <Link href="/notas">
+            {waiting === 1 ? "1 nota aguardando ciência" : `${waiting.toLocaleString("pt-BR")} notas aguardando ciência`}
+          </Link>
+        </p>
+      )}
+      {row.can_manage && <DfeToggle branchId={branchId} enabled={row.enabled} />}
     </>
   );
 }

@@ -10,6 +10,7 @@ export default defineConfig({
     include: ['**/*.spec.ts'],
     env: {
       APP_ENV: 'development',
+      DFE_WORKER: 'off',
       TERMINAL_TOKEN_SECRET: 'segredo-de-teste-com-mais-de-32-caracteres',
       FISCAL_ENCRYPTION_KEY: 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=',
     },
