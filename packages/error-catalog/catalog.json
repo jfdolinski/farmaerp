@@ -206,7 +206,11 @@
       "terminal_fiscal_series_event_id_uuid_v7_check",
       "catalog_product_tax_id_uuid_v7_check",
       "supplier_id_uuid_v7_check",
-      "product_supplier_id_uuid_v7_check"
+      "product_supplier_id_uuid_v7_check",
+      "purchase_invoice_id_uuid_v7_check",
+      "purchase_invoice_document_id_uuid_v7_check",
+      "purchase_invoice_item_id_uuid_v7_check",
+      "purchase_invoice_item_batch_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -491,7 +495,8 @@
     "retryable": false,
     "dbConstraints": [
       "product_status_event_reason_check",
-      "product_batch_event_reason_check"
+      "product_batch_event_reason_check",
+      "purchase_invoice_discard_reason_check"
     ]
   },
   "FA303": {
@@ -1421,5 +1426,115 @@
       "product_supplier_code_check",
       "product_supplier_fraction_quantity_check"
     ]
+  },
+  "FA927": {
+    "message": "Esta nota não é de uma filial da rede.",
+    "action": "Confira se o CNPJ do destinatário é de uma filial cadastrada em Empresas.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA928": {
+    "message": "Esta nota é do ambiente de teste da Sefaz.",
+    "action": "Envie a nota autorizada em produção. Notas de teste só entram na homologação.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA929": {
+    "message": "Esta nota já foi importada.",
+    "action": "Procure a nota na lista. Para importar de novo, descarte a anterior.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "purchase_invoice_access_key_active_key",
+      "purchase_invoice_document_invoice_key",
+      "purchase_invoice_item_number_key"
+    ]
+  },
+  "FA930": {
+    "message": "Este arquivo não é uma NF-e autorizada válida.",
+    "action": "Envie o XML da nota autorizada, do jeito que veio do fornecedor, sem abrir nem salvar em outro programa.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA931": {
+    "message": "Os dados da nota são inválidos.",
+    "action": "Confira o XML com o fornecedor. Se ele estiver certo, informe o suporte com o código abaixo.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "purchase_invoice_access_key_check",
+      "purchase_invoice_series_check",
+      "purchase_invoice_number_check",
+      "purchase_invoice_operation_type_check",
+      "purchase_invoice_purpose_check",
+      "purchase_invoice_environment_check",
+      "purchase_invoice_protocol_number_check",
+      "purchase_invoice_emitter_cnpj_check",
+      "purchase_invoice_emitter_name_check",
+      "purchase_invoice_products_total_check",
+      "purchase_invoice_discount_total_check",
+      "purchase_invoice_freight_total_check",
+      "purchase_invoice_insurance_total_check",
+      "purchase_invoice_other_total_check",
+      "purchase_invoice_ipi_total_check",
+      "purchase_invoice_st_total_check",
+      "purchase_invoice_invoice_total_check",
+      "purchase_invoice_status_check",
+      "purchase_invoice_not_postable_reason_check",
+      "purchase_invoice_status_reason_check",
+      "purchase_invoice_discard_check",
+      "purchase_invoice_document_xml_check",
+      "purchase_invoice_document_sha256_check",
+      "purchase_invoice_item_number_check",
+      "purchase_invoice_item_supplier_code_check",
+      "purchase_invoice_item_barcode_check",
+      "purchase_invoice_item_tax_barcode_check",
+      "purchase_invoice_item_description_check",
+      "purchase_invoice_item_ncm_check",
+      "purchase_invoice_item_cest_check",
+      "purchase_invoice_item_cfop_check",
+      "purchase_invoice_item_unit_check",
+      "purchase_invoice_item_quantity_check",
+      "purchase_invoice_item_unit_price_check",
+      "purchase_invoice_item_products_value_check",
+      "purchase_invoice_item_discount_value_check",
+      "purchase_invoice_item_freight_value_check",
+      "purchase_invoice_item_insurance_value_check",
+      "purchase_invoice_item_other_value_check",
+      "purchase_invoice_item_ipi_value_check",
+      "purchase_invoice_item_st_value_check",
+      "purchase_invoice_item_fcp_st_value_check",
+      "purchase_invoice_item_anvisa_code_check",
+      "purchase_invoice_item_pmc_check",
+      "purchase_invoice_item_match_source_check",
+      "purchase_invoice_item_match_check",
+      "purchase_invoice_item_batch_number_check",
+      "purchase_invoice_item_batch_quantity_check",
+      "purchase_invoice_item_batch_dates_check"
+    ]
+  },
+  "FA932": {
+    "message": "Esta nota não pode mais ser conferida.",
+    "action": "Atualize a página para ver a situação atual da nota.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA933": {
+    "message": "O arquivo passa do tamanho máximo de 5 MB.",
+    "action": "Confira se é o XML da nota. Uma NF-e costuma ter bem menos que isso.",
+    "httpStatus": 413,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
   }
 }
