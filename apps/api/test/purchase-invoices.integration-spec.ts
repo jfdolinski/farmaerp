@@ -111,8 +111,44 @@ describe('notas de compra contra o banco real', () => {
     expect((await call('get', '/admin/purchase-invoices', OPERATOR).expect(200)).body).toEqual([]);
   });
 
+  it('lança, mostra o custo, recusa liberação sem senha certa e estorna', async () => {
+    const nfe = buildNfe({ destCnpj: CENTRO_CNPJ, items: [{ code: `P-${randomInt(1e9)}`, ean: testGtin(), quantity: '4.0000', value: '40.00', description: 'ITEM PARA LANCAR' }] });
+    const id = ((await send(nfe.xml).expect(201)).body as Json).id as string;
+    const [item] = ((await call('get', `/admin/purchase-invoices/${id}`).expect(200)).body as Json).items as Json[];
+    expect(codeOf(await call('post', `/admin/purchase-invoices/${id}/post`).expect(422))).toBe('FA934');
+    const productId = ((await call('post', `/admin/purchase-invoice-items/${item.id}/duplicate`).send({ sourceProductId: DIPIRONA }).expect(201)).body as Json).id as string;
+
+    const before = (await call('get', `/admin/purchase-invoices/${id}`).expect(200)).body as Json;
+    expect(before).toMatchObject({ can_post: true, can_override_cost: true, events: [] });
+    expect(before.items[0].posting).toMatchObject({ cost_status: 'first_entry', unit_cost: '10.000000', stock_quantity: '4.000', batch_status: 'not_required' });
+
+    expect(codeOf(await call('post', `/admin/purchase-invoice-items/${item.id}/release-cost`).send({ reason: 'x', password: 'errada' }).expect(422))).toBe('FA409');
+    expect(codeOf(await call('post', `/admin/purchase-invoice-items/${item.id}/release-cost`).send({ reason: 'x' }).expect(422))).toBe('FA005');
+    expect(codeOf(await call('post', `/admin/purchase-invoice-items/${item.id}/release-cost`).send({ reason: 'x', password: PASSWORD }).expect(409))).toBe('FA941');
+    expect(codeOf(await call('post', `/admin/purchase-invoice-items/${item.id}/batches`).send({ batches: 'x' }).expect(422))).toBe('FA936');
+    expect(codeOf(await call('post', `/admin/purchase-invoice-items/${item.id}/batches`).send({ batches: [{ number: 'L1' }] }).expect(422))).toBe('FA936');
+    await call('post', `/admin/purchase-invoice-items/${item.id}/batches`).send({ batches: [] }).expect(200);
+
+    expect(codeOf(await call('post', `/admin/purchase-invoices/${id}/post`, OPERATOR).expect(403))).toBe('FA002');
+    await call('post', `/admin/purchase-invoices/${id}/post`).expect(200);
+    const after = (await call('get', `/admin/purchase-invoices/${id}`).expect(200)).body as Json;
+    expect(after.status).toBe('posted');
+    expect(after.items[0].posting).toMatchObject({ cost_status: 'posted', new_average_cost: '10.000000' });
+    expect(after.events).toEqual([expect.objectContaining({ kind: 'posted', reason: null, user_name: expect.any(String) })]);
+    const costs = (await call('get', `/admin/products/${productId}/average-costs`).expect(200)).body as Json[];
+    expect(costs).toEqual([expect.objectContaining({ branch_name: 'Loja Centro', average_cost: '10.000000', stock_quantity: '4.000' })]);
+    expect((await call('get', `/admin/products/${productId}/average-costs`, OPERATOR).expect(200)).body).toEqual([]);
+
+    expect(codeOf(await call('post', `/admin/purchase-invoices/${id}/discard`).send({ reason: 'x' }).expect(409))).toBe('FA940');
+    expect(codeOf(await call('post', `/admin/purchase-invoices/${id}/reverse`).send({}).expect(422))).toBe('FA302');
+    await call('post', `/admin/purchase-invoices/${id}/reverse`).send({ reason: 'Teste de estorno' }).expect(200);
+    expect(((await call('get', `/admin/purchase-invoices/${id}`).expect(200)).body as Json).status).toBe('review');
+    expect(codeOf(await call('post', `/admin/purchase-invoices/${id}/reverse`).send({ reason: 'de novo' }).expect(409))).toBe('FA939');
+  });
+
   it('identificadores e filtros inválidos', async () => {
-    await call('get', '/admin/purchase-invoices?status=posted').expect(422);
+    await call('get', '/admin/purchase-invoices?status=x').expect(422);
+    await call('get', '/admin/purchase-invoices?status=posted').expect(200);
     await call('get', '/admin/purchase-invoices?branch=x').expect(422);
     expect(codeOf(await call('get', `/admin/purchase-invoices/${randomUUID()}`).expect(404))).toBe('FA006');
     expect(codeOf(await call('post', `/admin/purchase-invoice-items/${randomUUID()}/link`).send({ productId: DIPIRONA }).expect(404))).toBe('FA006');

@@ -210,7 +210,10 @@
       "purchase_invoice_id_uuid_v7_check",
       "purchase_invoice_document_id_uuid_v7_check",
       "purchase_invoice_item_id_uuid_v7_check",
-      "purchase_invoice_item_batch_id_uuid_v7_check"
+      "purchase_invoice_item_batch_id_uuid_v7_check",
+      "product_cost_id_uuid_v7_check",
+      "purchase_invoice_item_cost_release_id_uuid_v7_check",
+      "purchase_invoice_event_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -496,7 +499,9 @@
     "dbConstraints": [
       "product_status_event_reason_check",
       "product_batch_event_reason_check",
-      "purchase_invoice_discard_reason_check"
+      "purchase_invoice_discard_reason_check",
+      "purchase_invoice_item_cost_release_reason_check",
+      "purchase_invoice_event_reason_check"
     ]
   },
   "FA303": {
@@ -1518,7 +1523,16 @@
       "purchase_invoice_item_match_check",
       "purchase_invoice_item_batch_number_check",
       "purchase_invoice_item_batch_quantity_check",
-      "purchase_invoice_item_batch_dates_check"
+      "purchase_invoice_item_batch_dates_check",
+      "purchase_invoice_item_batch_source_check",
+      "stock_movement_invoice_item_check",
+      "product_cost_average_cost_check",
+      "product_cost_previous_cost_check",
+      "product_cost_entry_quantity_check",
+      "product_cost_entry_cost_check",
+      "product_cost_reversal_check",
+      "purchase_invoice_event_kind_check",
+      "purchase_invoice_event_kind_reason_check"
     ]
   },
   "FA932": {
@@ -1536,5 +1550,73 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": []
+  },
+  "FA934": {
+    "message": "Há itens da nota sem produto ligado.",
+    "action": "Ligue todos os itens a um produto antes de lançar a nota.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA935": {
+    "message": "O custo de um item passou da tolerância e precisa ser liberado.",
+    "action": "Peça a liberação a quem pode liberar custo, ou confira a nota com o fornecedor.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA936": {
+    "message": "Os lotes do item estão incompletos ou inválidos.",
+    "action": "Informe número, validade e quantidade de cada lote. A soma precisa fechar com a quantidade do item na nota.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA937": {
+    "message": "Um lote da nota já está vencido.",
+    "action": "Produto vencido não entra no estoque. Confira o lote com o fornecedor.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA938": {
+    "message": "Esta nota não pode ser lançada.",
+    "action": "Atualize a página para ver a situação atual da nota.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA939": {
+    "message": "Esta nota não está lançada.",
+    "action": "Atualize a página para ver a situação atual da nota.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "product_cost_reversal_active_key"
+    ]
+  },
+  "FA940": {
+    "message": "Nota lançada não pode ser descartada.",
+    "action": "Estorne o lançamento antes de descartar a nota.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA941": {
+    "message": "O custo deste item não precisa de liberação.",
+    "action": "Atualize a página para ver a situação atual do item.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "purchase_invoice_item_cost_release_active_key"
+    ]
   }
 }

@@ -12,8 +12,12 @@ import {
   importXml,
   itemAction,
   ItemFormState,
+  postInvoice,
   ProductOption,
   refreshInvoices,
+  releaseItemCost,
+  reverseInvoice,
+  saveItemBatches,
   searchCatalog,
   searchProducts,
 } from "./actions";
@@ -293,6 +297,194 @@ export function DiscardForm({ invoiceId }: { invoiceId: string }) {
           </button>
         </div>
         <ErrorNotice error={state.error} />
+      </form>
+    </details>
+  );
+}
+
+function Notice({ state }: { state: ItemFormState }) {
+  return (
+    <>
+      <ErrorNotice error={state.error} />
+      {state.notice && (
+        <p className={styles.success} role="status">
+          {state.notice}
+        </p>
+      )}
+    </>
+  );
+}
+
+/** Lança a nota inteira. Com pendência, o botão fica desligado e a lista diz o que falta. */
+export function PostForm({ invoiceId, blockers }: { invoiceId: string; blockers: string[] }) {
+  const [state, action, pending] = useActionState<ItemFormState, FormData>(postInvoice, {});
+  return (
+    <form action={action} onSubmit={keepValues(action)} className={styles.stack}>
+      <input type="hidden" name="id" value={invoiceId} />
+      {blockers.length > 0 ? (
+        <>
+          <p className={styles.warning}>Antes de lançar, resolva:</p>
+          <ul className={styles.bullets}>
+            {blockers.map((blocker) => (
+              <li key={blocker}>{blocker}</li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <p className={styles.hint}>
+          Todos os itens entram no estoque de uma vez, com o custo médio e o PMC atualizados. Se precisar, o lançamento
+          pode ser estornado.
+        </p>
+      )}
+      <div>
+        <button type="submit" disabled={pending || blockers.length > 0}>
+          {pending ? "Lançando..." : "Lançar nota no estoque"}
+        </button>
+      </div>
+      <Notice state={state} />
+    </form>
+  );
+}
+
+export function ReverseForm({ invoiceId }: { invoiceId: string }) {
+  const [state, action, pending] = useActionState<ItemFormState, FormData>(reverseInvoice, {});
+  return (
+    <details className={styles.reason}>
+      <summary>Estornar o lançamento</summary>
+      <form action={action} onSubmit={keepValues(action)} className={styles.stack}>
+        <input type="hidden" name="id" value={invoiceId} />
+        <label>
+          Motivo
+          <input name="reason" required maxLength={500} size={40} />
+        </label>
+        <p className={styles.hint}>
+          Tira do estoque tudo o que esta nota pôs e refaz o custo médio. Se parte do que entrou já foi vendida ou
+          baixada, o estorno não é possível. A nota volta para a conferência.
+        </p>
+        <div>
+          <button type="submit" className={styles.danger} disabled={pending}>
+            Estornar
+          </button>
+        </div>
+        <Notice state={state} />
+      </form>
+    </details>
+  );
+}
+
+export interface BatchValue {
+  number: string;
+  quantity: number | string;
+  manufacturedOn: string | null;
+  expiresOn: string;
+}
+
+/** Lotes do item na unidade da nota. Começa com os lotes em uso; a soma precisa fechar com o item. */
+export function BatchForm({
+  itemId,
+  invoiceId,
+  unit,
+  batches,
+  open,
+}: {
+  itemId: string;
+  invoiceId: string;
+  unit: string;
+  batches: BatchValue[];
+  open: boolean;
+}) {
+  const [state, action, pending] = useActionState<ItemFormState, FormData>(saveItemBatches, {});
+  const [rows, setRows] = useState(() =>
+    (batches.length > 0 ? batches : [{ number: "", quantity: "", manufacturedOn: null, expiresOn: "" }]).map(
+      (batch, index) => ({ key: index, ...batch }),
+    ),
+  );
+  const [nextKey, setNextKey] = useState(rows.length);
+  // Aberto de início quando falta lote; depois, quem decide é a pessoa, para o aviso não sumir ao salvar.
+  const [isOpen, setOpen] = useState(open);
+  return (
+    <details
+      className={styles.reason}
+      open={isOpen}
+      onToggle={(event) => setOpen((event.currentTarget as HTMLDetailsElement).open)}
+    >
+      <summary>{batches.length > 0 ? "Corrigir lotes" : "Informar lotes"}</summary>
+      <form action={action} onSubmit={keepValues(action)} className={styles.stack}>
+        <input type="hidden" name="itemId" value={itemId} />
+        <input type="hidden" name="invoiceId" value={invoiceId} />
+        {rows.map((row, index) => (
+          <fieldset key={row.key} className={styles.inline}>
+            <legend className={styles.hint}>Lote {index + 1}</legend>
+            <label>
+              Número
+              <input name="number" defaultValue={row.number} maxLength={20} size={12} />
+            </label>
+            <label>
+              Quantidade ({unit})
+              <input name="quantity" defaultValue={String(row.quantity)} inputMode="decimal" size={8} />
+            </label>
+            <label>
+              Validade
+              <input name="expiresOn" type="date" defaultValue={row.expiresOn} />
+            </label>
+            <label>
+              Fabricação
+              <input name="manufacturedOn" type="date" defaultValue={row.manufacturedOn ?? ""} />
+            </label>
+            {rows.length > 1 && (
+              <button type="button" onClick={() => setRows(rows.filter((other) => other.key !== row.key))}>
+                Remover lote {index + 1}
+              </button>
+            )}
+          </fieldset>
+        ))}
+        <p className={styles.hint}>
+          A quantidade é na unidade da nota ({unit}). Os lotes que vieram no XML ficam guardados.
+        </p>
+        <div className={styles.inline}>
+          <button
+            type="button"
+            onClick={() => {
+              setRows([...rows, { key: nextKey, number: "", quantity: "", manufacturedOn: null, expiresOn: "" }]);
+              setNextKey(nextKey + 1);
+            }}
+          >
+            Acrescentar lote
+          </button>
+          <button type="submit" disabled={pending}>
+            Salvar lotes
+          </button>
+        </div>
+        <Notice state={state} />
+      </form>
+    </details>
+  );
+}
+
+/** Liberação do custo acima da tolerância: a própria senha e o motivo. */
+export function ReleaseCostForm({ itemId, invoiceId }: { itemId: string; invoiceId: string }) {
+  const [state, action, pending] = useActionState<ItemFormState, FormData>(releaseItemCost, {});
+  return (
+    <details className={styles.reason}>
+      <summary>Liberar este custo</summary>
+      <form action={action} onSubmit={keepValues(action)} className={styles.stack}>
+        <input type="hidden" name="itemId" value={itemId} />
+        <input type="hidden" name="invoiceId" value={invoiceId} />
+        <label>
+          Motivo
+          <input name="reason" required maxLength={500} size={40} />
+        </label>
+        <label>
+          Sua senha
+          <input name="password" type="password" required autoComplete="current-password" maxLength={200} />
+        </label>
+        <p className={styles.hint}>A liberação vale só para este produto e este custo, e fica registrada com o seu nome.</p>
+        <div>
+          <button type="submit" disabled={pending}>
+            Liberar custo
+          </button>
+        </div>
+        <Notice state={state} />
       </form>
     </details>
   );

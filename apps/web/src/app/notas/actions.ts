@@ -100,6 +100,62 @@ export async function itemAction(_previous: ItemFormState, form: FormData): Prom
   return { done: true, notice: "Produto cadastrado e ligado ao item." };
 }
 
+export async function postInvoice(_previous: ItemFormState, form: FormData): Promise<ItemFormState> {
+  const id = text(form, "id");
+  const result = await apiFetch(`/admin/purchase-invoices/${encodeURIComponent(id)}/post`, { method: "POST", body: {} });
+  if (!result.ok) return failure(result.error, `/notas/${id}`);
+  refresh();
+  return { done: true, notice: "Nota lançada no estoque." };
+}
+
+export async function reverseInvoice(_previous: ItemFormState, form: FormData): Promise<ItemFormState> {
+  const id = text(form, "id");
+  const result = await apiFetch(`/admin/purchase-invoices/${encodeURIComponent(id)}/reverse`, {
+    method: "POST",
+    body: { reason: text(form, "reason") },
+  });
+  if (!result.ok) return failure(result.error, `/notas/${id}`);
+  refresh();
+  return { done: true, notice: "Lançamento estornado. A nota voltou para a conferência." };
+}
+
+/** Lotes digitados: cada linha do formulário vira um lote; linha toda vazia é ignorada. */
+export async function saveItemBatches(_previous: ItemFormState, form: FormData): Promise<ItemFormState> {
+  const itemId = text(form, "itemId");
+  const next = `/notas/${text(form, "invoiceId")}`;
+  const column = (field: string) => form.getAll(field).map((value) => String(value).trim());
+  const numbers = column("number");
+  const quantities = column("quantity");
+  const expires = column("expiresOn");
+  const manufactured = column("manufacturedOn");
+  const batches = numbers
+    .map((number, index) => ({
+      number,
+      quantity: quantities[index] ? quantities[index].replace(",", ".") : "",
+      expiresOn: expires[index] ?? "",
+      manufacturedOn: manufactured[index] || null,
+    }))
+    .filter((batch) => batch.number || batch.quantity || batch.expiresOn);
+  const result = await apiFetch(`/admin/purchase-invoice-items/${encodeURIComponent(itemId)}/batches`, {
+    method: "POST",
+    body: { batches },
+  });
+  if (!result.ok) return failure(result.error, next);
+  refresh();
+  return { done: true, notice: "Lotes salvos." };
+}
+
+export async function releaseItemCost(_previous: ItemFormState, form: FormData): Promise<ItemFormState> {
+  const itemId = text(form, "itemId");
+  const result = await apiFetch(`/admin/purchase-invoice-items/${encodeURIComponent(itemId)}/release-cost`, {
+    method: "POST",
+    body: { reason: text(form, "reason"), password: String(form.get("password") ?? "") },
+  });
+  if (!result.ok) return failure(result.error, `/notas/${text(form, "invoiceId")}`);
+  refresh();
+  return { done: true, notice: "Custo liberado." };
+}
+
 export async function discardInvoice(_previous: ItemFormState, form: FormData): Promise<ItemFormState> {
   const id = text(form, "id");
   const result = await apiFetch(`/admin/purchase-invoices/${encodeURIComponent(id)}/discard`, {

@@ -53,7 +53,7 @@ async function InvoicesContent({ searchParams }: { searchParams: SearchParams })
   }
 
   const { situacao } = await searchParams;
-  const status = situacao === "review" || situacao === "not_postable" ? situacao : "";
+  const status = situacao === "review" || situacao === "not_postable" || situacao === "posted" ? situacao : "";
   const invoices = await apiFetch<InvoiceListRow[]>(`/admin/purchase-invoices?status=${status}`);
   if (!invoices.ok) redirectIfNeeded(invoices.error, "/notas");
 
@@ -77,6 +77,7 @@ async function InvoicesContent({ searchParams }: { searchParams: SearchParams })
             <select name="situacao" defaultValue={status}>
               <option value="">Todas</option>
               <option value="review">Em conferência</option>
+              <option value="posted">Lançada no estoque</option>
               <option value="not_postable">Não vai para o estoque</option>
             </select>
           </label>
