@@ -34,7 +34,16 @@ import {
   SupplierOption,
 } from "../../fornecedores/ui";
 import { cnpjText } from "../../fornecedores/format";
+import { costText, dateTimeText } from "../../notas/format";
 import styles from "../../terminais/page.module.css";
+
+interface AverageCostRow {
+  branch_id: string;
+  branch_name: string;
+  average_cost: string | null;
+  stock_quantity: string;
+  updated_at: string;
+}
 
 export const metadata: Metadata = { title: "Produto · FarmaERP" };
 
@@ -132,12 +141,13 @@ async function ProductContent({
 
   const canSeeSuppliers = can(user, "purchases.view") || can(user, "purchases.manage");
   const canManageSuppliers = can(user, "purchases.manage");
-  const [productSuppliers, supplierOptions] = canSeeSuppliers
+  const [productSuppliers, supplierOptions, averageCosts] = canSeeSuppliers
     ? await Promise.all([
         apiFetch<ProductSupplierRow[]>(`/admin/products/${encodeURIComponent(id)}/suppliers`),
         canManageSuppliers ? apiFetch<SupplierOption[]>("/admin/suppliers?limit=200") : null,
+        apiFetch<AverageCostRow[]>(`/admin/products/${encodeURIComponent(id)}/average-costs`),
       ])
-    : [null, null];
+    : [null, null, null];
 
   const stock = canSeeStock
     ? await apiFetch<{ balances: BalanceRow[]; tracking: TrackingRow[] }>(
@@ -421,6 +431,41 @@ async function ProductContent({
         )}
         {canPrice && <AddPmcForm productId={product.id} />}
       </section>
+
+      {averageCosts && (
+        <section className={styles.card}>
+          <h2>Custo médio por filial</h2>
+          {!averageCosts.ok && <ErrorNotice error={averageCosts.error} />}
+          {averageCosts.ok && averageCosts.data.length === 0 && (
+            <p className={styles.hint}>Ainda não houve entrada por nota de compra nas filiais que você vê.</p>
+          )}
+          {averageCosts.ok && averageCosts.data.length > 0 && (
+            <div className={styles.tableWrap}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Filial</th>
+                    <th>Custo médio</th>
+                    <th>Saldo</th>
+                    <th>Atualizado em</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {averageCosts.data.map((row) => (
+                    <tr key={row.branch_id}>
+                      <td>{row.branch_name}</td>
+                      <td>{row.average_cost === null ? "Sem custo" : costText(row.average_cost)}</td>
+                      <td>{quantityText(row.stock_quantity)}</td>
+                      <td>{dateTimeText(row.updated_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className={styles.hint}>Média móvel das entradas por nota de compra, sem descontar créditos de imposto.</p>
+        </section>
+      )}
 
       {productSuppliers && (
         <section className={styles.card}>

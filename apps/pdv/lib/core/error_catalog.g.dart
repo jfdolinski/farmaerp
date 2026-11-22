@@ -868,4 +868,52 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Confira se é o XML da nota. Uma NF-e costuma ter bem menos que isso.',
     retryable: false,
   ),
+  'FA934': ErrorCatalogEntry(
+    code: 'FA934',
+    message: 'Há itens da nota sem produto ligado.',
+    action: 'Ligue todos os itens a um produto antes de lançar a nota.',
+    retryable: false,
+  ),
+  'FA935': ErrorCatalogEntry(
+    code: 'FA935',
+    message: 'O custo de um item passou da tolerância e precisa ser liberado.',
+    action: 'Peça a liberação a quem pode liberar custo, ou confira a nota com o fornecedor.',
+    retryable: false,
+  ),
+  'FA936': ErrorCatalogEntry(
+    code: 'FA936',
+    message: 'Os lotes do item estão incompletos ou inválidos.',
+    action: 'Informe número, validade e quantidade de cada lote. A soma precisa fechar com a quantidade do item na nota.',
+    retryable: false,
+  ),
+  'FA937': ErrorCatalogEntry(
+    code: 'FA937',
+    message: 'Um lote da nota já está vencido.',
+    action: 'Produto vencido não entra no estoque. Confira o lote com o fornecedor.',
+    retryable: false,
+  ),
+  'FA938': ErrorCatalogEntry(
+    code: 'FA938',
+    message: 'Esta nota não pode ser lançada.',
+    action: 'Atualize a página para ver a situação atual da nota.',
+    retryable: false,
+  ),
+  'FA939': ErrorCatalogEntry(
+    code: 'FA939',
+    message: 'Esta nota não está lançada.',
+    action: 'Atualize a página para ver a situação atual da nota.',
+    retryable: false,
+  ),
+  'FA940': ErrorCatalogEntry(
+    code: 'FA940',
+    message: 'Nota lançada não pode ser descartada.',
+    action: 'Estorne o lançamento antes de descartar a nota.',
+    retryable: false,
+  ),
+  'FA941': ErrorCatalogEntry(
+    code: 'FA941',
+    message: 'O custo deste item não precisa de liberação.',
+    action: 'Atualize a página para ver a situação atual do item.',
+    retryable: false,
+  ),
 };

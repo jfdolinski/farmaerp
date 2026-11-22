@@ -287,7 +287,7 @@ Base da entrada de nota: o código que vem no XML aponta o produto e o fracionam
 
 ## Notas de compra
 
-Importação e conferência do XML da NF-e de compra. Nada mexe no estoque ainda: o lançamento é o próximo passo.
+Importação, conferência e lançamento da NF-e de compra no estoque.
 
 - **Envio:** em `/notas`, um ou vários XML, até 20 por vez e 5 MB cada. Cada arquivo vai numa requisição própria, como `application/xml`, e tem o seu resultado na tela.
 - **Conferência do XML, na API:** só a nota autorizada com protocolo (`nfeProc`, modelo 55, situação 100 ou 150). Confere o dígito da chave e se ela bate com a nota; a assinatura, com o certificado do próprio XML; e se o `digVal` do protocolo é o resumo assinado. Os dados saem só do trecho que a assinatura cobre. DOCTYPE é recusado. O motivo técnico de uma recusa fica só no log.
@@ -306,3 +306,16 @@ Importação e conferência do XML da NF-e de compra. Nada mexe no estoque ainda
 - **Trocar produto:** move o código do fornecedor para o produto novo. Os itens iguais de outras notas em conferência seguem junto.
 - **Descartar:** é a exclusão lógica, com motivo. Libera a chave para importar de novo, e o XML continua guardado.
 - **Permissões:** a nota é da filial. Importar e conferir exige `purchases.manage` na filial do destinatário, e ver exige `purchases.view`. Duplicar ou cadastrar produto exige também `products.manage`.
+
+### Lançamento
+
+- **Tudo ou nada:** `app.post_purchase_invoice` lança a nota inteira numa transação. Qualquer pendência barra o lançamento, e a tela lista o que falta antes do clique.
+- **Estoque:** cada item entra como movimentação `invoice` ligada ao item da nota, na quantidade da nota vezes o fracionamento (relação com o fornecedor > código de barras > produto).
+- **Custo unitário:** (produtos − desconto + frete + seguro + outras + IPI + ST + FCP-ST) ÷ quantidade no estoque. Créditos de imposto não são descontados, e bonificação entra pelo valor líquido.
+- **Custo médio por filial:** média móvel sobre o saldo da filial, em `product_cost` (só inclusão; a última linha vale). Sem custo anterior ou com saldo zerado ou negativo, vale o custo da entrada. Duas notas do mesmo produto e filial ao mesmo tempo esperam uma pela outra.
+- **Trava de custo:** usa a regra `cost_tolerance` do motor de regras. Acima da tolerância, a linha trava até alguém com `purchases.cost_override` liberar com a própria senha e um motivo. A liberação vale só para aquele produto e aquele custo. Sem regra, ou na primeira entrada, não trava; sem regra, a tela só avisa.
+- **Lotes:** os do XML, ou digitados na conferência, na unidade da nota. A soma precisa fechar com o item, e lote vencido barra o lançamento. Os lotes do XML ficam guardados quando são trocados. O MS da nota vale só para lote novo. Produto que não controla lote na filial ignora os lotes da nota.
+- **PMC:** o da nota é gravado para o estado e a região da filial, com origem `invoice`. Igual ao vigente não gera linha.
+- **Estorno:** movimentações contrárias, com motivo, e o custo médio pela conta inversa. Sem saldo depois, ou com a conta dando negativa, volta o custo de antes da entrada. Se parte do que entrou já saiu, o banco recusa. A nota volta para a conferência e as liberações de custo caem. O PMC gravado fica.
+- **Histórico:** quem lançou e quem estornou ficam em `purchase_invoice_event`. Nota lançada não se confere nem se descarta.
+- **Permissões:** `purchases.post` lança e estorna (o Gerente tem). `purchases.cost_override` libera custo (só o Administrador, por padrão). O custo médio aparece no produto para quem tem `purchases.view` ou `purchases.manage` na filial.

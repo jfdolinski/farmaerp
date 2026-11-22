@@ -3,7 +3,22 @@
 export const STATUS_LABELS: Record<string, string> = {
   review: "Em conferência",
   not_postable: "Não vai para o estoque",
+  posted: "Lançada no estoque",
 };
+
+/** Custo unitário com até quatro casas: o custo fracionado costuma ter centavos quebrados. */
+export const costText = (value: string | number | null) =>
+  value === null
+    ? ""
+    : Number(value).toLocaleString("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 4,
+      });
+
+export const percentText = (value: string | number | null) =>
+  value === null ? "" : `${Number(value) > 0 ? "+" : ""}${Number(value).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
 
 export const REASON_LABELS: Record<string, string> = {
   purpose: "A finalidade da nota não é de compra normal (complementar, ajuste ou devolução).",

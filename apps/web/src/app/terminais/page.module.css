@@ -250,3 +250,9 @@ button.danger {
 .inline select {
   max-width: 100%;
 }
+
+/* Lista com marcador dentro do cartão. */
+.bullets {
+  margin: 0;
+  padding-left: 1.25rem;
+}

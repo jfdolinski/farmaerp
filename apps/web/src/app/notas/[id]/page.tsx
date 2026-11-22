@@ -7,18 +7,41 @@ import { ErrorNotice } from "../../error-notice";
 import { cnpjText } from "../../fornecedores/format";
 import styles from "../../terminais/page.module.css";
 import {
+  costText,
   dateTimeText,
   dayText,
   keyText,
   moneyText,
+  percentText,
   quantityText,
   REASON_LABELS,
   SOURCE_LABELS,
   STATUS_LABELS,
 } from "../format";
-import { DiscardForm, ItemActions } from "../ui";
+import { BatchForm, DiscardForm, ItemActions, PostForm, ReleaseCostForm, ReverseForm } from "../ui";
 
 export const metadata: Metadata = { title: "Nota de compra · FarmaERP" };
+
+interface Posting {
+  fraction: string | null;
+  stock_quantity: string | null;
+  unit_cost: string | null;
+  average_cost: string | null;
+  new_average_cost: string | null;
+  tolerance: string | null;
+  difference_percent: string | null;
+  cost_status: string;
+  batch_status: string;
+  batch_required: boolean | null;
+  release: { reason: string; releasedBy: string; releasedAt: string; tolerance: number } | null;
+}
+
+interface InvoiceEvent {
+  kind: "posted" | "reversed";
+  reason: string | null;
+  created_at: string;
+  user_name: string | null;
+}
 
 interface InvoiceItem {
   id: string;
@@ -48,6 +71,7 @@ interface InvoiceItem {
   sale_price: string | null;
   pmc_below_price: boolean;
   batches: { number: string; quantity: number; manufacturedOn: string | null; expiresOn: string }[];
+  posting: Posting | null;
 }
 
 interface InvoiceDetail {
@@ -74,7 +98,10 @@ interface InvoiceDetail {
   status: string;
   not_postable_reason: string | null;
   can_manage: boolean;
+  can_post: boolean;
+  can_override_cost: boolean;
   items: InvoiceItem[];
+  events: InvoiceEvent[];
 }
 
 type Params = Promise<{ id: string }>;
@@ -121,6 +148,7 @@ async function InvoiceContent({ params }: { params: Params }) {
   const invoice = result.data;
   const reviewing = invoice.status === "review" && invoice.can_manage;
   const pending = invoice.items.filter((item) => !item.product_id).length;
+  const blockers = invoice.items.flatMap((item) => postingBlockers(item));
   const totals: [string, string][] = [
     ["Produtos", invoice.products_total],
     ["Desconto", invoice.discount_total],
@@ -158,6 +186,17 @@ async function InvoiceContent({ params }: { params: Params }) {
           {invoice.status === "review" &&
             (pending > 0 ? ` · ${pending} de ${invoice.items.length} itens a conferir` : " · Todos os itens ligados")}
         </p>
+        {invoice.events.length > 0 && (
+          <ul className={`${styles.hint} ${styles.bullets}`}>
+            {invoice.events.map((event) => (
+              <li key={`${event.kind}-${event.created_at}`}>
+                {event.kind === "posted" ? "Lançada" : "Estornada"} por {event.user_name ?? "usuário"} em{" "}
+                {dateTimeText(event.created_at)}
+                {event.reason && `: ${event.reason}`}
+              </li>
+            ))}
+          </ul>
+        )}
         {invoice.not_postable_reason && (
           <p className={styles.warning}>{REASON_LABELS[invoice.not_postable_reason] ?? invoice.not_postable_reason}</p>
         )}
@@ -223,6 +262,8 @@ async function InvoiceContent({ params }: { params: Params }) {
                 {item.batches
                   .map((batch) => `${batch.number} (${quantityText(batch.quantity)}, validade ${dayText(batch.expiresOn)})`)
                   .join(", ")}
+                {item.posting?.batch_status === "not_required" &&
+                  ". O produto não controla lote nesta filial, então os lotes da nota não entram no estoque."}
               </p>
             )}
             {item.ms_differs && (
@@ -235,16 +276,120 @@ async function InvoiceContent({ params }: { params: Params }) {
                 O PMC da nota ({moneyText(item.pmc)}) é menor que o preço de venda ({moneyText(item.sale_price)}).
               </p>
             )}
+            {item.posting && <CostLine posting={item.posting} />}
+            {item.posting && <BatchLine item={item} />}
+            {reviewing && item.posting?.batch_required && (
+              <BatchForm
+                itemId={item.id}
+                invoiceId={invoice.id}
+                unit={item.unit}
+                batches={item.batches}
+                open={item.posting.batch_status === "missing"}
+              />
+            )}
+            {invoice.status === "review" && invoice.can_override_cost && item.posting?.cost_status === "locked" && (
+              <ReleaseCostForm itemId={item.id} invoiceId={invoice.id} />
+            )}
             {reviewing && <ItemActions item={item} invoiceId={invoice.id} />}
           </div>
         ))}
       </section>
 
-      {invoice.can_manage && (
+      {invoice.status === "review" && invoice.can_post && (
+        <section className={styles.card}>
+          <h2>Lançamento</h2>
+          <PostForm invoiceId={invoice.id} blockers={blockers} />
+        </section>
+      )}
+
+      {invoice.status === "posted" && invoice.can_post && (
+        <section className={styles.card}>
+          <ReverseForm invoiceId={invoice.id} />
+        </section>
+      )}
+
+      {invoice.can_manage && invoice.status !== "posted" && (
         <section className={styles.card}>
           <DiscardForm invoiceId={invoice.id} />
         </section>
       )}
     </>
+  );
+}
+
+const BATCH_PROBLEMS: Record<string, string> = {
+  missing: "Este produto exige lote nesta filial: informe os lotes do item.",
+  mismatch: "A soma dos lotes é diferente da quantidade do item na nota.",
+  expired: "Há lote vencido neste item. Produto vencido não entra no estoque.",
+};
+
+function postingBlockers(item: InvoiceItem): string[] {
+  const label = `Item ${item.item_number}`;
+  if (!item.posting || item.posting.cost_status === "no_product") return [`${label}: ligar a um produto.`];
+  const found: string[] = [];
+  if (item.posting.cost_status === "locked") found.push(`${label}: custo acima da tolerância, precisa ser liberado.`);
+  if (item.posting.cost_status === "invalid") found.push(`${label}: quantidade da nota não dá estoque.`);
+  const batch = BATCH_PROBLEMS[item.posting.batch_status];
+  if (batch) found.push(`${label}: ${batch.charAt(0).toLowerCase()}${batch.slice(1)}`);
+  return found;
+}
+
+/** Custo da entrada contra o médio da filial, e o que isso significa para o lançamento. */
+function CostLine({ posting }: { posting: Posting }) {
+  if (posting.cost_status === "no_product" || posting.unit_cost === null) return null;
+  if (posting.cost_status === "posted") {
+    return (
+      <p className={styles.hint}>
+        Entrou a {costText(posting.unit_cost)} por unidade.{" "}
+        {posting.average_cost === null
+          ? `O custo médio passou a ser ${costText(posting.new_average_cost)}.`
+          : `Custo médio de ${costText(posting.average_cost)} para ${costText(posting.new_average_cost)}.`}
+      </p>
+    );
+  }
+  const base = `Custo por unidade: ${costText(posting.unit_cost)}`;
+  if (posting.cost_status === "first_entry") {
+    return <p className={styles.hint}>{base}. Primeira entrada nesta filial: este custo passa a ser o custo médio.</p>;
+  }
+  const comparison = `${base} · Custo médio: ${costText(posting.average_cost)}${
+    posting.difference_percent === null ? "" : ` (${percentText(posting.difference_percent)})`
+  }`;
+  if (posting.cost_status === "locked") {
+    return (
+      <p className={styles.warning}>
+        {comparison}. Passou da tolerância de {quantityText(posting.tolerance)}% e precisa ser liberado por quem pode
+        liberar custo.
+      </p>
+    );
+  }
+  if (posting.cost_status === "released" && posting.release) {
+    return (
+      <p className={styles.success}>
+        {comparison}. Liberado por {posting.release.releasedBy} em {dateTimeText(posting.release.releasedAt)}:{" "}
+        {posting.release.reason}
+      </p>
+    );
+  }
+  if (posting.cost_status === "no_rule" && Number(posting.difference_percent) > 0) {
+    return (
+      <p className={styles.warning}>
+        {comparison}. Não há tolerância de custo cadastrada para este produto, então o custo não trava: confira com a
+        nota.
+      </p>
+    );
+  }
+  return <p className={styles.hint}>{comparison}.</p>;
+}
+
+function BatchLine({ item }: { item: InvoiceItem }) {
+  const problem = item.posting ? BATCH_PROBLEMS[item.posting.batch_status] : undefined;
+  if (!problem) return null;
+  const total = item.batches.reduce((sum, batch) => sum + Number(batch.quantity), 0);
+  return (
+    <p className={styles.warning}>
+      {problem}
+      {item.posting?.batch_status === "mismatch" &&
+        ` Lotes: ${quantityText(total)} ${item.unit}; item: ${quantityText(item.quantity)} ${item.unit}.`}
+    </p>
   );
 }
