@@ -27,6 +27,13 @@ import {
 import { BatchTrackingRow, TrackingRow } from "../../estoque/ui";
 import { BalanceRow, dayText, quantityText } from "../../estoque/format";
 import { ProductTax, TaxRow } from "../tax";
+import {
+  AddProductSupplierForm,
+  ProductSupplierForm,
+  ProductSupplierRow,
+  SupplierOption,
+} from "../../fornecedores/ui";
+import { cnpjText } from "../../fornecedores/format";
 import styles from "../../terminais/page.module.css";
 
 export const metadata: Metadata = { title: "Produto · FarmaERP" };
@@ -122,6 +129,15 @@ async function ProductContent({
   }
   const product = productResult.data;
   const structure = structureResult.ok ? structureResult.data : EMPTY_STRUCTURE;
+
+  const canSeeSuppliers = can(user, "purchases.view") || can(user, "purchases.manage");
+  const canManageSuppliers = can(user, "purchases.manage");
+  const [productSuppliers, supplierOptions] = canSeeSuppliers
+    ? await Promise.all([
+        apiFetch<ProductSupplierRow[]>(`/admin/products/${encodeURIComponent(id)}/suppliers`),
+        canManageSuppliers ? apiFetch<SupplierOption[]>("/admin/suppliers?limit=200") : null,
+      ])
+    : [null, null];
 
   const stock = canSeeStock
     ? await apiFetch<{ balances: BalanceRow[]; tracking: TrackingRow[] }>(
@@ -405,6 +421,32 @@ async function ProductContent({
         )}
         {canPrice && <AddPmcForm productId={product.id} />}
       </section>
+
+      {productSuppliers && (
+        <section className={styles.card}>
+          <h2>Fornecedores</h2>
+          {!productSuppliers.ok && <ErrorNotice error={productSuppliers.error} />}
+          {productSuppliers.ok && productSuppliers.data.length === 0 && (
+            <p className={styles.hint}>Nenhum código de fornecedor ligado a este produto.</p>
+          )}
+          {productSuppliers.ok &&
+            productSuppliers.data.map((row) => (
+              <ProductSupplierForm
+                key={row.id}
+                row={row}
+                canManage={canManageSuppliers}
+                next={path}
+                title={
+                  <Link href={`/fornecedores/${row.supplier_id}`}>
+                    {row.supplier_name} · {cnpjText(row.supplier_cnpj)}
+                  </Link>
+                }
+              />
+            ))}
+          {supplierOptions && !supplierOptions.ok && <ErrorNotice error={supplierOptions.error} />}
+          {supplierOptions?.ok && <AddProductSupplierForm productId={product.id} suppliers={supplierOptions.data} />}
+        </section>
+      )}
 
       <section className={styles.card}>
         <h2>Códigos de barras</h2>

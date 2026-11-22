@@ -802,4 +802,28 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Corrija o arquivo do Catálogo e importe de novo. Nada foi gravado.',
     retryable: false,
   ),
+  'FA923': ErrorCatalogEntry(
+    code: 'FA923',
+    message: 'Já existe um fornecedor com este CNPJ.',
+    action: 'Procure o fornecedor na lista. Se ele foi encerrado por engano, cadastre de novo.',
+    retryable: false,
+  ),
+  'FA924': ErrorCatalogEntry(
+    code: 'FA924',
+    message: 'Os dados do fornecedor são inválidos.',
+    action: 'Confira a razão social, a inscrição estadual com o estado, o telefone, o e-mail e o endereço.',
+    retryable: false,
+  ),
+  'FA925': ErrorCatalogEntry(
+    code: 'FA925',
+    message: 'Este código do fornecedor já está ligado a um produto.',
+    action: 'Confira o produto ligado a este código no cadastro do fornecedor.',
+    retryable: false,
+  ),
+  'FA926': ErrorCatalogEntry(
+    code: 'FA926',
+    message: 'O código do fornecedor ou o fracionamento é inválido.',
+    action: 'Informe o código como vem na nota, com até 60 caracteres, e o fracionamento maior que zero.',
+    retryable: false,
+  ),
 };
