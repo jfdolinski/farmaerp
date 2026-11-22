@@ -100,6 +100,17 @@ export async function itemAction(_previous: ItemFormState, form: FormData): Prom
   return { done: true, notice: "Produto cadastrado e ligado ao item." };
 }
 
+/** Ciência da operação de uma nota. A tela chama uma por vez e mostra o resultado de cada. */
+export async function giveAwareness(summaryId: string): Promise<{ error?: ApiError }> {
+  const result = await apiFetch(`/admin/purchase-summaries/${encodeURIComponent(summaryId)}/awareness`, { method: "POST", body: {} });
+  if (!result.ok) return failure(result.error, "/notas");
+  return {};
+}
+
+export async function refreshSummaries(): Promise<void> {
+  refresh();
+}
+
 export async function postInvoice(_previous: ItemFormState, form: FormData): Promise<ItemFormState> {
   const id = text(form, "id");
   const result = await apiFetch(`/admin/purchase-invoices/${encodeURIComponent(id)}/post`, { method: "POST", body: {} });

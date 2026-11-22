@@ -9,12 +9,14 @@ import { keepValues } from "../produtos/ui";
 import styles from "../terminais/page.module.css";
 import {
   discardInvoice,
+  giveAwareness,
   importXml,
   itemAction,
   ItemFormState,
   postInvoice,
   ProductOption,
   refreshInvoices,
+  refreshSummaries,
   releaseItemCost,
   reverseInvoice,
   saveItemBatches,
@@ -487,5 +489,125 @@ export function ReleaseCostForm({ itemId, invoiceId }: { itemId: string; invoice
         <Notice state={state} />
       </form>
     </details>
+  );
+}
+
+export interface SummaryRow {
+  id: string;
+  branch_name: string;
+  emitter_document: string;
+  emitter_name: string;
+  issued_at: string;
+  total: string;
+  situation: number;
+  awareness_at: string | null;
+  awareness_by_name: string | null;
+  can_manage: boolean;
+}
+
+const moneyOf = (value: string) => Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const dayOf = (value: string) => new Date(value).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+
+/**
+ * Notas que a Sefaz mostrou e ainda não chegaram completas. A ciência é uma manifestação oficial
+ * em nome da empresa: só por clique, uma nota de cada vez, mesmo quando várias são marcadas.
+ */
+export function AwarenessList({ rows }: { rows: SummaryRow[] }) {
+  const [selected, setSelected] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [results, setResults] = useState<Record<string, ApiError | "ok">>({});
+  const pendingRows = rows.filter((row) => row.can_manage && row.situation === 1 && !row.awareness_at);
+
+  async function send(ids: string[]) {
+    setBusy(true);
+    const done: Record<string, ApiError | "ok"> = { ...results };
+    for (const id of ids) {
+      const result = await giveAwareness(id);
+      done[id] = result.error ?? "ok";
+      setResults({ ...done });
+    }
+    setSelected([]);
+    setBusy(false);
+    await refreshSummaries();
+  }
+
+  return (
+    <div className={styles.stack}>
+      <div className={styles.tableWrap}>
+        <table>
+          <thead>
+            <tr>
+              <th>
+                <span className={styles.hint}>Marcar</span>
+              </th>
+              <th>Emitente</th>
+              <th>Filial</th>
+              <th>Emissão</th>
+              <th>Valor</th>
+              <th>Situação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const canSend = pendingRows.includes(row);
+              const result = results[row.id];
+              return (
+                <tr key={row.id}>
+                  <td>
+                    {canSend && (
+                      <input
+                        type="checkbox"
+                        aria-label={`Marcar a nota de ${row.emitter_name}`}
+                        checked={selected.includes(row.id)}
+                        onChange={(event) =>
+                          setSelected(event.target.checked ? [...selected, row.id] : selected.filter((id) => id !== row.id))
+                        }
+                      />
+                    )}
+                  </td>
+                  <td>
+                    {row.emitter_name}
+                    <small className={styles.hint}> {row.emitter_document}</small>
+                  </td>
+                  <td>{row.branch_name}</td>
+                  <td>{dayOf(row.issued_at)}</td>
+                  <td>{moneyOf(row.total)}</td>
+                  <td>
+                    {row.situation === 3 && <span className={styles.warning}>Cancelada pelo emitente</span>}
+                    {row.situation === 2 && <span className={styles.warning}>Denegada pela Sefaz</span>}
+                    {row.situation === 1 && row.awareness_at && (
+                      <span>
+                        Ciência dada por {row.awareness_by_name ?? "usuário"} em {dayOf(row.awareness_at)}. O XML completo
+                        chega em alguns minutos.
+                      </span>
+                    )}
+                    {canSend && (
+                      <button type="button" disabled={busy} onClick={() => void send([row.id])}>
+                        Dar ciência
+                      </button>
+                    )}
+                    {result && result !== "ok" && <ErrorNotice error={result} />}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {pendingRows.length > 1 && (
+        <div className={styles.inline}>
+          <button type="button" disabled={busy || selected.length === 0} onClick={() => void send(selected)}>
+            {busy ? "Enviando..." : `Dar ciência nas marcadas (${selected.length})`}
+          </button>
+          <button type="button" disabled={busy} onClick={() => setSelected(pendingRows.map((row) => row.id))}>
+            Marcar todas
+          </button>
+        </div>
+      )}
+      <p className={styles.hint}>
+        A ciência da operação informa à Sefaz, em nome da empresa, que a filial sabe da nota. Ela não confirma o
+        recebimento da mercadoria, e é o que libera o XML completo para o download.
+      </p>
+    </div>
   );
 }

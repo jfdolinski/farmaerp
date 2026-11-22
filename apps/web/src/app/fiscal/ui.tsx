@@ -11,6 +11,7 @@ import {
   copyCertificate,
   FiscalFormState,
   setCsc,
+  setDfe,
   setRegime,
   setSeries,
   setStateRegistration,
@@ -312,6 +313,23 @@ export function SeriesForm({ row }: { row: SeriesRow }) {
       {locked && <p className={styles.hint}>Já em uso, até o número {row.last_used_number}. Não pode mais mudar.</p>}
       <ErrorNotice error={state.error} />
       <Saved state={state} text="Série salva." />
+    </form>
+  );
+}
+
+/** Liga ou desliga o download automático das notas de compra da filial. */
+export function DfeToggle({ branchId, enabled }: { branchId: string; enabled: boolean }) {
+  const [state, action, pending] = useActionState<FiscalFormState, FormData>(setDfe, {});
+  return (
+    <form action={action} className={styles.stack}>
+      <input type="hidden" name="branchId" value={branchId} />
+      <input type="hidden" name="enabled" value={enabled ? "false" : "true"} />
+      <div>
+        <button type="submit" className={enabled ? styles.danger : undefined} disabled={pending}>
+          {enabled ? "Desligar o download automático" : "Ligar o download automático"}
+        </button>
+      </div>
+      <ErrorNotice error={state.error} />
     </form>
   );
 }

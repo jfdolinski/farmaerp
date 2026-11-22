@@ -291,7 +291,7 @@ Importação, conferência e lançamento da NF-e de compra no estoque.
 
 - **Envio:** em `/notas`, um ou vários XML, até 20 por vez e 5 MB cada. Cada arquivo vai numa requisição própria, como `application/xml`, e tem o seu resultado na tela.
 - **Conferência do XML, na API:** só a nota autorizada com protocolo (`nfeProc`, modelo 55, situação 100 ou 150). Confere o dígito da chave e se ela bate com a nota; a assinatura, com o certificado do próprio XML; e se o `digVal` do protocolo é o resumo assinado. Os dados saem só do trecho que a assinatura cobre. DOCTYPE é recusado. O motivo técnico de uma recusa fica só no log.
-- **Limite da conferência:** a assinatura prova que o XML não foi alterado, mas não que o certificado é ICP-Brasil, e o protocolo dentro do XML não é assinado. A confirmação forte vem com a consulta da chave na Sefaz.
+- **Limite da conferência:** a assinatura prova que o XML não foi alterado, mas não que o certificado é ICP-Brasil, e o protocolo dentro do XML não é assinado. Por isso, em produção, a nota só se lança depois de confirmada pela Sefaz (veja abaixo).
 - **Regras, no banco:**
     - A filial é a do CNPJ do destinatário.
     - O fornecedor é criado pelo emitente quando ainda não existe.
@@ -319,3 +319,14 @@ Importação, conferência e lançamento da NF-e de compra no estoque.
 - **Estorno:** movimentações contrárias, com motivo, e o custo médio pela conta inversa. Sem saldo depois, ou com a conta dando negativa, volta o custo de antes da entrada. Se parte do que entrou já saiu, o banco recusa. A nota volta para a conferência e as liberações de custo caem. O PMC gravado fica.
 - **Histórico:** quem lançou e quem estornou ficam em `purchase_invoice_event`. Nota lançada não se confere nem se descarta.
 - **Permissões:** `purchases.post` lança e estorna (o Gerente tem). `purchases.cost_override` libera custo (só o Administrador, por padrão). O custo médio aparece no produto para quem tem `purchases.view` ou `purchases.manage` na filial.
+
+### Download automático e confirmação pela Sefaz
+
+- **Distribuição (NFeDistribuicaoDFe, Ambiente Nacional):** a rotina da API roda a cada minuto e busca, por NSU, as filiais com o download ligado em `/fiscal` e com certificado A1 válido. Respeita a espera de uma hora depois de "nada novo" (137) ou de "consumo indevido" (656). Cada filial fica reservada por 10 minutos durante a busca, então várias instâncias da API não repetem consulta.
+- **O que chega:** cada documento fica guardado em `dfe_document`, uma vez por NSU. O resumo (`resNFe`) vira uma nota "Aguardando ciência" em `/notas`; o XML completo (`procNFe`) passa pela mesma conferência da importação manual e entra confirmado; o evento de cancelamento (110111) cancela a nota.
+- **Ciência da operação (210210):** só por clique, uma nota por vez, por quem tem `purchases.manage` na filial. O evento vai assinado com o certificado da filial, e o XML completo chega pela consulta da chave nos minutos seguintes.
+- **Confirmação:** a nota importada à mão é comparada com o resumo da Sefaz pelo resumo da assinatura (`digVal`). Sem resumo, a rotina consulta a chave (até 15 consultas por hora por filial). Em produção, a nota só se lança confirmada; fora dela, a confirmação só aparece na tela.
+- **Cancelamento:** nota em conferência passa a "Cancelada pelo emitente" e não se lança; nota já lançada ganha um alerta, e o estorno fica a critério de quem confere.
+- **Ambiente da Sefaz:** a API de produção usa a Sefaz de produção; homologação e desenvolvimento usam a homologação da Sefaz, para nenhuma ciência oficial sair de lá.
+- **Funções da rotina:** as `app.dfe_*` só respondem com `app.worker = 'dfe'` e sem usuário na sessão. Os testes usam uma Sefaz falsa (`SEFAZ_DIST_URL`, `SEFAZ_EVENT_URL` e `SEFAZ_TEST_CA`, ignoradas em produção) e desligam a rotina com `DFE_WORKER=off`.
+- **Fora por enquanto:** notas com mais de 90 dias (a distribuição não as entrega; a consulta por UF fica para depois), as manifestações conclusivas (confirmação, desconhecimento e operação não realizada) e a NFS-e.
