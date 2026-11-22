@@ -204,7 +204,9 @@
       "branch_company_event_id_uuid_v7_check",
       "terminal_fiscal_series_id_uuid_v7_check",
       "terminal_fiscal_series_event_id_uuid_v7_check",
-      "catalog_product_tax_id_uuid_v7_check"
+      "catalog_product_tax_id_uuid_v7_check",
+      "supplier_id_uuid_v7_check",
+      "product_supplier_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -1120,7 +1122,8 @@
     "dbConstraints": [
       "customer_document_check",
       "customer_dependent_cpf_check",
-      "agreement_cnpj_check"
+      "agreement_cnpj_check",
+      "supplier_cnpj_check"
     ]
   },
   "FA903": {
@@ -1364,6 +1367,59 @@
       "catalog_product_tax_ibs_cbs_group_check",
       "catalog_product_tax_ibs_cbs_reduction_check",
       "catalog_product_tax_active_key"
+    ]
+  },
+  "FA923": {
+    "message": "Já existe um fornecedor com este CNPJ.",
+    "action": "Procure o fornecedor na lista. Se ele foi encerrado por engano, cadastre de novo.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "supplier_cnpj_active_key"
+    ]
+  },
+  "FA924": {
+    "message": "Os dados do fornecedor são inválidos.",
+    "action": "Confira a razão social, a inscrição estadual com o estado, o telefone, o e-mail e o endereço.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "supplier_legal_name_check",
+      "supplier_trade_name_check",
+      "supplier_state_registration_check",
+      "supplier_phone_check",
+      "supplier_email_check",
+      "supplier_postal_code_check",
+      "supplier_street_check",
+      "supplier_street_number_check",
+      "supplier_complement_check",
+      "supplier_district_check",
+      "supplier_city_check",
+      "supplier_city_code_check",
+      "supplier_state_check"
+    ]
+  },
+  "FA925": {
+    "message": "Este código do fornecedor já está ligado a um produto.",
+    "action": "Confira o produto ligado a este código no cadastro do fornecedor.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "product_supplier_code_active_key"
+    ]
+  },
+  "FA926": {
+    "message": "O código do fornecedor ou o fracionamento é inválido.",
+    "action": "Informe o código como vem na nota, com até 60 caracteres, e o fracionamento maior que zero.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "product_supplier_code_check",
+      "product_supplier_fraction_quantity_check"
     ]
   }
 }

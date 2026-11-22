@@ -273,3 +273,14 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - **Inscrição estadual:** confere o tamanho esperado em cada estado, ou ISENTO. O dígito verificador entra com o Fiscal.
 - **Convênios:** cadastro e vínculo com matrícula e limite, com `agreements.manage` em todas as filiais, porque o limite é crédito da rede.
 - **Exclusão a pedido do titular:** ainda não existe. A proposta é anonimizar, mantendo só o que a lei fiscal exige.
+
+## Fornecedores
+
+Base da entrada de nota: o código que vem no XML aponta o produto e o fracionamento da compra.
+
+- **Cadastro:** único na rede, por CNPJ completo, com a mesma consulta pública de CNPJ dos clientes. O CNPJ não muda depois do cadastro, porque as notas ficam ligadas a ele.
+- **Inscrição estadual:** conferida pelo dígito do estado, então estado e inscrição andam juntos. ISENTO é aceito.
+- **Código do fornecedor:** o `cProd` da nota, com até 60 caracteres. Um código aponta um só produto, e o produto pode ter vários códigos e vários fornecedores. Trocar o código é remover e ligar de novo.
+- **Fracionamento:** três níveis, do mais específico ao mais geral: relação com o fornecedor, código de barras e produto. `app.effective_fraction(produto, código de barras, relação)` resolve.
+- **Encerrar o fornecedor:** encerra também os códigos dele.
+- **Permissões:** `purchases.view` vê, e `purchases.manage` cadastra e liga códigos, valendo para a rede. O Gerente recebe as duas, porque recebe a nota da loja.
