@@ -284,3 +284,25 @@ Base da entrada de nota: o código que vem no XML aponta o produto e o fracionam
 - **Fracionamento:** três níveis, do mais específico ao mais geral: relação com o fornecedor, código de barras e produto. `app.effective_fraction(produto, código de barras, relação)` resolve.
 - **Encerrar o fornecedor:** encerra também os códigos dele.
 - **Permissões:** `purchases.view` vê, e `purchases.manage` cadastra e liga códigos, valendo para a rede. O Gerente recebe as duas, porque recebe a nota da loja.
+
+## Notas de compra
+
+Importação e conferência do XML da NF-e de compra. Nada mexe no estoque ainda: o lançamento é o próximo passo.
+
+- **Envio:** em `/notas`, um ou vários XML, até 20 por vez e 5 MB cada. Cada arquivo vai numa requisição própria, como `application/xml`, e tem o seu resultado na tela.
+- **Conferência do XML, na API:** só a nota autorizada com protocolo (`nfeProc`, modelo 55, situação 100 ou 150). Confere o dígito da chave e se ela bate com a nota; a assinatura, com o certificado do próprio XML; e se o `digVal` do protocolo é o resumo assinado. Os dados saem só do trecho que a assinatura cobre. DOCTYPE é recusado. O motivo técnico de uma recusa fica só no log.
+- **Limite da conferência:** a assinatura prova que o XML não foi alterado, mas não que o certificado é ICP-Brasil, e o protocolo dentro do XML não é assinado. A confirmação forte vem com a consulta da chave na Sefaz.
+- **Regras, no banco:**
+    - A filial é a do CNPJ do destinatário.
+    - O fornecedor é criado pelo emitente quando ainda não existe.
+    - A mesma chave não entra duas vezes no grupo.
+    - A produção recusa nota de teste da Sefaz.
+    - Devolução, complementar, ajuste, nota de entrada e nota emitida por filial da rede ficam registradas, mas não vão para o estoque.
+- **Ligação dos itens:**
+    1. Código do fornecedor.
+    2. Código de barras (`cEAN`), criando a relação com o fornecedor.
+    3. Ligação manual, que acrescenta o código de barras ao produto quando ele não é de outro.
+    4. Duplicar um produto parecido ou cadastrar pelo Catálogo.
+- **Trocar produto:** move o código do fornecedor para o produto novo. Os itens iguais de outras notas em conferência seguem junto.
+- **Descartar:** é a exclusão lógica, com motivo. Libera a chave para importar de novo, e o XML continua guardado.
+- **Permissões:** a nota é da filial. Importar e conferir exige `purchases.manage` na filial do destinatário, e ver exige `purchases.view`. Duplicar ou cadastrar produto exige também `products.manage`.

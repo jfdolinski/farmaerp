@@ -23,6 +23,8 @@ function codeFromHttpStatus(status: number): string {
   if (status === 403 || status === 401) return 'FA002';
   if (status === 404) return 'FA006';
   if (status === 429) return 'FA009';
+  // O leitor do corpo recusa o arquivo grande antes de chegar à rota.
+  if (status === 413) return 'FA933';
   if (status === 503) return 'FA001';
   if (status >= 400 && status < 500) return 'FA007';
   return FALLBACK_CODE;

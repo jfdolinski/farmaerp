@@ -1,4 +1,5 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
+import express from 'express';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthController } from './auth/auth.controller.js';
@@ -10,6 +11,7 @@ import { CustomersController } from './customers/customers.controller.js';
 import { DatabaseService } from './database.service.js';
 import { FiscalController } from './fiscal/fiscal.controller.js';
 import { HealthController } from './health.controller.js';
+import { PurchaseInvoicesController } from './purchases/purchase-invoices.controller.js';
 import { SuppliersController } from './purchases/suppliers.controller.js';
 import { AllExceptionsFilter } from './observability/all-exceptions.filter.js';
 import { AppLogger, createPinoLogger } from './observability/app-logger.js';
@@ -38,6 +40,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     CustomersController,
     AgreementsController,
     SuppliersController,
+    PurchaseInvoicesController,
     FiscalController,
     StructureController,
     TerminalDeviceController,
@@ -59,5 +62,9 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
     consumer.apply(TraceMiddleware).forRoutes('{*splat}');
+    // O XML da nota chega como texto, só nesta rota e com limite próprio; o resto segue no limite padrão.
+    consumer
+      .apply(express.text({ type: ['application/xml', 'text/xml'], limit: '5mb' }))
+      .forRoutes({ path: 'admin/purchase-invoices', method: RequestMethod.POST });
   }
 }

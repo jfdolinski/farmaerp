@@ -826,4 +826,46 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Informe o código como vem na nota, com até 60 caracteres, e o fracionamento maior que zero.',
     retryable: false,
   ),
+  'FA927': ErrorCatalogEntry(
+    code: 'FA927',
+    message: 'Esta nota não é de uma filial da rede.',
+    action: 'Confira se o CNPJ do destinatário é de uma filial cadastrada em Empresas.',
+    retryable: false,
+  ),
+  'FA928': ErrorCatalogEntry(
+    code: 'FA928',
+    message: 'Esta nota é do ambiente de teste da Sefaz.',
+    action: 'Envie a nota autorizada em produção. Notas de teste só entram na homologação.',
+    retryable: false,
+  ),
+  'FA929': ErrorCatalogEntry(
+    code: 'FA929',
+    message: 'Esta nota já foi importada.',
+    action: 'Procure a nota na lista. Para importar de novo, descarte a anterior.',
+    retryable: false,
+  ),
+  'FA930': ErrorCatalogEntry(
+    code: 'FA930',
+    message: 'Este arquivo não é uma NF-e autorizada válida.',
+    action: 'Envie o XML da nota autorizada, do jeito que veio do fornecedor, sem abrir nem salvar em outro programa.',
+    retryable: false,
+  ),
+  'FA931': ErrorCatalogEntry(
+    code: 'FA931',
+    message: 'Os dados da nota são inválidos.',
+    action: 'Confira o XML com o fornecedor. Se ele estiver certo, informe o suporte com o código abaixo.',
+    retryable: false,
+  ),
+  'FA932': ErrorCatalogEntry(
+    code: 'FA932',
+    message: 'Esta nota não pode mais ser conferida.',
+    action: 'Atualize a página para ver a situação atual da nota.',
+    retryable: false,
+  ),
+  'FA933': ErrorCatalogEntry(
+    code: 'FA933',
+    message: 'O arquivo passa do tamanho máximo de 5 MB.',
+    action: 'Confira se é o XML da nota. Uma NF-e costuma ter bem menos que isso.',
+    retryable: false,
+  ),
 };

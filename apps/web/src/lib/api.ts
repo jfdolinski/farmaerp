@@ -38,7 +38,7 @@ async function clientIp(): Promise<string | null> {
 /** Chama a API. Toda falha volta como erro do catálogo, pronto para mostrar. */
 export async function apiFetch<T>(
   path: string,
-  options: { method?: "GET" | "POST" | "PATCH" | "PUT"; body?: unknown } = {},
+  options: { method?: "GET" | "POST" | "PATCH" | "PUT"; body?: unknown; xml?: string } = {},
 ): Promise<ApiResult<T>> {
   let response: Response;
   try {
@@ -50,12 +50,13 @@ export async function apiFetch<T>(
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
       headers: {
-        "Content-Type": "application/json",
+        // O XML da nota segue como texto; o resto, como JSON.
+        "Content-Type": options.xml === undefined ? "application/json" : "application/xml",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         // O limite de tentativas precisa ver o IP de quem usa, não o da retaguarda.
         ...(ip ? { "X-Forwarded-For": ip } : {}),
       },
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      body: options.xml ?? (options.body === undefined ? undefined : JSON.stringify(options.body)),
     });
   } catch {
     return { ok: false, error: unavailable() };
