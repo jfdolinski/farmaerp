@@ -1012,4 +1012,22 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Reinicie o terminal. Se continuar, informe o código e a referência ao suporte.',
     retryable: true,
   ),
+  'FA958': ErrorCatalogEntry(
+    code: 'FA958',
+    message: 'O registro enviado pelo terminal é inválido.',
+    action: 'Atualize o PDV. O registro fica nos conflitos de sincronização, na retaguarda.',
+    retryable: false,
+  ),
+  'FA959': ErrorCatalogEntry(
+    code: 'FA959',
+    message: 'O terminal enviou um tipo de registro desconhecido.',
+    action: 'Atualize a API ou o PDV. O registro fica nos conflitos de sincronização, na retaguarda.',
+    retryable: false,
+  ),
+  'FA960': ErrorCatalogEntry(
+    code: 'FA960',
+    message: 'Não foi possível registrar a solução do conflito.',
+    action: 'Atualize a página e confira a situação do conflito. A explicação aceita até 500 caracteres.',
+    retryable: false,
+  ),
 };

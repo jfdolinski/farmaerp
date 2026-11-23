@@ -30,6 +30,41 @@ class SyncService extends ChangeNotifier {
   int get received => database.syncState.windowReceived;
   int? get total => database.syncState.windowTotal;
 
+  /// Itens da outbox esperando envio.
+  int get outboxPending => database.outboxPending;
+
+  /// Sobe a outbox e depois desce o que mudou. Erros da API sobem para quem chamou.
+  Future<void> run(String accessToken) async {
+    await push(accessToken);
+    await pull(accessToken);
+  }
+
+  bool _pushing = false;
+
+  /// Sobe a outbox em ordem, pacote por pacote, até esvaziar.
+  Future<void> push(String accessToken) async {
+    if (_pushing) return;
+    _pushing = true;
+    try {
+      // Limite por rodada: o resto vai na próxima, sem segurar o sinal de vida.
+      for (var round = 0; round < 50; round += 1) {
+        final batch = database.nextOutboxBatch();
+        if (batch.isEmpty) return;
+        final results = await api.push(accessToken: accessToken, items: batch);
+        database.markSent(batch, results, now: _clock());
+        final conflicts = results.where((result) => result.outcome == 'conflict').length;
+        if (conflicts > 0) {
+          // Info, e não aviso: o aviso entraria na própria outbox.
+          logger?.info('Itens recusados pela central viraram conflito', fields: {'count': conflicts});
+        }
+        notifyListeners();
+        if (results.length < batch.length) return;
+      }
+    } finally {
+      _pushing = false;
+    }
+  }
+
   /// Traz tudo o que mudou desde o último cursor. Erros da API sobem para quem chamou.
   Future<void> pull(String accessToken) async {
     if (_running) return;
