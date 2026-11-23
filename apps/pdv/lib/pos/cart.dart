@@ -1,6 +1,7 @@
 import 'package:uuid/uuid.dart';
 
 import '../local/local_database.dart';
+import 'controlled.dart';
 import 'money.dart';
 import 'pos_auth.dart';
 
@@ -29,6 +30,9 @@ class CartLine {
   /// Liberação do desconto feita no PDV por outra pessoa (supervisor).
   ({String supervisorId, String supervisorName, String reason})? release;
 
+  /// Controlado: receita, comprador e lote (ou a liberação pendente), com o farmacêutico que liberou.
+  ControlledRelease? controlled;
+
   /// Venda sem estoque autorizada com o PDV sem internet.
   ({String supervisorId, String supervisorName, int minutesOffline})? zeroStockRelease;
 
@@ -47,6 +51,10 @@ class CartLine {
     else if (product.stockMilli <= 0)
       'Sem estoque na cópia local',
     if (release != null) 'Desconto liberado por ${release!.supervisorName}',
+    if (controlled != null && controlled!.isPending)
+      'Controlado sem saldo em lote: liberado por ${controlled!.pharmacistName}, dados do SNGPC pendentes'
+    else if (controlled != null)
+      'Controlado · lote ${controlled!.batch!.number} · ${controlled!.form!.type.label} · liberado por ${controlled!.pharmacistName}',
   ];
 }
 
@@ -109,22 +117,29 @@ class Cart {
   /// O que foi pago a mais em cartão ou PIX não vira troco: precisa ser corrigido.
   bool get overpaidWithoutCash => paidCents - totalCents > changeCents;
 
-  /// Acrescenta o produto (ou soma no item igual que já está na venda).
-  CartLine add(SaleProduct product, {int quantityMilli = 1000}) {
-    if (product.controlledClass != null) throw const PosException('FA971');
+  /// Quanto deste lote já está na venda (itens de controlado).
+  int quantityOfBatch(String batchId) => lines
+      .where((line) => line.controlled?.batch?.id == batchId)
+      .fold(0, (sum, line) => sum + line.quantityMilli);
+
+  /// Acrescenta o produto (ou soma no item igual que já está na venda). Controlado só entra com a
+  /// liberação do farmacêutico, e cada um fica no seu item (receita e lote próprios).
+  CartLine add(SaleProduct product, {int quantityMilli = 1000, ControlledRelease? controlled}) {
+    if ((product.controlledClass != null) != (controlled != null)) throw const PosException('FA986');
     if (product.priceCents == null) throw const PosException('FA974');
     if (quantityMilli <= 0) throw const PosException('FA975');
-    // Código lido com fracionamento (caixa com 10, por exemplo) vale a fração.
-    final quantity = product.barcodeFractionMilli == null
+    // Código lido com fracionamento (caixa com 10, por exemplo) vale a fração. No controlado, a
+    // quantidade já vem contada da janela da receita.
+    final quantity = product.barcodeFractionMilli == null || controlled != null
         ? quantityMilli
         : (quantityMilli * product.barcodeFractionMilli! / 1000).round();
     for (final line in lines) {
-      if (line.product.id == product.id && line.discountCents == 0 && line.zeroStockRelease == null) {
+      if (controlled == null && line.product.id == product.id && line.discountCents == 0 && line.zeroStockRelease == null) {
         line.quantityMilli += quantity;
         return line;
       }
     }
-    final line = CartLine(product: product, quantityMilli: quantity, unitPriceCents: product.priceCents!);
+    final line = CartLine(product: product, quantityMilli: quantity, unitPriceCents: product.priceCents!)..controlled = controlled;
     lines.add(line);
     return line;
   }
@@ -175,11 +190,12 @@ SaleDraft buildSale({
       'unit_price': money(line.unitPriceCents),
       'discount': money(line.discountCents),
       'total': money(line.totalCents),
-      'batch_id': null,
+      'batch_id': line.controlled?.batch?.id,
       'release': line.release == null ? null : {'supervisor_id': line.release!.supervisorId, 'reason': line.release!.reason},
       'zero_stock_release': line.zeroStockRelease == null
           ? null
           : {'supervisor_id': line.zeroStockRelease!.supervisorId, 'minutes_offline': line.zeroStockRelease!.minutesOffline},
+      'controlled': line.controlled?.toJson(),
     });
     rows.add({
       'id': id,

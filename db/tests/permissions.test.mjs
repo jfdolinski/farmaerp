@@ -13,13 +13,13 @@ beforeAll(async () => {
 afterAll(closePools);
 
 const ALL = [
-  'agreements.manage', 'audit.view', 'branches.view_all', 'customers.manage', 'customers.view', 'fiscal.certificate', 'fiscal.manage', 'fiscal.view', 'products.manage', 'products.price', 'products.reactivate',
+  'agreements.manage', 'audit.view', 'branches.view_all', 'controlled.dispense', 'controlled.view', 'customers.manage', 'customers.view', 'fiscal.certificate', 'fiscal.manage', 'fiscal.view', 'products.manage', 'products.price', 'products.reactivate',
   'products.status', 'products.view', 'purchases.cost_override', 'purchases.manage', 'purchases.post', 'purchases.view', 'releases.view', 'roles.assign', 'roles.manage', 'rules.manage', 'rules.view', 'sales.discount_override', 'sales.sell', 'sales.view', 'sales.zero_stock_release',
   'stock.adjust', 'stock.batch', 'stock.batch_override', 'stock.loss', 'stock.transfer', 'stock.view', 'structure.manage', 'sync.resolve', 'sync.view',
   'terminals.approve', 'terminals.block', 'terminals.request', 'terminals.revoke', 'terminals.view',
   'users.manage', 'users.reset_password', 'users.view',
 ];
-const MANAGER = ['customers.manage', 'customers.view', 'fiscal.certificate', 'products.view', 'purchases.manage', 'purchases.post', 'purchases.view', 'releases.view', 'sales.sell', 'sales.view', 'sales.zero_stock_release', 'stock.batch_override', 'stock.loss', 'stock.transfer', 'stock.view', 'sync.resolve', 'sync.view', 'terminals.block', 'terminals.request', 'terminals.view', 'users.reset_password', 'users.view'];
+const MANAGER = ['controlled.view', 'customers.manage', 'customers.view', 'fiscal.certificate', 'products.view', 'purchases.manage', 'purchases.post', 'purchases.view', 'releases.view', 'sales.sell', 'sales.view', 'sales.zero_stock_release', 'stock.batch_override', 'stock.loss', 'stock.transfer', 'stock.view', 'sync.resolve', 'sync.view', 'terminals.block', 'terminals.request', 'terminals.view', 'users.reset_password', 'users.view'];
 
 const has = async (client, code, branchId = null) =>
   (await client.query('SELECT app.has_permission($1, $2) AS ok', [code, branchId])).rows[0].ok;
@@ -68,7 +68,7 @@ describe('catálogo e perfis iniciais', () => {
   it.each([
     ['Administrador', ALL],
     ['Gerente', MANAGER],
-    ['Farmacêutico', []],
+    ['Farmacêutico', ['controlled.dispense', 'controlled.view', 'sales.sell']],
     ['Operador de caixa', ['sales.sell']],
   ])('%s tem as permissões da tabela', async (name, expected) => {
     await asOwner(async (client) => {

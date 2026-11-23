@@ -87,6 +87,15 @@ List<ReceiptLine> buildReceipt({
       )),
       if (cart.lines[index].discountCents > 0)
         ReceiptLine(_twoColumns('  desconto', '-${formatCents(cart.lines[index].discountCents)}')),
+      // Controlado: lote e receita. O documento do comprador não sai no papel.
+      if (cart.lines[index].controlled case final controlled?) ...[
+        for (final text in _wrap(controlled.isPending
+            ? '  Controlado: dados da receita pendentes'
+            : '  Lote ${controlled.batch!.number} · ${controlled.form!.type.label}'
+              '${controlled.form!.number.trim().isEmpty ? '' : ' nº ${controlled.form!.number.trim()}'}'))
+          ReceiptLine(text),
+        ReceiptLine('  Farmacêutico: ${controlled.pharmacistName}'),
+      ],
     ],
     ReceiptLine('-' * receiptWidth),
     if (cart.discountCents > 0) ReceiptLine(_twoColumns('Descontos', '-${formatCents(cart.discountCents)}')),

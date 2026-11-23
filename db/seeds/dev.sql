@@ -170,6 +170,40 @@ SELECT seed.id, '019a0000-0000-7000-8000-000000000001'::uuid, seed.branch_id, '0
   ) AS seed (id, branch_id, batch_id, quantity)
  WHERE NOT EXISTS (SELECT 1 FROM stock_movement m WHERE m.id = seed.id);
 
+-- Controlado de demonstração (lista B1) na Loja Centro, com lote e saldo, para testar a venda com receita.
+INSERT INTO product (id, economic_group_id, catalog_product_id, display_name, category_id, commission_group_id)
+SELECT '019a0000-0000-7000-8000-000000000033'::uuid, '019a0000-0000-7000-8000-000000000001'::uuid, cp.id, cp.name,
+       '019a0000-0000-7000-8000-000000000022'::uuid, '019a0000-0000-7000-8000-000000000023'::uuid
+  FROM catalog_product cp
+ WHERE cp.source_key = 'demo-4' AND cp.deleted_at IS NULL
+   AND NOT EXISTS (SELECT 1 FROM product p WHERE p.id = '019a0000-0000-7000-8000-000000000033');
+
+INSERT INTO product_barcode (id, economic_group_id, product_id, code, is_primary) VALUES
+  ('019a0000-0000-7000-8000-000000000034', '019a0000-0000-7000-8000-000000000001',
+   '019a0000-0000-7000-8000-000000000033', '7890000000055', true)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO product_price (id, economic_group_id, product_id, branch_id, price, reason) VALUES
+  ('019a0000-0000-7000-8000-000000000035', '019a0000-0000-7000-8000-000000000001',
+   '019a0000-0000-7000-8000-000000000033', NULL, 24.50, 'Preço de demonstração')
+ON CONFLICT (id) DO NOTHING;
+
+UPDATE product_branch_status SET tracks_batches = true
+ WHERE product_id = '019a0000-0000-7000-8000-000000000033'
+   AND branch_id = '019a0000-0000-7000-8000-000000000005'
+   AND NOT EXISTS (SELECT 1 FROM stock_movement WHERE id = '019a0000-0000-7000-8000-000000000037');
+
+INSERT INTO product_batch (id, economic_group_id, branch_id, product_id, batch_number, expires_on, ms_registration, ms_original) VALUES
+  ('019a0000-0000-7000-8000-000000000036', '019a0000-0000-7000-8000-000000000001', '019a0000-0000-7000-8000-000000000005',
+   '019a0000-0000-7000-8000-000000000033', 'CLZ01', '2030-03-31', '1000000000004', '1000000000004')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO stock_movement (id, economic_group_id, branch_id, product_id, batch_id, movement_type, quantity, reason)
+SELECT '019a0000-0000-7000-8000-000000000037'::uuid, '019a0000-0000-7000-8000-000000000001'::uuid,
+       '019a0000-0000-7000-8000-000000000005'::uuid, '019a0000-0000-7000-8000-000000000033'::uuid,
+       '019a0000-0000-7000-8000-000000000036'::uuid, 'adjustment', 30, 'Saldo de demonstração'
+ WHERE NOT EXISTS (SELECT 1 FROM stock_movement m WHERE m.id = '019a0000-0000-7000-8000-000000000037');
+
 -- Cliente fictício. O CPF é o exemplo de dígito válido usado em documentação.
 INSERT INTO customer (id, economic_group_id, person_type, document, name, phone, city, state)
 SELECT '019a0000-0000-7000-8000-000000000032'::uuid, '019a0000-0000-7000-8000-000000000001'::uuid,

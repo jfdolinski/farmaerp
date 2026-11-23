@@ -238,7 +238,8 @@
       "sale_item_id_uuid_v7_check",
       "sale_payment_id_uuid_v7_check",
       "sale_alert_id_uuid_v7_check",
-      "user_pin_id_uuid_v7_check"
+      "user_pin_id_uuid_v7_check",
+      "controlled_dispensing_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -2117,5 +2118,73 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": []
+  },
+  "FA985": {
+    "message": "Esta pessoa não pode liberar a venda de controlados.",
+    "action": "Chame o farmacêutico responsável para digitar o código e o PIN.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA986": {
+    "message": "Faltam dados obrigatórios da receita, do prescritor ou do comprador.",
+    "action": "Preencha os campos marcados e confira o tipo de receita.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA987": {
+    "message": "A receita está vencida ou com data no futuro.",
+    "action": "Confira a data da receita. Receita vencida não pode ser aviada.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA988": {
+    "message": "O lote escolhido não tem saldo para essa quantidade.",
+    "action": "Escolha outro lote ou diminua a quantidade.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA989": {
+    "message": "Há lote com saldo para este controlado.",
+    "action": "Escolha o lote e preencha a receita; a liberação pendente é só para estoque negativo.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA990": {
+    "message": "Os dados do controlado vendido estão incompletos ou inválidos.",
+    "action": "A venda fica nos conflitos de sincronização. Atualize o PDV e confira com o farmacêutico.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": [
+      "controlled_dispensing_quantity_check",
+      "controlled_dispensing_status_check",
+      "controlled_dispensing_pending_reason_check",
+      "controlled_dispensing_prescription_type_check",
+      "controlled_dispensing_prescription_number_check",
+      "controlled_dispensing_prescriber_name_check",
+      "controlled_dispensing_prescriber_council_check",
+      "controlled_dispensing_prescriber_number_check",
+      "controlled_dispensing_prescriber_state_check",
+      "controlled_dispensing_buyer_name_check",
+      "controlled_dispensing_buyer_document_type_check",
+      "controlled_dispensing_buyer_document_check",
+      "controlled_dispensing_buyer_issuer_check",
+      "controlled_dispensing_buyer_state_check",
+      "controlled_dispensing_patient_name_check",
+      "controlled_dispensing_patient_age_check",
+      "controlled_dispensing_patient_sex_check",
+      "controlled_dispensing_complete_check",
+      "controlled_dispensing_item_key"
+    ]
   }
 }

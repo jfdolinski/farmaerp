@@ -336,7 +336,7 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - **Venda:**
   - leitura do código de barras (com o fracionamento do código), do código do produto ou busca por nome, princípio ativo e fabricante, sem acento (FTS5 do SQLite);
   - avisos de encomenda, bloqueado e sem estoque;
-  - controlados ficam para a próxima versão (FA971).
+  - controlados pedem a receita e o farmacêutico (abaixo).
 - **Pagamento:** dinheiro (com troco), cartão de crédito e de débito (bandeira e autorização opcionais) e PIX. O troco só sai do dinheiro.
 - **Número da venda:** contador do terminal, que continua do último número que a central recebeu (`last_sale_number` nos dados fiscais), mesmo se o banco local se perder.
 - **Comprovante não fiscal:** 48 colunas para bobina de 80 mm.
@@ -358,6 +358,24 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - O cliente identificado vai na venda e no comprovante, com o documento mascarado.
   - Os convênios dele descem com o cadastro.
   - O pagamento em convênio aparece só com cliente que tenha convênio, com a matrícula. O saldo do convênio chega com o financeiro do cliente (Etapa 7).
+
+**Controlados**
+
+- **No caixa:** o controlado lido abre o aviso "Preencher a receita". Cada controlado fica no seu item, com receita e lote próprios.
+  - **Receita:** tipo (sugerido pela lista do produto: A → notificação A, B1 → notificação B, B2 → B2, C2 → retinoide, C3 → talidomida, antimicrobiano → receita de antimicrobiano, demais → controle especial), número (obrigatório nas notificações) e data.
+  - **Validade:** 30 dias da data da receita; antimicrobiano, 10. Vencida ou com data no futuro é recusada (FA987).
+  - **Prescritor:** nome, conselho (CRM, CRO, CRMV, COREN, CRF, RMS), número e UF.
+  - **Comprador:** nome, documento (RG, CPF, CNH, passaporte ou outro), número, órgão emissor e UF.
+  - **Paciente:** opcional; idade e sexo obrigatórios no antimicrobiano.
+  - **Lote:** só os lotes com saldo e não vencidos da cópia local, o que vence primeiro antes. Quantidade acima do saldo do lote é recusada (FA988).
+  - **Liberação:** código e PIN de quem tem `controlled.dispense` (perfil Farmacêutico; FA985 para os demais).
+- **Pendente (estoque negativo):** sem lote com saldo para a quantidade, o farmacêutico libera com um motivo, sem os dados da receita. Com lote com saldo, a liberação pendente é recusada (FA989). Os dados do SNGPC são completados na manutenção (Etapa 8).
+- **Na central:** `controlled_dispensing` guarda receita, comprador, lote e farmacêutico, e não muda depois.
+  - Dados que a tabela recusa viram conflito (FA990).
+  - Viram alerta da venda: controlado sem os dados, liberado por quem não tinha a permissão, pendente, receita vencida ou futura, tipo de receita diferente do da lista.
+- **Retaguarda:** `/controlados` lista por situação (todas, pendentes, completas) e período, com o documento do comprador mascarado. Exige `controlled.view` (Farmacêutico e Gerente).
+- **Dados pessoais:** vão só pela outbox e ficam no banco local criptografado e na central. Não entram no log nem no comprovante (que mostra lote, receita e farmacêutico).
+- **Seed:** Clonazepam de demonstração (lista B1, código de barras 7890000000055) com o lote CLZ01 na Loja Centro. O Administrador (PIN 2580) pode liberar.
 
 ## Clientes
 

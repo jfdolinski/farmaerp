@@ -247,7 +247,10 @@ describe('seed sobre dados existentes', () => {
       );
       // Regras encerradas e estrutura de demonstração excluída.
       await client.query(`UPDATE product_rule SET deleted_at = now() WHERE deleted_at IS NULL`);
-      await client.query(`UPDATE product SET category_id = NULL WHERE id = $1`, [PRODUCT]);
+      // Os dois produtos de demonstração (Dipirona e o controlado Clonazepam) saem da categoria.
+      await client.query(`UPDATE product SET category_id = NULL WHERE id = ANY($1)`, [
+        [PRODUCT, '019a0000-0000-7000-8000-000000000033'],
+      ]);
       await client.query(
         `UPDATE product_category SET deleted_at = now() WHERE level = 3 AND deleted_at IS NULL`,
       );
@@ -270,6 +273,7 @@ describe('seed sobre dados existentes', () => {
         [CENTRO, SUL],
       ),
     );
-    expect(rows[0]).toEqual({ categories: 0, rules: 0, stock: 70 });
+    // Dipirona: 50 na Centro e 20 na Sul; Clonazepam: 30 na Centro.
+    expect(rows[0]).toEqual({ categories: 0, rules: 0, stock: 100 });
   });
 });

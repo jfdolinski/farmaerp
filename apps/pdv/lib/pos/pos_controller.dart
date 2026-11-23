@@ -8,6 +8,7 @@ import '../customers/customer_service.dart';
 import '../local/local_database.dart';
 import '../terminal/terminal_api.dart';
 import 'cart.dart';
+import 'controlled.dart';
 import 'discount.dart';
 import 'pos_auth.dart';
 import 'receipt.dart';
@@ -29,6 +30,16 @@ class PendingZeroStock {
   final SaleProduct product;
   final int quantityMilli;
   final int minutesOffline;
+}
+
+/// Controlado lido, esperando a receita e a liberação do farmacêutico.
+class PendingControlled {
+  const PendingControlled({required this.product, required this.quantityMilli});
+
+  final SaleProduct product;
+  final int quantityMilli;
+
+  PrescriptionType get suggestedType => PrescriptionType.forClass(product.controlledClass!);
 }
 
 /// Estado do caixa: quem está operando, o turno, a venda em montagem e o pagamento.
@@ -53,6 +64,9 @@ class PosController extends ChangeNotifier {
 
   /// Produto sem estoque esperando a autorização do gerente.
   PendingZeroStock? pendingZeroStock;
+
+  /// Controlado esperando a receita e o farmacêutico.
+  PendingControlled? pendingControlled;
 
   final LocalDatabase database;
   final PosAuth auth;
@@ -112,6 +126,8 @@ class PosController extends ChangeNotifier {
 
   void logout() {
     operator = null;
+    pendingControlled = null;
+    pendingZeroStock = null;
     cart.clear();
     paying = false;
     results = const [];
@@ -151,6 +167,17 @@ class PosController extends ChangeNotifier {
       final quantity = product.barcodeFractionMilli == null
           ? quantityMilli
           : (quantityMilli * product.barcodeFractionMilli! / 1000).round();
+      if (product.controlledClass != null) {
+        if (product.priceCents == null) throw const PosException('FA974');
+        final quantity = product.barcodeFractionMilli == null
+            ? quantityMilli
+            : (quantityMilli * product.barcodeFractionMilli! / 1000).round();
+        pendingControlled = PendingControlled(product: product, quantityMilli: quantity);
+        results = const [];
+        notice = null;
+        notifyListeners();
+        return;
+      }
       // Por encomenda não tem estoque mesmo: o aviso basta.
       if (product.status != 'on_order' && product.controlledClass == null && product.priceCents != null &&
           product.stockMilli - cart.quantityOf(product.id) - quantity < 0) {
@@ -211,6 +238,122 @@ class PosController extends ChangeNotifier {
 
   void cancelZeroStock() {
     pendingZeroStock = null;
+    notifyListeners();
+  }
+
+  /// Lotes do controlado com saldo para esta venda (descontado o que já está nela), FEFO.
+  /// Lote vencido não aparece: não pode ser vendido.
+  List<ControlledBatch> controlledBatches(SaleProduct product) {
+    final now = _clock();
+    String two(int value) => value.toString().padLeft(2, '0');
+    final today = '${now.year}-${two(now.month)}-${two(now.day)}';
+    return [
+      for (final batch in database.batchesOf(product.id))
+        if (batch.expiresOn.compareTo(today) >= 0)
+          ControlledBatch(
+            id: batch.id,
+            number: batch.number,
+            expiresOn: batch.expiresOn,
+            availableMilli: batch.quantityMilli - cart.quantityOfBatch(batch.id),
+          ),
+    ].where((batch) => batch.availableMilli > 0).toList();
+  }
+
+  /// Farmacêutico (ou quem tem a permissão) confere com código e PIN.
+  Future<LocalUser> _pharmacist(String code, String pin) async {
+    final user = await auth.verify(code, pin);
+    if (!user.can('controlled.dispense')) throw const PosException('FA985');
+    return user;
+  }
+
+  /// Venda do controlado com receita, comprador e lote. Devolve true quando o item entrou na venda.
+  Future<bool> releaseControlled({
+    required PrescriptionForm form,
+    required String batchId,
+    required int quantityMilli,
+    required String code,
+    required String pin,
+  }) async {
+    final pending = pendingControlled;
+    if (pending == null || operator == null || busy) return false;
+    busy = true;
+    notice = null;
+    notifyListeners();
+    try {
+      if (quantityMilli <= 0) throw const PosException('FA975');
+      final today = _clock();
+      // Confere a receita antes de pedir o PIN, para o farmacêutico não digitar à toa.
+      final errors = prescriptionErrors(form, today);
+      if (errors.containsKey('date') && form.date != null) throw const PosException('FA987');
+      if (errors.isNotEmpty) throw const PosException('FA986');
+      final batch = controlledBatches(pending.product).where((batch) => batch.id == batchId).firstOrNull;
+      if (batch == null || batch.availableMilli < quantityMilli) throw const PosException('FA988');
+      final pharmacist = await _pharmacist(code, pin);
+      final release = ControlledRelease.complete(
+        form: form,
+        batch: batch,
+        pharmacist: (id: pharmacist.id, name: pharmacist.name),
+        today: today,
+      );
+      cart.add(pending.product, quantityMilli: quantityMilli, controlled: release);
+      cart.payments.clear();
+      pendingControlled = null;
+      // Sem dados pessoais no log: só o produto, o lote e quem liberou.
+      logger?.info('Controlado liberado', fields: {
+        'product_code': pending.product.code,
+        'batch_number': batch.number,
+        'pharmacist_code': pharmacist.code,
+      });
+      return true;
+    } on PosException catch (error) {
+      notice = ErrorDisplay.fromCode(error.code);
+      return false;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  /// Sem saldo em lote (estoque negativo): o farmacêutico libera e os dados do SNGPC ficam pendentes.
+  Future<bool> releaseControlledPending({
+    required String reason,
+    required int quantityMilli,
+    required String code,
+    required String pin,
+  }) async {
+    final pending = pendingControlled;
+    if (pending == null || operator == null || busy) return false;
+    busy = true;
+    notice = null;
+    notifyListeners();
+    try {
+      if (quantityMilli <= 0) throw const PosException('FA975');
+      if (controlledBatches(pending.product).any((batch) => batch.availableMilli >= quantityMilli)) {
+        throw const PosException('FA989');
+      }
+      if (reason.trim().isEmpty) throw const PosException('FA986');
+      final pharmacist = await _pharmacist(code, pin);
+      final release = ControlledRelease.pending(reason: reason, pharmacist: (id: pharmacist.id, name: pharmacist.name));
+      cart.add(pending.product, quantityMilli: quantityMilli, controlled: release);
+      cart.payments.clear();
+      pendingControlled = null;
+      logger?.warn('Controlado liberado sem saldo em lote', fields: {
+        'product_code': pending.product.code,
+        'pharmacist_code': pharmacist.code,
+      });
+      return true;
+    } on PosException catch (error) {
+      notice = ErrorDisplay.fromCode(error.code);
+      return false;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  void cancelControlled() {
+    pendingControlled = null;
+    notice = null;
     notifyListeners();
   }
 
@@ -304,6 +447,13 @@ class PosController extends ChangeNotifier {
 
   void setQuantity(CartLine line, int quantityMilli) {
     if (quantityMilli <= 0) return _fail('FA975');
+    // Controlado com lote: a nova quantidade precisa caber no saldo do lote.
+    final batch = line.controlled?.batch;
+    if (batch != null) {
+      final local = database.batchesOf(line.product.id).where((row) => row.id == batch.id).firstOrNull;
+      final others = cart.quantityOfBatch(batch.id) - line.quantityMilli;
+      if (local == null || local.quantityMilli - others < quantityMilli) return _fail('FA988');
+    }
     line.quantityMilli = quantityMilli;
     notifyListeners();
   }

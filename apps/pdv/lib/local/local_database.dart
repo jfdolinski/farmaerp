@@ -1132,6 +1132,20 @@ class LocalDatabase {
     return rows.map(_saleProduct).toList();
   }
 
+  /// Lotes do produto na cópia local, o que vence primeiro antes (FEFO).
+  List<({String id, String number, String expiresOn, int quantityMilli})> batchesOf(String productId) => _db
+      .select(
+        'SELECT id, number, expires_on, quantity_milli FROM stock_batch WHERE product_id = ? ORDER BY expires_on, number',
+        [uuidBytes(productId)],
+      )
+      .map((row) => (
+            id: uuidText(row['id'] as List<int>),
+            number: row['number'] as String,
+            expiresOn: row['expires_on'] as String,
+            quantityMilli: row['quantity_milli'] as int,
+          ))
+      .toList();
+
   SaleProduct _saleProduct(Row row) => SaleProduct(
     id: uuidText(row['id'] as List<int>),
     code: row['code'] as int,
