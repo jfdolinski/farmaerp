@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import { apiFetch, can, redirectIfNeeded, requireUser } from "@/lib/api";
 import { AppHeader } from "../app-header";
@@ -35,6 +36,11 @@ interface MonitorRow {
   connectivity: "online" | "offline";
   last_sync_at: string | null;
   outbox_pending: number | null;
+  initial_load_at: string | null;
+  last_pull_at: string | null;
+  last_push_at: string | null;
+  pending_changes: number | null;
+  open_conflicts: number;
 }
 
 const STATUS_LABELS = {
@@ -48,7 +54,40 @@ const PROFILE_LABELS: Record<string, string> = {
   cashier: "Caixa",
   self_service: "Autoatendimento",
 };
-const NOT_AVAILABLE = "Ainda não disponível";
+// A central conta até 10.001 mudanças à espera, para não pesar a tela.
+const LAG_LIMIT = 10000;
+
+function lagText(count: number | null): string {
+  if (count === null) return "—";
+  if (count > LAG_LIMIT) return "mais de 10.000";
+  return count.toLocaleString("pt-BR");
+}
+
+/** Situação da sincronização do terminal, em linhas curtas. */
+function SyncSummary({ terminal }: { terminal: MonitorRow }) {
+  if (terminal.status !== "active" && !terminal.initial_load_at) return <>—</>;
+  return (
+    <>
+      {terminal.initial_load_at ? (
+        <small>Carga inicial: {formatDate(terminal.initial_load_at)}</small>
+      ) : (
+        <small className={styles.warning}>Carga inicial ainda não concluída</small>
+      )}
+      <small>Desceu: {formatDate(terminal.last_pull_at)}</small>
+      <small>Subiu: {formatDate(terminal.last_push_at)}</small>
+      <small>
+        A enviar: {terminal.outbox_pending ?? "—"} · A receber: {lagText(terminal.pending_changes)}
+      </small>
+      {terminal.open_conflicts > 0 && (
+        <small>
+          <Link href="/sincronizacao" className={styles.warning}>
+            {terminal.open_conflicts === 1 ? "1 conflito aberto" : `${terminal.open_conflicts} conflitos abertos`}
+          </Link>
+        </small>
+      )}
+    </>
+  );
+}
 
 function formatDate(value: string | null): string {
   return value
@@ -119,8 +158,7 @@ async function TerminalsContent() {
                   <th>Situação</th>
                   <th>Conexão</th>
                   <th>Versão</th>
-                  <th>Último sync</th>
-                  <th>Pendências</th>
+                  <th>Sincronização</th>
                   <th>Ações</th>
                 </tr>
               </thead>
@@ -160,11 +198,8 @@ async function TerminalsContent() {
                     </td>
                     <td>{terminal.app_version ?? "-"}</td>
                     <td>
-                      {terminal.last_sync_at
-                        ? formatDate(terminal.last_sync_at)
-                        : NOT_AVAILABLE}
+                      <SyncSummary terminal={terminal} />
                     </td>
-                    <td>{terminal.outbox_pending ?? NOT_AVAILABLE}</td>
                     <td className={styles.actions}>
                       {terminal.status === "pending" && canApprove && (
                         <>

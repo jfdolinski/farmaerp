@@ -80,6 +80,18 @@ abstract class TerminalApi {
     required List<OutboxItem> items,
   });
 
+  /// Busca de cliente com internet: lista com o documento mascarado.
+  Future<List<CustomerSummary>> searchCustomers({
+    required String accessToken,
+    required String query,
+  });
+
+  /// Cliente escolhido, inteiro. A partir daqui a descida o mantém atualizado.
+  Future<PullItem> customer({
+    required String accessToken,
+    required String id,
+  });
+
   /// Um pacote da descida. Sem cursor, a carga inteira.
   Future<PullPage> pull({
     required String accessToken,
@@ -112,21 +124,35 @@ class HttpTerminalApi implements TerminalApi {
     String? accessToken,
     Duration? requestTimeout,
   }) async {
+    final json = await _request(
+      path,
+      body: body,
+      accessToken: accessToken,
+      requestTimeout: requestTimeout,
+    );
+    if (json is Map<String, dynamic>) return json;
+    throw const ApiException('FA000');
+  }
+
+  /// POST com corpo, ou GET sem corpo. Devolve o JSON da resposta, objeto ou lista.
+  Future<Object?> _request(
+    String path, {
+    Map<String, Object?>? body,
+    String? accessToken,
+    Duration? requestTimeout,
+  }) async {
     final traceId = newTraceId();
+    final headers = {
+      'Content-Type': 'application/json',
+      'X-Trace-Id': traceId,
+      'Authorization': ?(accessToken == null ? null : 'Bearer $accessToken'),
+    };
+    final uri = Uri.parse('$baseUrl$path');
     http.Response response;
     try {
-      response = await _client
-          .post(
-            Uri.parse('$baseUrl$path'),
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Trace-Id': traceId,
-              'Authorization': ?(accessToken == null
-                  ? null
-                  : 'Bearer $accessToken'),
-            },
-            body: jsonEncode(body),
-          )
+      response = await (body == null
+              ? _client.get(uri, headers: headers)
+              : _client.post(uri, headers: headers, body: jsonEncode(body)))
           .timeout(requestTimeout ?? timeout);
     } catch (error) {
       logger?.warn(
@@ -137,9 +163,9 @@ class HttpTerminalApi implements TerminalApi {
       throw ApiException('FA001', traceId: traceId);
     }
 
-    Map<String, dynamic>? json;
+    Object? json;
     try {
-      json = jsonDecode(response.body) as Map<String, dynamic>;
+      json = jsonDecode(response.body);
     } catch (_) {
       json = null;
     }
@@ -147,7 +173,7 @@ class HttpTerminalApi implements TerminalApi {
     if (response.statusCode >= 200 && response.statusCode < 300 && json != null) {
       return json;
     }
-    final code = json?['code'] as String? ?? 'FA000';
+    final code = (json is Map ? json['code'] as String? : null) ?? 'FA000';
     logger?.warn(
       'A API recusou a operação',
       traceId: traceId,
@@ -248,6 +274,38 @@ class HttpTerminalApi implements TerminalApi {
         .cast<Map<String, dynamic>>()
         .map(PushResult.fromJson)
         .toList();
+  }
+
+  @override
+  Future<List<CustomerSummary>> searchCustomers({
+    required String accessToken,
+    required String query,
+  }) async {
+    // POST: o CPF da busca não vai na URL.
+    final json = await _request(
+      '/terminals/customers/search',
+      body: {'query': query},
+      accessToken: accessToken,
+    );
+    if (json is! List) throw const ApiException('FA000');
+    return json.cast<Map<String, dynamic>>().map(CustomerSummary.fromJson).toList();
+  }
+
+  @override
+  Future<PullItem> customer({
+    required String accessToken,
+    required String id,
+  }) async {
+    final json = await _request(
+      '/terminals/customers/${Uri.encodeComponent(id)}',
+      accessToken: accessToken,
+    );
+    if (json is! Map<String, dynamic>) throw const ApiException('FA000');
+    return PullItem(
+      type: 'customer',
+      id: json['id'] as String,
+      data: json['data'] as Map<String, dynamic>?,
+    );
   }
 
   @override

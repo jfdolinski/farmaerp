@@ -3,6 +3,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:farmaerp_pdv/customers/customer_service.dart';
 import 'package:farmaerp_pdv/local/local_database.dart';
 import 'package:farmaerp_pdv/sync/sync_service.dart';
 import 'package:farmaerp_pdv/terminal/terminal_api.dart';
@@ -15,6 +16,7 @@ import 'app_test.dart' show MemoryStore;
 final _api = Platform.environment['PDV_E2E_API'];
 const _branch = '019a0000-0000-7000-8000-000000000005';
 const _dipirona = '019a0000-0000-7000-8000-000000000027';
+const _demoCustomer = '019a0000-0000-7000-8000-000000000032';
 
 void main() {
   test(
@@ -94,6 +96,17 @@ void main() {
         expect(database.debugSelect('SELECT result FROM outbox').single['result'], 'applied');
         final again = await client.push(accessToken: token.value, items: pending);
         expect(again.single.status, 'duplicate');
+
+        // Cliente: busca mascarada, escolha completa e, depois, a descida acompanha o cadastro.
+        final customers = CustomerService(api: client, database: database, accessToken: () async => token.value);
+        final found = await customers.search('demonstra');
+        expect(found.online, isTrue);
+        final demo = found.customers.singleWhere((c) => c.id == _demoCustomer);
+        expect(demo.documentMasked, '111.***.***-35');
+        final chosen = await customers.select(_demoCustomer);
+        expect(chosen['document'], '11144477735');
+        await sync.pull(token.value);
+        expect(database.customerById(_demoCustomer)?['name'], 'Cliente Demonstração');
       } finally {
         await admin('/admin/products/$_dipirona/prices', {'branchId': _branch, 'price': null}, token: session);
         await admin('/admin/terminals/$terminalId/revoke', {'reason': 'Fim do teste E2E'}, token: session);

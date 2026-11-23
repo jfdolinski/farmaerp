@@ -433,7 +433,7 @@ describe('proteções', () => {
     }
     for (const args of [
       { cursor: 'abc' }, { cursor: '-1' }, { until: '1x' }, { after: `3:${randomUUID()}` },
-      { until: '10', after: `5:${randomUUID()}` }, { until: '10', after: '3:nada' }, { limit: 0 }, { limit: 5001 },
+      { until: '10', after: `6:${randomUUID()}` }, { until: '10', after: '3:nada' }, { limit: 0 }, { limit: 5001 },
     ]) {
       await expect(pullPage(a.terminal1, args)).rejects.toSatisfy(hasCode('FA956'));
     }
@@ -449,7 +449,7 @@ describe('proteções', () => {
         'SELECT * FROM v_sync_change',
         `SELECT app.mark_sync_change('product', gen_random_uuid(), NULL, NULL)`,
         `SELECT * FROM app.pdv_product_data('${a.branch1.id}', ARRAY[]::uuid[])`,
-        `SELECT * FROM app.pdv_targets('${a.branch1.id}', '${a.group.id}', NULL, '1')`,
+        `SELECT * FROM app.pdv_targets('${a.branch1.id}', '${a.group.id}', '${a.terminal1.id}', NULL, '1')`,
       ]) {
         await client.query('SAVEPOINT s');
         await expect(client.query(call)).rejects.toThrow(/permission denied/);

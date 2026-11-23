@@ -291,6 +291,9 @@ class TerminalController extends ChangeNotifier {
     await sync?.run(token.value);
   }
 
+  /// Token válido do terminal, para as consultas com internet (ex.: busca de cliente).
+  Future<String> accessToken() async => (await _validToken()).value;
+
   Future<AccessToken> _validToken() async {
     final current = _token;
     if (current != null &&
