@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { apiFetch, can, redirectIfNeeded, requireUser } from "@/lib/api";
 import { AppHeader } from "../app-header";
 import { ErrorNotice } from "../error-notice";
-import { CreateRoleForm, PermissionRow, RoleCard, RoleRow } from "./ui";
+import { CreateRoleForm, LimitRow, PermissionRow, RoleCard, RoleRow } from "./ui";
 import styles from "../terminais/page.module.css";
 
 export const metadata: Metadata = { title: "Perfis · FarmaERP" };
@@ -34,9 +34,10 @@ async function RolesContent() {
     );
   }
 
-  const [roles, permissions] = await Promise.all([
+  const [roles, permissions, limits] = await Promise.all([
     apiFetch<RoleRow[]>("/admin/roles"),
     apiFetch<PermissionRow[]>("/admin/permissions"),
+    apiFetch<LimitRow[]>("/admin/role-limits"),
   ]);
   if (!roles.ok) redirectIfNeeded(roles.error, "/perfis");
   const catalog = permissions.ok ? permissions.data : [];
@@ -55,6 +56,7 @@ async function RolesContent() {
             permissions={catalog}
             own={user.permissions}
             canManage={canManage}
+            limits={limits.ok ? limits.data.filter((row) => row.role_id === role.id) : []}
           />
         ))}
     </>

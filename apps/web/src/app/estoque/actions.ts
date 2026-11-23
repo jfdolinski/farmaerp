@@ -29,11 +29,23 @@ function quantityValue(raw: string): number | string {
   return value === "" || Number.isNaN(parsed) ? raw : parsed;
 }
 
+/** Liberação do supervisor, quando a tela pediu: código ou e-mail, senha e motivo. */
+function releaseOf(form: FormData) {
+  const identifier = text(form, "supervisorIdentifier");
+  if (!identifier) return undefined;
+  return {
+    identifier,
+    password: String(form.get("supervisorPassword") ?? ""),
+    reason: optional(form, "releaseReason"),
+  };
+}
+
 export async function registerMovement(
   _previous: StockFormState,
   form: FormData,
 ): Promise<StockFormState> {
   const kind = text(form, "kind");
+  const release = releaseOf(form);
   const common = {
     productLookup: text(form, "productLookup"),
     branchId: text(form, "branchId"),
@@ -68,6 +80,7 @@ export async function registerMovement(
         expiresOn: optional(form, "expiresOn"),
         msRegistration: optional(form, "msRegistration"),
         reason: common.reason,
+        release,
       },
     });
     if (!result.ok) return handleFailure(result.error, "/estoque");
@@ -76,7 +89,7 @@ export async function registerMovement(
   }
   const result =
     kind === "loss"
-      ? await apiFetch("/admin/stock/losses", { method: "POST", body: common })
+      ? await apiFetch("/admin/stock/losses", { method: "POST", body: { ...common, release } })
       : await apiFetch("/admin/stock/adjustments", {
           method: "POST",
           body: {
@@ -84,6 +97,7 @@ export async function registerMovement(
             direction: kind === "out" ? "out" : "in",
             expiresOn: optional(form, "expiresOn"),
             msRegistration: optional(form, "msRegistration"),
+            release,
           },
         });
   if (!result.ok) return handleFailure(result.error, "/estoque");

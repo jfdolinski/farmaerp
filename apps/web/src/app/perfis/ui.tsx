@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef } from "react";
 import { ErrorNotice } from "../error-notice";
-import { createRole, deleteRole, RoleFormState, updateRole } from "./actions";
+import { createRole, deleteRole, RoleFormState, updateRole, saveRoleLimits } from "./actions";
 import styles from "../terminais/page.module.css";
 
 export interface PermissionRow {
@@ -116,16 +116,87 @@ export function CreateRoleForm({
   );
 }
 
+export interface LimitRow {
+  role_id: string;
+  code: string;
+  name: string;
+  unit: "percent" | "money";
+  max_value: string;
+  value: string | null;
+}
+
+const limitText = (row: LimitRow) =>
+  row.value === null
+    ? "zero (tudo precisa de liberação)"
+    : row.unit === "percent"
+      ? `${Number(row.value).toLocaleString("pt-BR")}%`
+      : Number(row.value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+/** Teto de cada tipo de limite. Acima dele, a operação pede a liberação de um supervisor. */
+function LimitsForm({ roleId, limits, editable }: { roleId: string; limits: LimitRow[]; editable: boolean }) {
+  const [state, action, pending] = useActionState<RoleFormState, FormData>(saveRoleLimits, {});
+  if (limits.length === 0) return null;
+  return (
+    <form action={action} className={styles.stack}>
+      <h3>Limites de valor</h3>
+      <input type="hidden" name="id" value={roleId} />
+      {editable ? (
+        <div className={styles.inline}>
+          {limits.map((row) => (
+            <label key={row.code}>
+              {row.name} ({row.unit === "percent" ? "%" : "R$"})
+              <input type="hidden" name="code" value={row.code} />
+              <input
+                name={`limit:${row.code}`}
+                inputMode="decimal"
+                size={10}
+                defaultValue={row.value === null ? "" : Number(row.value).toLocaleString("pt-BR", { useGrouping: false })}
+              />
+            </label>
+          ))}
+        </div>
+      ) : (
+        <ul className={styles.bullets}>
+          {limits.map((row) => (
+            <li key={row.code}>
+              {row.name}: {limitText(row)}
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className={styles.hint}>
+        Acima do limite, a operação pede a liberação de um supervisor presente. Quem tem vários perfis fica com o maior
+        limite. Campo vazio vale zero.
+      </p>
+      {editable && (
+        <div>
+          <button type="submit" disabled={pending}>
+            Salvar limites
+          </button>
+        </div>
+      )}
+      <ErrorNotice error={state.error} />
+      {state.done && !state.error && (
+        <p className={styles.success} role="status">
+          Limites salvos.
+        </p>
+      )}
+    </form>
+  );
+}
+
 export function RoleCard({
   role,
   permissions,
   own,
   canManage,
+  limits,
 }: {
   role: RoleRow;
   permissions: PermissionRow[];
   own: string[];
   canManage: boolean;
+  limits: LimitRow[];
 }) {
   const [state, action, pending] = useActionState<RoleFormState, FormData>(
     updateRole,
@@ -182,6 +253,11 @@ export function RoleCard({
           </p>
         )}
       </form>
+      {isSystem ? (
+        <p className={styles.hint}>Sem limite de valor: não precisa de liberação de supervisor.</p>
+      ) : (
+        <LimitsForm roleId={role.id} limits={limits} editable={editable} />
+      )}
       {editable && (
         <form action={removeAction} className={styles.stack}>
           <input type="hidden" name="id" value={role.id} />

@@ -25,7 +25,12 @@ export interface TrackingRow {
   is_controlled: boolean;
 }
 
-const ITEM_FIELDS = ["productLookup", "quantity", "batchNumber", "expiresOn", "msRegistration", "reason"];
+const ITEM_FIELDS = [
+  "productLookup", "quantity", "batchNumber", "expiresOn", "msRegistration", "reason",
+  "supervisorIdentifier", "supervisorPassword", "releaseReason",
+];
+// Erros da liberação de supervisor: com eles, o formulário mostra os campos do supervisor.
+const RELEASE_CODES = new Set(["FA949", "FA950", "FA951", "FA952", "FA953"]);
 
 export function MovementForm({
   branches,
@@ -44,6 +49,7 @@ export function MovementForm({
   const [state, action, pending] = useActionState<StockFormState, FormData>(registerMovement, {});
   const [kind, setKind] = useState(initialKind);
   const form = useRef<HTMLFormElement>(null);
+  const needsRelease = kind !== "transfer" && state.error !== undefined && RELEASE_CODES.has(state.error.code);
   // Limpa só os dados do item: operação e filiais ficam, para lançar vários seguidos.
   useEffect(() => {
     if (!state.done || !form.current) return;
@@ -132,6 +138,32 @@ export function MovementForm({
           Registrar
         </button>
       </div>
+      {needsRelease && (
+        <fieldset className={`${styles.stack} ${styles.fieldset}`}>
+          <legend>Liberação de supervisor</legend>
+          <p className={styles.hint}>
+            O valor desta movimentação, pelo custo médio, passa do seu limite. Um supervisor presente informa o código ou o
+            e-mail e a senha dele.
+          </p>
+          <div className={styles.inline}>
+            <label>
+              Código ou e-mail do supervisor
+              <input name="supervisorIdentifier" required maxLength={254} autoComplete="off" />
+            </label>
+            <label>
+              Senha do supervisor
+              <input name="supervisorPassword" type="password" required maxLength={200} autoComplete="off" />
+            </label>
+            <label>
+              Motivo da liberação
+              <input name="releaseReason" required maxLength={500} size={30} />
+            </label>
+            <button type="submit" disabled={pending}>
+              Liberar e registrar
+            </button>
+          </div>
+        </fieldset>
+      )}
       <ErrorNotice error={state.error} />
       {state.done && !state.unchanged && (
         <p className={styles.success} role="status">

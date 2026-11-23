@@ -42,6 +42,7 @@ export function AppHeader({ user }: { user: CurrentUser }) {
         {(can(user, "roles.manage") || can(user, "roles.assign")) && (
           <Link href="/perfis">Perfis</Link>
         )}
+        {can(user, "releases.view") && <Link href="/liberacoes">Liberações</Link>}
       </nav>
       <div className={styles.nav}>
         <span>{user.name}</span>

@@ -958,4 +958,40 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Confira se o certificado é da mesma empresa da filial. O motivo informado aparece na tela Fiscal.',
     retryable: false,
   ),
+  'FA949': ErrorCatalogEntry(
+    code: 'FA949',
+    message: 'Este valor passa do seu limite e precisa da liberação de um supervisor.',
+    action: 'Peça a um supervisor presente que informe o código ou e-mail e a senha dele, com o motivo.',
+    retryable: false,
+  ),
+  'FA950': ErrorCatalogEntry(
+    code: 'FA950',
+    message: 'Quem pede não pode liberar para si mesmo.',
+    action: 'Peça a liberação a outra pessoa.',
+    retryable: false,
+  ),
+  'FA951': ErrorCatalogEntry(
+    code: 'FA951',
+    message: 'Este supervisor não pode liberar esta operação nesta filial.',
+    action: 'Peça a liberação a alguém que faça esta operação nesta filial.',
+    retryable: false,
+  ),
+  'FA952': ErrorCatalogEntry(
+    code: 'FA952',
+    message: 'O limite do supervisor também não cobre este valor.',
+    action: 'Peça a liberação a alguém com limite maior, ou divida a operação.',
+    retryable: false,
+  ),
+  'FA953': ErrorCatalogEntry(
+    code: 'FA953',
+    message: 'Código, e-mail ou senha do supervisor incorretos.',
+    action: 'Confira os dados com o supervisor e tente de novo. Depois de cinco erros, a conta dele fica bloqueada por 15 minutos.',
+    retryable: false,
+  ),
+  'FA954': ErrorCatalogEntry(
+    code: 'FA954',
+    message: 'Os dados do limite são inválidos.',
+    action: 'Confira o valor: ele não pode ser negativo nem passar do teto do tipo de limite.',
+    retryable: false,
+  ),
 };

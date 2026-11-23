@@ -256,3 +256,16 @@ button.danger {
   margin: 0;
   padding-left: 1.25rem;
 }
+
+/* Grupo de campos com moldura, como o da liberação de supervisor. */
+.fieldset {
+  margin: 0;
+  padding: 12px 16px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.fieldset legend {
+  padding: 0 6px;
+  font-weight: 600;
+}

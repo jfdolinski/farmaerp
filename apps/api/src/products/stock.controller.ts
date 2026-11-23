@@ -8,9 +8,12 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { SessionGuard } from '../auth/session.guard.js';
+import { resolveSupervisorRelease } from '../auth/supervisor-release.js';
 import {
   asBody,
   Body,
@@ -152,8 +155,9 @@ export class StockController {
   }
 
   @Post('stock/adjustments')
-  adjust(@RequestBody() rawBody: unknown) {
+  async adjust(@RequestBody() rawBody: unknown, @Req() request: Request) {
     const body = asBody(rawBody);
+    const release = await resolveSupervisorRelease(this.database, body, request.ip ?? '');
     const data = {
       productLookup: requireText(body, 'productLookup', 30),
       branchId: requireUuid(body.branchId),
@@ -163,6 +167,7 @@ export class StockController {
       expiresOn: optionalDay(body, 'expiresOn'),
       msRegistration: optionalText(body, 'msRegistration', 13),
       reason: optionalText(body, 'reason', 500),
+      release,
     };
     return this.database.withContext(async (client) => {
       const { rows } = await client.query<{ id: string }>(
@@ -203,7 +208,7 @@ export class StockController {
 
   /** Contagem igual ao saldo não gera movimentação, e a resposta diz isso. */
   @Post('stock/counts')
-  count(@RequestBody() rawBody: unknown) {
+  async count(@RequestBody() rawBody: unknown, @Req() request: Request) {
     const body = asBody(rawBody);
     const counted = body.countedQuantity;
     if (typeof counted === 'number' && counted < 0) {
@@ -217,6 +222,7 @@ export class StockController {
       expiresOn: optionalDay(body, 'expiresOn'),
       msRegistration: optionalText(body, 'msRegistration', 13),
       reason: optionalText(body, 'reason', 500),
+      release: await resolveSupervisorRelease(this.database, body, request.ip ?? ''),
     };
     return this.database.withContext(async (client) => {
       const { rows } = await client.query<{ id: string | null }>(
@@ -228,7 +234,7 @@ export class StockController {
   }
 
   @Post('stock/losses')
-  loss(@RequestBody() rawBody: unknown) {
+  async loss(@RequestBody() rawBody: unknown, @Req() request: Request) {
     const body = asBody(rawBody);
     const data = {
       productLookup: requireText(body, 'productLookup', 30),
@@ -236,6 +242,7 @@ export class StockController {
       quantity: quantityOf(body.quantity),
       batchNumber: optionalText(body, 'batchNumber', 40),
       reason: optionalText(body, 'reason', 500),
+      release: await resolveSupervisorRelease(this.database, body, request.ip ?? ''),
     };
     return this.database.withContext(async (client) => {
       const { rows } = await client.query<{ id: string }>(

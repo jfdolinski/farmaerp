@@ -93,7 +93,9 @@
       "branch_dfe_sync_branch_key",
       "dfe_document_nsu_key",
       "purchase_invoice_summary_key",
-      "service_invoice_access_key"
+      "service_invoice_access_key",
+      "limit_type_code_key",
+      "role_limit_active_key"
     ]
   },
   "FA009": {
@@ -221,7 +223,10 @@
       "branch_dfe_sync_id_uuid_v7_check",
       "dfe_document_id_uuid_v7_check",
       "purchase_invoice_summary_id_uuid_v7_check",
-      "service_invoice_id_uuid_v7_check"
+      "service_invoice_id_uuid_v7_check",
+      "limit_type_id_uuid_v7_check",
+      "role_limit_id_uuid_v7_check",
+      "supervisor_release_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -509,7 +514,8 @@
       "product_batch_event_reason_check",
       "purchase_invoice_discard_reason_check",
       "purchase_invoice_item_cost_release_reason_check",
-      "purchase_invoice_event_reason_check"
+      "purchase_invoice_event_reason_check",
+      "supervisor_release_reason_check"
     ]
   },
   "FA303": {
@@ -1743,5 +1749,65 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": []
+  },
+  "FA949": {
+    "message": "Este valor passa do seu limite e precisa da liberação de um supervisor.",
+    "action": "Peça a um supervisor presente que informe o código ou e-mail e a senha dele, com o motivo.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA950": {
+    "message": "Quem pede não pode liberar para si mesmo.",
+    "action": "Peça a liberação a outra pessoa.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "supervisor_release_people_check"
+    ]
+  },
+  "FA951": {
+    "message": "Este supervisor não pode liberar esta operação nesta filial.",
+    "action": "Peça a liberação a alguém que faça esta operação nesta filial.",
+    "httpStatus": 403,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA952": {
+    "message": "O limite do supervisor também não cobre este valor.",
+    "action": "Peça a liberação a alguém com limite maior, ou divida a operação.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA953": {
+    "message": "Código, e-mail ou senha do supervisor incorretos.",
+    "action": "Confira os dados com o supervisor e tente de novo. Depois de cinco erros, a conta dele fica bloqueada por 15 minutos.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA954": {
+    "message": "Os dados do limite são inválidos.",
+    "action": "Confira o valor: ele não pode ser negativo nem passar do teto do tipo de limite.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "limit_type_code_check",
+      "limit_type_name_check",
+      "limit_type_unit_check",
+      "limit_type_max_value_check",
+      "role_limit_value_check",
+      "supervisor_release_action_check",
+      "supervisor_release_value_check",
+      "supervisor_release_requester_limit_check",
+      "supervisor_release_releaser_limit_check"
+    ]
   }
 }
