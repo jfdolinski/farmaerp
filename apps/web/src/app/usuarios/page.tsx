@@ -8,6 +8,7 @@ import {
   CreateUserForm,
   EditUser,
   RoleOption,
+  PdvPin,
   TemporaryPassword,
   UserBranches,
   UserRoles,
@@ -122,6 +123,7 @@ async function UsersContent() {
                         />
                       )}
                       {canReset && row.is_active && <TemporaryPassword user={row} />}
+                      {canReset && row.is_active && <PdvPin user={row} />}
                     </td>
                   </tr>
                 ))}

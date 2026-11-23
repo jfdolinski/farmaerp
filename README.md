@@ -323,6 +323,28 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - **Nota fiscal:** a venda fica com a nota pendente de emissão até a Etapa 8 (NFC-e e NF-e).
 - **Retaguarda:** `/vendas` lista por período e filial, com o filtro "Só com alerta", e mostra o detalhe com itens, lotes baixados, pagamentos e alertas. Exige `sales.view` (Gerente); o Operador de caixa tem `sales.sell`.
 
+**Caixa no PDV**
+
+- **Entrada:** código do usuário + PIN de 4 a 6 números, conferido no próprio PDV (funciona sem internet).
+  - Quem pode gerar senha temporária para a pessoa define o PIN em `/usuarios` (`POST /admin/users/:id/pin`).
+  - A API recusa PIN com todos os números iguais ou em sequência (FA965) e guarda só o hash PBKDF2-SHA256 (210 mil rodadas, sal próprio) em `user_pin`.
+  - O hash desce para as filiais da pessoa (formato 2 da descida).
+  - Cinco PINs errados seguidos bloqueiam a pessoa neste terminal por 5 minutos (FA967). Código desconhecido e PIN errado dão a mesma mensagem.
+  - A regra é a mesma da senha temporária: só age sobre quem tem perfis que a pessoa cobre. Um Gerente de loja não define o PIN de quem tem perfil na rede inteira.
+- **PINs de desenvolvimento (seed):** Administrador 2580, Operador Centro 2468, Gerente Centro 1357.
+- **Turno:** abertura com o fundo de troco, gravada no banco local e na outbox na mesma transação (`cash_session_open`).
+- **Venda:**
+  - leitura do código de barras (com o fracionamento do código), do código do produto ou busca por nome, princípio ativo e fabricante, sem acento (FTS5 do SQLite);
+  - avisos de encomenda, bloqueado e sem estoque;
+  - controlados ficam para a próxima versão (FA971).
+- **Pagamento:** dinheiro (com troco), cartão de crédito e de débito (bandeira e autorização opcionais) e PIX. O troco só sai do dinheiro.
+- **Número da venda:** contador do terminal, que continua do último número que a central recebeu (`last_sale_number` nos dados fiscais), mesmo se o banco local se perder.
+- **Comprovante não fiscal:** 48 colunas para bobina de 80 mm.
+  - Impressora térmica em ESC/POS pela fila do Windows (tipo RAW, página 860 para os acentos), escolhida no ícone de impressora do caixa.
+  - Sem impressora configurada, sai em PDF em `Documentos\FarmaERP\comprovantes`.
+  - Falha na impressão não desfaz a venda e mostra "Reimprimir".
+- **Atalhos:** F2 vai para a leitura, F10 abre o pagamento, Esc volta.
+
 ## Clientes
 
 - **Cadastro:** único na rede, com código humano. Pessoa física com CPF ou jurídica com CNPJ, ambos com dígito validado e sem repetir no grupo. Só nome e documento são obrigatórios.

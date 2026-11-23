@@ -15,6 +15,7 @@ import { asBody, optionalText, requireText, requireUuid } from '../common/parse.
 import { DatabaseService } from '../database.service.js';
 import { AppError } from '../observability/app-error.js';
 import { generateTemporaryPassword, hashPassword } from './password.js';
+import { hashPin, isAcceptablePin } from './pin.js';
 import { type AuthenticatedRequest, SessionGuard } from './session.guard.js';
 
 /** Gestão de usuários. Quem pode fazer o quê é decidido pelo banco. */
@@ -150,5 +151,23 @@ export class UsersController {
       ]),
     );
     return { temporaryPassword };
+  }
+
+  /** PIN do PDV, definido por quem pode gerar senha temporária para a pessoa. */
+  @Post(':id/pin')
+  @HttpCode(200)
+  async pin(
+    @Param('id') id: string,
+    @RequestBody() rawBody: unknown,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const userId = requireUuid(id);
+    const pin = asBody(rawBody).pin;
+    if (!isAcceptablePin(pin)) throw new AppError('FA965');
+    const hash = await hashPin(pin);
+    await this.database.withContext((client) =>
+      client.query('SELECT app.set_user_pin($1, $2, $3)', [userId, hash, request.ip ?? '']),
+    );
+    return { status: 'ok' };
   }
 }
