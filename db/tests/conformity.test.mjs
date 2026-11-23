@@ -5,7 +5,7 @@ import { asOwner, closePools, connectionConfig, ownerPool } from './helpers.mjs'
 afterAll(closePools);
 
 const EXPECTED_TABLES = [
-  'agreement', 'auth_event', 'branch', 'branch_certificate', 'branch_company_event', 'branch_csc', 'branch_dfe_sync', 'branch_group', 'catalog_manufacturer', 'catalog_product', 'catalog_product_barcode',
+  'agreement', 'auth_event', 'branch', 'branch_certificate', 'branch_company_event', 'branch_csc', 'branch_dfe_sync', 'branch_group', 'catalog_manufacturer', 'catalog_product', 'catalog_product_barcode', 'catalog_product_image',
   'catalog_product_pmc', 'catalog_product_tax', 'code_counter', 'company', 'customer', 'customer_agreement', 'customer_consent_event', 'customer_dependent', 'dfe_document', 'economic_group', 'limit_type', 'permission', 'product', 'product_barcode',
   'product_barcode_channel', 'product_batch', 'product_batch_event', 'product_branch_status', 'product_category', 'product_cost', 'product_group', 'product_pmc',
   'product_price', 'product_rule', 'product_status_event', 'product_supplier', 'purchase_invoice', 'purchase_invoice_document', 'purchase_invoice_event', 'purchase_invoice_item', 'purchase_invoice_item_batch', 'purchase_invoice_item_cost_release', 'purchase_invoice_summary', 'region', 'role', 'role_limit', 'role_permission', 'rule_type', 'sales_channel', 'service_invoice', 'stock_balance', 'stock_movement', 'supervisor_release', 'supplier',
@@ -61,6 +61,7 @@ describe('migrations', () => {
       '0025_purchase_invoice_download',
       '0026_service_invoices',
       '0027_value_limits',
+      '0028_catalog_images',
     ]);
   });
 });

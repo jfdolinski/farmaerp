@@ -18,6 +18,7 @@ import { DfeService } from './sefaz/dfe.service.js';
 import { SuppliersController } from './purchases/suppliers.controller.js';
 import { AllExceptionsFilter } from './observability/all-exceptions.filter.js';
 import { AppLogger, createPinoLogger } from './observability/app-logger.js';
+import { CatalogImagesController } from './products/catalog-images.js';
 import { ProductsController } from './products/products.controller.js';
 import { RulesController } from './products/rules.controller.js';
 import { StockController } from './products/stock.controller.js';
@@ -38,6 +39,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     UsersController,
     RolesController,
     ProductsController,
+    CatalogImagesController,
     RulesController,
     StockController,
     CustomersController,

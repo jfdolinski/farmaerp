@@ -994,4 +994,10 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Confira o valor: ele não pode ser negativo nem passar do teto do tipo de limite.',
     retryable: false,
   ),
+  'FA955': ErrorCatalogEntry(
+    code: 'FA955',
+    message: 'As imagens do Catálogo são inválidas.',
+    action: 'Confira as imagens do arquivo do Catálogo: até 20 por produto, sem repetir, em JPEG, PNG ou WebP de até 5 MB.',
+    retryable: false,
+  ),
 };

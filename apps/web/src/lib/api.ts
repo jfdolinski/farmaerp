@@ -73,7 +73,7 @@ export async function apiFetch<T>(
 }
 
 /** Arquivo da API (o XML da nota, por exemplo), repassado como veio. */
-export async function apiDownload(path: string): Promise<Response> {
+export async function apiDownload(path: string, extraHeaders: Record<string, string> = {}): Promise<Response> {
   const apiUrl = process.env.API_URL ?? "http://127.0.0.1:3001";
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   const ip = await clientIp();
@@ -82,6 +82,7 @@ export async function apiDownload(path: string): Promise<Response> {
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
       headers: {
+        ...extraHeaders,
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(ip ? { "X-Forwarded-For": ip } : {}),
       },

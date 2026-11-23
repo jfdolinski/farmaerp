@@ -1,5 +1,6 @@
 import Link from "next/link";
 import styles from "../terminais/page.module.css";
+import { CatalogThumb } from "./images";
 
 export interface CatalogRow {
   id: string;
@@ -12,6 +13,7 @@ export interface CatalogRow {
   cest: string | null;
   barcodes: string[];
   product_id: string | null;
+  main_image_id?: string | null;
 }
 
 export const controlledLabel = (value: string) =>
@@ -32,6 +34,7 @@ export function CatalogResults({
       <table>
         <thead>
           <tr>
+            <th>Imagem</th>
             <th>Item do Catálogo</th>
             <th>Fabricante</th>
             <th>Código de barras</th>
@@ -41,6 +44,9 @@ export function CatalogResults({
         <tbody>
           {items.map((item) => (
             <tr key={item.id}>
+              <td>
+                <CatalogThumb id={item.main_image_id ?? null} alt={item.name} />
+              </td>
               <td>
                 {item.name}
                 {item.active_ingredient && <small>{item.active_ingredient}</small>}
