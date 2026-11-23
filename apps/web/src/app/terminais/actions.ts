@@ -72,6 +72,17 @@ export async function approveTerminal(
   });
 }
 
+/** Tempo sem internet para a venda sem estoque: da filial (padrão) ou do terminal (exceção). */
+export async function setOfflineMinutes(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const scope = text(form, "scope") === "branch" ? "branches" : "terminals";
+  const raw = text(form, "minutes");
+  const minutes = raw === "" || text(form, "inherit") === "1" ? null : Number(raw);
+  return post(`/admin/${scope}/${text(form, "id")}/offline-minutes`, { minutes });
+}
+
 export async function changeTerminalStatus(
   _previous: ActionState,
   form: FormData,

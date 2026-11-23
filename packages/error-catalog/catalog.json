@@ -2042,5 +2042,80 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": []
+  },
+  "FA976": {
+    "message": "O tempo sem internet precisa ficar entre 5 minutos e 24 horas.",
+    "action": "Informe um valor em minutos, de 5 a 1440.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "branch_offline_zero_stock_minutes_check",
+      "terminal_offline_zero_stock_minutes_check"
+    ]
+  },
+  "FA977": {
+    "message": "Produto sem estoque nesta filial.",
+    "action": "Veja o estoque das outras filiais ou registre uma encomenda.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA978": {
+    "message": "Este desconto passa do seu limite.",
+    "action": "Peça a um supervisor para liberar com o código e o PIN dele.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA979": {
+    "message": "Este supervisor não pode liberar esse desconto.",
+    "action": "Chame alguém com limite maior ou diminua o desconto.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA980": {
+    "message": "O desconto é maior que o valor do item.",
+    "action": "Diminua o desconto.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA981": {
+    "message": "Esta pessoa não pode autorizar venda sem estoque.",
+    "action": "Chame o gerente da loja.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA982": {
+    "message": "A liberação precisa ser de outra pessoa.",
+    "action": "Chame o supervisor ou o gerente para digitar o código e o PIN.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA983": {
+    "message": "Para pagar com convênio, identifique um cliente que tenha o convênio.",
+    "action": "Escolha o cliente na venda ou use outra forma de pagamento.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA984": {
+    "message": "A consulta precisa de internet.",
+    "action": "Tente de novo quando a conexão voltar.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
   }
 }

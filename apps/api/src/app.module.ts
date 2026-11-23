@@ -28,6 +28,7 @@ import { TerminalAdminController } from './terminals/terminal-admin.controller.j
 import { TerminalDeviceController } from './terminals/terminal-device.controller.js';
 import { SyncConflictsController } from './terminals/sync-conflicts.controller.js';
 import { SalesController } from './sales/sales.controller.js';
+import { OfflineRulesController, TerminalStockController } from './terminals/offline-rules.controller.js';
 import { TerminalCustomersController } from './terminals/terminal-customers.controller.js';
 import { TerminalSyncController } from './terminals/terminal-sync.controller.js';
 import { TerminalGuard } from './terminals/terminal.guard.js';
@@ -58,6 +59,8 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     TerminalSyncController,
     TerminalCustomersController,
     SalesController,
+    OfflineRulesController,
+    TerminalStockController,
     SyncConflictsController,
     TerminalAdminController,
   ],

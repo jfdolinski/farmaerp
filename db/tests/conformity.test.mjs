@@ -67,6 +67,7 @@ describe('migrations', () => {
       '0031_pdv_sync_monitor',
       '0032_sales',
       '0033_pdv_pin',
+      '0034_pdv_sale_rules',
     ]);
   });
 });

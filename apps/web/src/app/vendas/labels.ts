@@ -20,6 +20,7 @@ export const ALERT_LABELS: Record<string, string> = {
   negative_stock: "Estoque ficou negativo",
   product_status: "Produto não estava ativo na filial",
   agreement_link: "Convênio sem o cliente vinculado",
+  offline_zero_stock: "Vendido sem estoque com o PDV sem internet",
 };
 
 export const brl = (value: number | string | null) =>
@@ -42,6 +43,8 @@ export function alertText(kind: string, detail: Record<string, unknown>): string
       return `${label}: ${percent(detail.percent)} com máximo de ${percent(detail.rule_max)}.`;
     case "discount_above_limit":
       return `${label}: ${percent(detail.percent)}, limite do operador ${percent(detail.operator_limit)}.`;
+    case "offline_zero_stock":
+      return `${label}: ${detail.minutes_offline} min sem sincronizar${detail.supervisor_allowed ? ", autorizado pelo gerente" : ", autorizado por quem não tinha a permissão"}.`;
     case "negative_stock":
       return `${label}: saldo ${Number(detail.balance).toLocaleString("pt-BR")}.`;
     default:

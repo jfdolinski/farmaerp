@@ -347,6 +347,12 @@ const _migrations = <String>[
   ) STRICT;
   CREATE INDEX sale_payment_sale_idx ON sale_payment (sale_id);
   ''',
+  // Desconto máximo do produto (centésimos de ponto percentual) e convênios do cliente.
+  '''
+  ALTER TABLE product ADD COLUMN max_discount_bp INTEGER;
+  ALTER TABLE product ADD COLUMN max_discount_until TEXT;
+  ALTER TABLE customer ADD COLUMN agreements TEXT NOT NULL DEFAULT '[]';
+  ''',
 ];
 
 /// Pessoa que pode entrar no PDV, com o que veio da central.
@@ -389,7 +395,17 @@ class SaleProduct {
     this.controlledClass,
     this.barcodeId,
     this.barcodeFractionMilli,
+    this.maxDiscountBp,
+    this.maxDiscountUntil,
   });
+
+  /// Desconto máximo em centésimos de ponto (750 = 7,5%); vazio é sem regra.
+  final int? maxDiscountBp;
+  final DateTime? maxDiscountUntil;
+
+  /// Regra de desconto que vale agora (a que já venceu não vale).
+  int? maxDiscountAt(DateTime now) =>
+      maxDiscountBp != null && (maxDiscountUntil == null || maxDiscountUntil!.isAfter(now)) ? maxDiscountBp : null;
 
   final String id;
   final int code;
@@ -757,8 +773,9 @@ class LocalDatabase {
   void _upsertProduct(Uint8List id, Map<String, dynamic> data, int generation) {
     _db.execute(
       'INSERT INTO product (id, code, name, manufacturer, active_ingredient, controlled_class, ms_registration, '
-      'ncm, cest, status, price_cents, fraction_milli, batch_required, seen_generation) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET '
+      'ncm, cest, status, price_cents, fraction_milli, batch_required, seen_generation, max_discount_bp, max_discount_until) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET '
+      'max_discount_bp = excluded.max_discount_bp, max_discount_until = excluded.max_discount_until, '
       'code = excluded.code, name = excluded.name, manufacturer = excluded.manufacturer, '
       'active_ingredient = excluded.active_ingredient, controlled_class = excluded.controlled_class, '
       'ms_registration = excluded.ms_registration, ncm = excluded.ncm, cest = excluded.cest, '
@@ -779,6 +796,8 @@ class LocalDatabase {
         toMilli(data['fraction_quantity']) ?? 1000,
         data['batch_required'] == true ? 1 : 0,
         generation,
+        data['max_discount'] == null ? null : ((data['max_discount'] as num) * 100).round(),
+        data['max_discount_until'],
       ],
     );
     _db.execute('DELETE FROM product_search WHERE product_id = ?', [id]);
@@ -977,14 +996,19 @@ class LocalDatabase {
   void _upsertCustomer(Uint8List id, Map<String, dynamic> data) {
     const columns = [
       'code', 'person_type', 'name', 'trade_name', 'document', 'birth_date', 'phone', 'email', 'postal_code',
-      'street', 'street_number', 'complement', 'district', 'city', 'city_code', 'state',
+      'street', 'street_number', 'complement', 'district', 'city', 'city_code', 'state', 'agreements',
     ];
     final search = normalizeSearch('${data['name'] ?? ''} ${data['trade_name'] ?? ''}');
     _db.execute(
       'INSERT INTO customer (id, ${columns.join(', ')}, search_text, saved_at) '
       'VALUES (?, ${List.filled(columns.length, '?').join(', ')}, ?, ?) ON CONFLICT (id) DO UPDATE SET '
       '${columns.map((c) => '$c = excluded.$c').join(', ')}, search_text = excluded.search_text, saved_at = excluded.saved_at',
-      [id, for (final c in columns) data[c], search, DateTime.now().toUtc().toIso8601String()],
+      [
+        id,
+        for (final c in columns) c == 'agreements' ? jsonEncode(data[c] ?? const []) : data[c],
+        search,
+        DateTime.now().toUtc().toIso8601String(),
+      ],
     );
   }
 
@@ -997,6 +1021,7 @@ class LocalDatabase {
     if (rows.isEmpty) return null;
     final row = Map<String, Object?>.from(rows.first)..remove('search_text');
     row['id'] = id;
+    row['agreements'] = jsonDecode(row['agreements'] as String? ?? '[]');
     return row;
   }
 
@@ -1120,6 +1145,8 @@ class LocalDatabase {
     controlledClass: row['controlled_class'] as String?,
     barcodeId: row['barcode_id'] == null ? null : uuidText(row['barcode_id'] as List<int>),
     barcodeFractionMilli: row['barcode_fraction'] as int?,
+    maxDiscountBp: row['max_discount_bp'] as int?,
+    maxDiscountUntil: DateTime.tryParse(row['max_discount_until'] as String? ?? ''),
   );
 
   /// Dados da filial e da empresa (para o comprovante) e o último número que a central conhece.

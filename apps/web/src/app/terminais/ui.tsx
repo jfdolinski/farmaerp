@@ -7,6 +7,7 @@ import {
   ActionState,
   approveTerminal,
   changeTerminalStatus,
+  setOfflineMinutes,
   claimPairing,
   LookupState,
   lookupPairing,
@@ -213,6 +214,57 @@ export function ReasonAction({
           {config.confirm}
         </button>
         <ErrorNotice error={state.error} />
+      </form>
+    </details>
+  );
+}
+
+/**
+ * Venda sem estoque com o PDV sem internet: liberada só depois deste tempo sem sincronizar, com a
+ * autorização do gerente. A filial tem o padrão; o terminal pode ter uma exceção.
+ */
+export function OfflineMinutesForm({
+  scope,
+  id,
+  current,
+  inherited,
+}: {
+  scope: "branch" | "terminal";
+  id: string;
+  current: number | null;
+  inherited?: number;
+}) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(setOfflineMinutes, {});
+  return (
+    <details className={styles.reason}>
+      <summary>
+        {scope === "branch"
+          ? `Venda sem estoque sem internet: após ${current} min`
+          : current === null
+            ? `Sem internet: ${inherited} min (da filial)`
+            : `Sem internet: ${current} min (deste terminal)`}
+      </summary>
+      <form action={action} className={styles.rowForm}>
+        <input type="hidden" name="scope" value={scope} />
+        <input type="hidden" name="id" value={id} />
+        <p className={styles.hint}>
+          Com o saldo local zerado, o PDV só vende se estiver sem sincronizar há mais que este tempo, e com a
+          autorização do gerente. A venda fica registrada como alerta.
+        </p>
+        <label>
+          Minutos (5 a 1440)
+          <input name="minutes" type="number" min={5} max={1440} defaultValue={current ?? undefined} required={scope === "branch"} />
+        </label>
+        <button type="submit" disabled={pending}>
+          Salvar
+        </button>
+        {scope === "terminal" && current !== null && (
+          <button type="submit" name="inherit" value="1" disabled={pending}>
+            Usar o tempo da filial
+          </button>
+        )}
+        <ErrorNotice error={state.error} />
+        {state.done && <p role="status">Salvo. Chega ao PDV na próxima sincronização.</p>}
       </form>
     </details>
   );

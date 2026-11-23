@@ -116,7 +116,7 @@ describe('descida para o PDV contra o banco real', () => {
     expect(response.headers['content-encoding']).toBe('gzip');
     expect(response.headers['cache-control']).toBe('no-store');
     const page = response.body as Json;
-    expect(page).toMatchObject({ format: 2, until: expect.stringMatching(/^\d+$/) });
+    expect(page).toMatchObject({ format: 3, until: expect.stringMatching(/^\d+$/) });
     expect(page.items[0]).toMatchObject({ type: 'fiscal', id: BRANCH_CENTRO });
     expect(page.items[0].data.series.map((s: Json) => s.model)).toEqual(['55', '65']);
 
@@ -249,6 +249,31 @@ describe('descida para o PDV contra o banco real', () => {
     expect((await asManager(`/sales/${uuidV7()}`).expect(404)).body).toMatchObject({ code: 'FA006' });
     const asOperator = request(server()).get(`/admin/sales/${saleId}`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(OPERATOR_EMAIL)}`);
     expect((await asOperator.expect(404)).body).toMatchObject({ code: 'FA006' });
+  });
+
+  it('estoque das outras filiais e tempo sem internet para a venda sem estoque', async () => {
+    const auth = (call: request.Test) => call.set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`);
+    const network = (await auth(request(server()).get(`/terminals/stock/${DIPIRONA}`)).expect(200)).body as Json[];
+    expect(network[0]).toMatchObject({ branch_id: BRANCH_CENTRO, own: true });
+    expect(network.length).toBeGreaterThan(1);
+    expect((await auth(request(server()).get('/terminals/stock/nada')).expect(422)).body).toMatchObject({ code: 'FA005' });
+    expect((await auth(request(server()).get(`/terminals/stock/${uuidV7()}`)).expect(404)).body).toMatchObject({ code: 'FA006' });
+
+    const post = (path: string, body: Json, email = ADMIN_EMAIL) =>
+      request(server()).post(`/admin${path}`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(email)}`).send(body);
+    await post(`/branches/${BRANCH_CENTRO}/offline-minutes`, { minutes: 40 }).expect(200);
+    await post(`/terminals/${terminalId}/offline-minutes`, { minutes: 15 }).expect(200);
+    const fiscal = (await pullAll(null)).find('fiscal', BRANCH_CENTRO)?.data;
+    expect(fiscal).toMatchObject({ offline_zero_stock_minutes: 15 });
+    const monitor = ((await admin('get', '/terminals').expect(200)).body as Json[]).find((row) => row.id === terminalId);
+    expect(monitor).toMatchObject({ offline_minutes: 15, branch_offline_minutes: 40 });
+    await post(`/terminals/${terminalId}/offline-minutes`, { minutes: null }).expect(200);
+    expect((await pullAll(null)).find('fiscal', BRANCH_CENTRO)?.data).toMatchObject({ offline_zero_stock_minutes: 40 });
+    for (const body of [{ minutes: 2 }, { minutes: '30' }, { minutes: 30.5 }]) {
+      expect((await post(`/branches/${BRANCH_CENTRO}/offline-minutes`, body).expect(422)).body).toMatchObject({ code: 'FA976' });
+    }
+    expect((await post(`/branches/${BRANCH_CENTRO}/offline-minutes`, { minutes: 50 }, OPERATOR_EMAIL).expect(403)).body).toMatchObject({ code: 'FA002' });
+    await post(`/branches/${BRANCH_CENTRO}/offline-minutes`, { minutes: 30 }).expect(200);
   });
 
   it('recusa pedido fora do formato, sem token e de terminal bloqueado', async () => {

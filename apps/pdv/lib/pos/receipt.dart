@@ -50,6 +50,7 @@ List<ReceiptLine> buildReceipt({
   required String operatorName,
   required Cart cart,
   required int terminalNumber,
+  SaleCustomer? customer,
 }) {
   final branch = (fiscal?['branch'] as Map?) ?? const {};
   final company = (fiscal?['company'] as Map?) ?? const {};
@@ -74,6 +75,9 @@ List<ReceiptLine> buildReceipt({
     const ReceiptLine(''),
     ReceiptLine(_twoColumns('Venda $saleCode', when)),
     ReceiptLine('Caixa $terminalNumber · Operador: $operatorName'),
+    if (customer != null)
+      for (final text in _wrap('Cliente: ${customer.name}${customer.documentMasked == null ? '' : ' · ${customer.documentMasked}'}'))
+        ReceiptLine(text),
     ReceiptLine('-' * receiptWidth),
     for (var index = 0; index < cart.lines.length; index += 1) ...[
       for (final text in _wrap('${index + 1} ${cart.lines[index].product.code} ${cart.lines[index].product.name}')) ReceiptLine(text),
@@ -81,11 +85,19 @@ List<ReceiptLine> buildReceipt({
         '  ${formatMilli(cart.lines[index].quantityMilli)} x ${formatCents(cart.lines[index].unitPriceCents)}',
         formatCents(cart.lines[index].totalCents),
       )),
+      if (cart.lines[index].discountCents > 0)
+        ReceiptLine(_twoColumns('  desconto', '-${formatCents(cart.lines[index].discountCents)}')),
     ],
     ReceiptLine('-' * receiptWidth),
     if (cart.discountCents > 0) ReceiptLine(_twoColumns('Descontos', '-${formatCents(cart.discountCents)}')),
     ReceiptLine(_twoColumns('TOTAL', formatCents(cart.totalCents)), bold: true),
-    for (final payment in cart.payments) ReceiptLine(_twoColumns(payment.method.label, formatCents(payment.amountCents))),
+    for (final payment in cart.payments) ...[
+      ReceiptLine(_twoColumns(
+        payment.method == PaymentMethod.agreement ? 'Convênio ${payment.agreementName ?? ''}' : payment.method.label,
+        formatCents(payment.amountCents),
+      )),
+      if (payment.agreementRegistration != null) ReceiptLine('  Matrícula ${payment.agreementRegistration}'),
+    ],
     if (cart.changeCents > 0) ReceiptLine(_twoColumns('Troco', formatCents(cart.changeCents))),
     const ReceiptLine(''),
     const ReceiptLine('Nota fiscal pendente de emissão.', center: true),

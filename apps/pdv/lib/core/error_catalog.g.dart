@@ -1114,4 +1114,58 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Use um número maior que zero.',
     retryable: false,
   ),
+  'FA976': ErrorCatalogEntry(
+    code: 'FA976',
+    message: 'O tempo sem internet precisa ficar entre 5 minutos e 24 horas.',
+    action: 'Informe um valor em minutos, de 5 a 1440.',
+    retryable: false,
+  ),
+  'FA977': ErrorCatalogEntry(
+    code: 'FA977',
+    message: 'Produto sem estoque nesta filial.',
+    action: 'Veja o estoque das outras filiais ou registre uma encomenda.',
+    retryable: false,
+  ),
+  'FA978': ErrorCatalogEntry(
+    code: 'FA978',
+    message: 'Este desconto passa do seu limite.',
+    action: 'Peça a um supervisor para liberar com o código e o PIN dele.',
+    retryable: false,
+  ),
+  'FA979': ErrorCatalogEntry(
+    code: 'FA979',
+    message: 'Este supervisor não pode liberar esse desconto.',
+    action: 'Chame alguém com limite maior ou diminua o desconto.',
+    retryable: false,
+  ),
+  'FA980': ErrorCatalogEntry(
+    code: 'FA980',
+    message: 'O desconto é maior que o valor do item.',
+    action: 'Diminua o desconto.',
+    retryable: false,
+  ),
+  'FA981': ErrorCatalogEntry(
+    code: 'FA981',
+    message: 'Esta pessoa não pode autorizar venda sem estoque.',
+    action: 'Chame o gerente da loja.',
+    retryable: false,
+  ),
+  'FA982': ErrorCatalogEntry(
+    code: 'FA982',
+    message: 'A liberação precisa ser de outra pessoa.',
+    action: 'Chame o supervisor ou o gerente para digitar o código e o PIN.',
+    retryable: false,
+  ),
+  'FA983': ErrorCatalogEntry(
+    code: 'FA983',
+    message: 'Para pagar com convênio, identifique um cliente que tenha o convênio.',
+    action: 'Escolha o cliente na venda ou use outra forma de pagamento.',
+    retryable: false,
+  ),
+  'FA984': ErrorCatalogEntry(
+    code: 'FA984',
+    message: 'A consulta precisa de internet.',
+    action: 'Tente de novo quando a conexão voltar.',
+    retryable: false,
+  ),
 };

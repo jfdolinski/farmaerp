@@ -81,6 +81,7 @@ LocalDatabase seeded() {
       product(controlled, 3, 'Clonazepam 2 mg', controlledClass: 'B1', barcode: '7890000000031', barcodeId: '019a0000-0000-7000-8000-000000000042'),
       product(noPrice, 4, 'Produto sem preço', price: null, barcode: '7890000000048', barcodeId: '019a0000-0000-7000-8000-000000000052'),
       const PullItem(type: 'stock', id: dipirona, data: {'quantity': 3, 'batches': []}),
+      const PullItem(type: 'stock', id: caixa10, data: {'quantity': 50, 'batches': []}),
     ]),
     now: DateTime.utc(2026, 11, 23),
   );
