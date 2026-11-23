@@ -112,6 +112,17 @@ A API responde sempre no formato `{ code, message, action, retryable, traceId }`
 
 O aparelho guarda uma chave Ed25519, responde a um desafio assinado e recebe um token de 15 minutos. A situação do terminal é consultada a cada requisição, então um bloqueio vale no próximo contato, em até 60 segundos. Um terminal offline só descobre o bloqueio ao reconectar.
 
+**Banco local e descida (central → PDV)**
+
+- **Banco local:** SQLite criptografado (SQLite3MultipleCiphers, escolhido em `hooks.user_defines` do `pubspec.yaml`), em `farmaerp.db` na pasta de dados do app. A chave nasce no aparelho e fica no cofre do sistema, junto da chave do terminal. Se o arquivo não abrir com a chave (cofre apagado), ele é guardado de lado como `.ilegivel-<data>` e a carga recomeça.
+- **Migrações locais:** lista em `lib/local/local_database.dart`, controlada por `PRAGMA user_version`. Só se acrescenta no fim. UUID fica em blob de 16 bytes; dinheiro em centavos e quantidade em milésimos, sem ponto flutuante.
+- **O que desce:** dados fiscais da filial e as séries do terminal (sem certificado nem CSC), usuários com perfil na filial (com permissões e limites, sem senha nem e-mail), produtos ativos e por encomenda (bloqueados só com saldo; inativos não descem) com preço efetivo da filial, códigos de leitura e tributação em vigor e futura, e o estoque por lote.
+- **Como a central sabe o que mudou:** triggers anotam cada mudança em `sync_change` (uma linha por item, com o número da transação). O cursor do PDV é o `xmin` do snapshot: transação demorada nunca fica para trás do que o PDV já leu.
+- **Rota:** `POST /terminals/sync/pull` com o token do terminal, em pacotes de 1.000 itens compactados com gzip. Sem `cursor`, faz a carga inteira; a resposta traz `until`, `next` e, no primeiro pacote, `total`. Item com `data` vazio sai da cópia local.
+- **No PDV:** a descida roda depois de cada sinal de vida aceito. Cada pacote é aplicado numa transação junto com a posição da janela: se o PDV fechar no meio, continua do último pacote gravado. A tela mostra "Preparando a loja" com o progresso até a carga inicial terminar.
+- **Formato:** `app.pdv_sync_format()` muda quando o que desce muda de forma; o PDV então refaz a carga inteira e limpa o que não veio.
+- **Teste de ponta a ponta:** com a API local no ar, `PDV_E2E_API=http://localhost:3001 flutter test test/sync_e2e_test.dart` dentro de `apps/pdv`.
+
 **Variáveis de ambiente da API**
 
 - `TERMINAL_TOKEN_SECRET`: assina desafios e tokens, com ao menos 32 caracteres. Sem ela, a API não inicia.
@@ -170,7 +181,7 @@ O UUID é a identidade do registro. O código humano serve para tela, cupom e at
 - **Estoque:** perda, ajuste e inventário passam pelo limite de perda ou ajuste, pelo valor da movimentação ao custo médio da filial. Produto sem custo médio não pede liberação.
 - **Desconto:** `app.discount_check` diz se o desconto passa sozinho, pede liberação ou só passa com `sales.discount_override` (acima do máximo do produto no motor de regras). O PDV usa a partir da Etapa 4.
 - **Auditoria:** `/liberacoes`, com `releases.view` na filial, mostra também as liberações de custo da nota de compra.
-- **Offline:** a liberação sem internet no PDV depende da sincronização de usuários e perfis, na Etapa 3.
+- **Offline:** usuários, perfis, permissões e limites já descem para o PDV (Etapa 3). A liberação sem internet depende de conferir a credencial no aparelho, que chega com a autenticação da Etapa 5.
 
 ## Produtos
 

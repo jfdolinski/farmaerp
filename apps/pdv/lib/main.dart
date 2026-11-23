@@ -10,6 +10,8 @@ import 'core/error_display.dart';
 import 'core/local_logger.dart';
 import 'core/secret_store.dart';
 import 'core/trace_id.dart';
+import 'local/local_database.dart';
+import 'sync/sync_service.dart';
 import 'terminal/terminal_api.dart';
 import 'terminal/terminal_controller.dart';
 import 'terminal/terminal_screen.dart';
@@ -60,9 +62,36 @@ Future<void> main() async {
     return;
   }
 
+  final api = HttpTerminalApi(baseUrl: _apiUrl, logger: logger);
+  final store = await createSecretStore(
+    dataDirectory: dataDirectory,
+    logger: logger,
+  );
+  final LocalDatabase database;
+  try {
+    database = await LocalDatabase.open(
+      file: File(
+        '${dataDirectory.path}${Platform.pathSeparator}farmaerp.db',
+      ),
+      store: store,
+      logger: logger,
+    );
+  } catch (error, stack) {
+    logger.error(
+      'Banco local indisponível',
+      traceId: newTraceId(),
+      errorCode: 'FA957',
+      error: error,
+      stackTrace: stack,
+    );
+    runApp(const InvalidConfigurationApp(code: 'FA957'));
+    return;
+  }
+
   final controller = TerminalController(
-    api: HttpTerminalApi(baseUrl: _apiUrl, logger: logger),
-    store: await createSecretStore(dataDirectory: dataDirectory, logger: logger),
+    api: api,
+    store: store,
+    sync: SyncService(api: api, database: database, logger: logger),
     platform: Platform.operatingSystem,
     deviceName: Platform.localHostname,
     appVersion: _appVersion,
@@ -98,13 +127,16 @@ class FarmaErpPdvApp extends StatelessWidget {
   }
 }
 
-/// Aparece quando o aplicativo foi compilado com um endereço inseguro da API.
+/// Aparece quando o PDV não pode funcionar: endereço inseguro da API (FA010) ou banco local
+/// que não abre (FA957).
 class InvalidConfigurationApp extends StatelessWidget {
-  const InvalidConfigurationApp({super.key});
+  const InvalidConfigurationApp({super.key, this.code = 'FA010'});
+
+  final String code;
 
   @override
   Widget build(BuildContext context) {
-    final error = ErrorDisplay.fromCode('FA010');
+    final error = ErrorDisplay.fromCode(code);
     return MaterialApp(
       title: 'FarmaERP PDV',
       debugShowCheckedModeBanner: false,

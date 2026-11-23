@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../core/local_logger.dart';
 import '../core/trace_id.dart';
+import '../local/local_database.dart';
 
 /// Erro da API, já com código do catálogo. Sem conexão, o código é FA001.
 class ApiException implements Exception {
@@ -69,6 +70,15 @@ abstract class TerminalApi {
   Future<int?> heartbeat({
     required String accessToken,
     required String appVersion,
+    DateTime? lastSyncAt,
+  });
+
+  /// Um pacote da descida. Sem cursor, a carga inteira.
+  Future<PullPage> pull({
+    required String accessToken,
+    String? cursor,
+    String? until,
+    String? after,
   });
 }
 
@@ -78,17 +88,22 @@ class HttpTerminalApi implements TerminalApi {
     http.Client? client,
     this.logger,
     this.timeout = const Duration(seconds: 10),
+    this.pullTimeout = const Duration(seconds: 60),
   }) : _client = client ?? http.Client();
 
   final String baseUrl;
   final LocalLogger? logger;
   final Duration timeout;
+
+  /// O pacote da descida é maior e pode levar mais tempo em rede lenta.
+  final Duration pullTimeout;
   final http.Client _client;
 
   Future<Map<String, dynamic>> _post(
     String path,
     Map<String, Object?> body, {
     String? accessToken,
+    Duration? requestTimeout,
   }) async {
     final traceId = newTraceId();
     http.Response response;
@@ -105,7 +120,7 @@ class HttpTerminalApi implements TerminalApi {
             },
             body: jsonEncode(body),
           )
-          .timeout(timeout);
+          .timeout(requestTimeout ?? timeout);
     } catch (error) {
       logger?.warn(
         'Falha de conexão com a API',
@@ -200,10 +215,28 @@ class HttpTerminalApi implements TerminalApi {
   Future<int?> heartbeat({
     required String accessToken,
     required String appVersion,
+    DateTime? lastSyncAt,
   }) async {
     final json = await _post('/terminals/heartbeat', {
       'appVersion': appVersion,
+      'lastSyncAt': ?lastSyncAt?.toUtc().toIso8601String(),
     }, accessToken: accessToken);
     return json['terminalNumber'] as int?;
+  }
+
+  @override
+  Future<PullPage> pull({
+    required String accessToken,
+    String? cursor,
+    String? until,
+    String? after,
+  }) async {
+    final json = await _post(
+      '/terminals/sync/pull',
+      {'cursor': cursor, 'until': until, 'after': after},
+      accessToken: accessToken,
+      requestTimeout: pullTimeout,
+    );
+    return PullPage.fromJson(json);
   }
 }

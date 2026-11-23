@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../core/error_display.dart';
 import '../core/local_logger.dart';
 import '../core/secret_store.dart';
+import '../sync/sync_service.dart';
 import 'terminal_api.dart';
 import 'terminal_identity.dart';
 
@@ -18,7 +19,7 @@ enum TerminalPhase {
   /// Código aceito; aguardando o admin aprovar.
   awaitingApproval,
 
-  /// Aprovado. As vendas só são liberadas depois da carga inicial (Etapa 3).
+  /// Aprovado. As vendas só são liberadas depois da carga inicial (veja [SyncService]).
   ready,
 
   blocked,
@@ -43,6 +44,7 @@ class TerminalController extends ChangeNotifier {
     required this.platform,
     required this.deviceName,
     required this.appVersion,
+    this.sync,
     this.logger,
     this.pollInterval = const Duration(seconds: 3),
     this.heartbeatInterval = const Duration(seconds: 60),
@@ -54,6 +56,9 @@ class TerminalController extends ChangeNotifier {
   final String platform;
   final String deviceName;
   final String appVersion;
+
+  /// Descida para o banco local. Roda depois de cada sinal de vida aceito.
+  final SyncService? sync;
   final LocalLogger? logger;
   final Duration pollInterval;
   final Duration heartbeatInterval;
@@ -271,6 +276,7 @@ class TerminalController extends ChangeNotifier {
     final number = await api.heartbeat(
       accessToken: token.value,
       appVersion: appVersion,
+      lastSyncAt: sync?.lastPullAt,
     );
     if (number != null && number != _terminalNumber) {
       _terminalNumber = number;
@@ -281,6 +287,7 @@ class TerminalController extends ChangeNotifier {
     }
     await _rememberStatus('active');
     _setPhase(TerminalPhase.ready);
+    await sync?.pull(token.value);
   }
 
   Future<AccessToken> _validToken() async {

@@ -227,7 +227,8 @@
       "limit_type_id_uuid_v7_check",
       "role_limit_id_uuid_v7_check",
       "supervisor_release_id_uuid_v7_check",
-      "catalog_product_image_id_uuid_v7_check"
+      "catalog_product_image_id_uuid_v7_check",
+      "sync_change_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -1827,5 +1828,25 @@
       "catalog_product_image_sha256_key",
       "catalog_product_image_main_key"
     ]
+  },
+  "FA956": {
+    "message": "Os dados da sincronização são inválidos.",
+    "action": "Atualize o PDV e tente novamente. Se continuar, informe o código e a referência ao suporte.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": [
+      "sync_change_entity_check",
+      "sync_change_scope_check",
+      "sync_change_key"
+    ]
+  },
+  "FA957": {
+    "message": "Não foi possível abrir os dados locais do terminal.",
+    "action": "Reinicie o terminal. Se continuar, informe o código e a referência ao suporte.",
+    "httpStatus": 500,
+    "severity": "error",
+    "retryable": true,
+    "dbConstraints": []
   }
 }
