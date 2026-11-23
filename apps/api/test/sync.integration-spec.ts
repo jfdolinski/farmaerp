@@ -15,6 +15,7 @@ const OPERATOR_EMAIL = 'operador@farmaerp.test';
 const DEV_PASSWORD = 'farmaerp-dev-123';
 const BRANCH_CENTRO = '019a0000-0000-7000-8000-000000000005';
 const DIPIRONA = '019a0000-0000-7000-8000-000000000027';
+const DEMO_CUSTOMER = '019a0000-0000-7000-8000-000000000032';
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -178,6 +179,43 @@ describe('descida para o PDV contra o banco real', () => {
     expect((await resolve(MANAGER_EMAIL, 'De novo').expect(409)).body).toMatchObject({ code: 'FA960' });
     const resolved = ((await conflicts(MANAGER_EMAIL, '?status=resolved').expect(200)).body as Json[]).find((row) => row.id === mine!.id);
     expect(resolved).toMatchObject({ status: 'resolved', resolution_note: 'PDV antigo, atualizado.', resolved_by_name: expect.any(String) });
+  });
+
+  it('clientes: busca mascarada, escolha completa, descida acompanhada e situação na retaguarda', async () => {
+    const auth = (call: request.Test) => call.set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`);
+    const found = (await auth(request(server()).post('/terminals/customers/search')).send({ query: 'demonstra' }).expect(200)).body as Json[];
+    const demo = found.find((row) => row.id === DEMO_CUSTOMER);
+    expect(demo).toMatchObject({ name: 'Cliente Demonstração', city: 'São Paulo' });
+    expect(JSON.stringify(found)).not.toContain('11144477735');
+    expect(((await auth(request(server()).post('/terminals/customers/search')).send({ query: '111.444.777-35' }).expect(200)).body as Json[])
+      .map((row) => row.id)).toEqual([DEMO_CUSTOMER]);
+    expect((await auth(request(server()).post('/terminals/customers/search')).send({ query: 'ab' }).expect(422)).body).toMatchObject({ code: 'FA961' });
+    expect((await auth(request(server()).post('/terminals/customers/search')).send({ query: 12 }).expect(422)).body).toMatchObject({ code: 'FA005' });
+
+    const { until } = await pullAll(null);
+    const full = (await auth(request(server()).get(`/terminals/customers/${DEMO_CUSTOMER}`)).expect(200)).body as Json;
+    expect(full).toMatchObject({ id: DEMO_CUSTOMER, data: { document: '11144477735', phone: '11999990000' } });
+    expect((await auth(request(server()).get('/terminals/customers/nada')).expect(422)).body).toMatchObject({ code: 'FA005' });
+    expect((await auth(request(server()).get('/terminals/customers/019a0000-0000-7000-8000-0000000000ff')).expect(404)).body)
+      .toMatchObject({ code: 'FA006' });
+
+    // Mudança no cadastro desce para este terminal.
+    const current = (await admin('get', `/customers/${DEMO_CUSTOMER}`).expect(200)).body as Json;
+    await request(server()).patch(`/admin/customers/${DEMO_CUSTOMER}`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${session}`)
+      .send({ personType: 'individual', document: current.document ?? '11144477735', name: 'Cliente Demonstração', phone: '11988880000', city: 'São Paulo', state: 'SP' })
+      .expect(200);
+    const step = await pullAll(until);
+    expect(step.find('customer', DEMO_CUSTOMER)?.data).toMatchObject({ phone: '11988880000' });
+    await request(server()).patch(`/admin/customers/${DEMO_CUSTOMER}`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${session}`)
+      .send({ personType: 'individual', document: current.document ?? '11144477735', name: 'Cliente Demonstração', phone: '11999990000', city: 'São Paulo', state: 'SP' })
+      .expect(200);
+
+    // A retaguarda vê a situação da sincronização do terminal.
+    const monitor = ((await admin('get', '/terminals').expect(200)).body as Json[]).find((row) => row.id === terminalId);
+    expect(monitor).toMatchObject({ pending_changes: expect.any(Number), open_conflicts: expect.any(Number) });
+    expect(monitor!.initial_load_at).not.toBeNull();
+    expect(monitor!.last_pull_at).not.toBeNull();
+    expect(monitor!.last_push_at).not.toBeNull();
   });
 
   it('recusa pedido fora do formato, sem token e de terminal bloqueado', async () => {

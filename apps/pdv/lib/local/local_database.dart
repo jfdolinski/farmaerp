@@ -228,7 +228,92 @@ const _migrations = <String>[
   ) STRICT;
   CREATE INDEX outbox_pending_idx ON outbox (sequence) WHERE sent_at IS NULL;
   ''',
+  // Clientes buscados neste terminal. Ficam criptografados com o resto do banco local.
+  '''
+  CREATE TABLE customer (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    code INTEGER NOT NULL,
+    person_type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    trade_name TEXT,
+    document TEXT NOT NULL,
+    birth_date TEXT,
+    phone TEXT,
+    email TEXT,
+    postal_code TEXT,
+    street TEXT,
+    street_number TEXT,
+    complement TEXT,
+    district TEXT,
+    city TEXT,
+    city_code TEXT,
+    state TEXT,
+    search_text TEXT NOT NULL,
+    saved_at TEXT NOT NULL
+  ) STRICT;
+  CREATE INDEX customer_code_idx ON customer (code);
+  CREATE INDEX customer_document_idx ON customer (document);
+  ''',
 ];
+
+/// Documento mascarado, igual ao da central: 123.***.***-09 ou 12.345.***/****-90.
+String? maskDocument(String? document) {
+  if (document == null) return null;
+  if (document.length == 11) {
+    return '${document.substring(0, 3)}.***.***-${document.substring(9)}';
+  }
+  if (document.length == 14) {
+    return '${document.substring(0, 2)}.${document.substring(2, 5)}.***/****-${document.substring(12)}';
+  }
+  return null;
+}
+
+/// Texto para busca sem acento nem maiúscula, como a central faz.
+String normalizeSearch(String value) {
+  const from = 'áàâãäéèêëíìîïóòôõöúùûüçñ';
+  const to = 'aaaaaeeeeiiiiooooouuuucn';
+  final lower = value.toLowerCase();
+  final buffer = StringBuffer();
+  for (final char in lower.split('')) {
+    final index = from.indexOf(char);
+    buffer.write(index >= 0 ? to[index] : char);
+  }
+  return buffer.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+}
+
+/// Cliente na lista de busca: o documento vem mascarado.
+class CustomerSummary {
+  const CustomerSummary({
+    required this.id,
+    required this.code,
+    required this.personType,
+    required this.name,
+    this.tradeName,
+    this.documentMasked,
+    this.city,
+    this.state,
+  });
+
+  factory CustomerSummary.fromJson(Map<String, dynamic> json) => CustomerSummary(
+    id: json['id'] as String,
+    code: json['code'] as int,
+    personType: json['person_type'] as String,
+    name: json['name'] as String,
+    tradeName: json['trade_name'] as String?,
+    documentMasked: json['document_masked'] as String?,
+    city: json['city'] as String?,
+    state: json['state'] as String?,
+  );
+
+  final String id;
+  final int code;
+  final String personType;
+  final String name;
+  final String? tradeName;
+  final String? documentMasked;
+  final String? city;
+  final String? state;
+}
 
 /// Logs que esperam envio além deste número não entram na outbox: ficam só no arquivo local.
 const maxPendingLogs = 5000;
@@ -485,6 +570,12 @@ class LocalDatabase {
         } else {
           _upsertFiscal(id, data, generation);
         }
+      case 'customer':
+        if (data == null) {
+          _db.execute('DELETE FROM customer WHERE id = ?', [id]);
+        } else {
+          _upsertCustomer(id, data);
+        }
       default:
         // Tipo novo de uma versão mais nova da central: fica para a próxima atualização do PDV.
         break;
@@ -705,6 +796,63 @@ class LocalDatabase {
           [now.toUtc().subtract(const Duration(days: 7)).toIso8601String()],
         );
       });
+
+  void _upsertCustomer(Uint8List id, Map<String, dynamic> data) {
+    const columns = [
+      'code', 'person_type', 'name', 'trade_name', 'document', 'birth_date', 'phone', 'email', 'postal_code',
+      'street', 'street_number', 'complement', 'district', 'city', 'city_code', 'state',
+    ];
+    final search = normalizeSearch('${data['name'] ?? ''} ${data['trade_name'] ?? ''}');
+    _db.execute(
+      'INSERT INTO customer (id, ${columns.join(', ')}, search_text, saved_at) '
+      'VALUES (?, ${List.filled(columns.length, '?').join(', ')}, ?, ?) ON CONFLICT (id) DO UPDATE SET '
+      '${columns.map((c) => '$c = excluded.$c').join(', ')}, search_text = excluded.search_text, saved_at = excluded.saved_at',
+      [id, for (final c in columns) data[c], search, DateTime.now().toUtc().toIso8601String()],
+    );
+  }
+
+  /// Guarda o cliente escolhido no PDV (vindo da central). Vazio: o cliente não existe mais.
+  void saveCustomer(PullItem item) => _transaction(() => _applyItem(item, syncState.generation));
+
+  /// Cliente guardado neste terminal, com os dados completos para a venda.
+  Map<String, Object?>? customerById(String id) {
+    final rows = _db.select('SELECT * FROM customer WHERE id = ?', [uuidBytes(id)]);
+    if (rows.isEmpty) return null;
+    final row = Map<String, Object?>.from(rows.first)..remove('search_text');
+    row['id'] = id;
+    return row;
+  }
+
+  /// Busca sem internet, só entre os clientes já guardados: nome, código ou CPF/CNPJ.
+  List<CustomerSummary> searchLocalCustomers(String query) {
+    final text = query.trim();
+    final digits = text.replaceAll(RegExp(r'[^0-9A-Za-z]'), '').toUpperCase();
+    final words = normalizeSearch(text).split(' ').where((word) => word.isNotEmpty).toList();
+    final byName = RegExp(r'[0-9]').hasMatch(text) ? <String>[] : words;
+    final rows = _db.select(
+      'SELECT id, code, person_type, name, trade_name, document, city, state FROM customer '
+      "WHERE CAST(code AS TEXT) = ? OR document = ? ${byName.isEmpty ? '' : 'OR (${byName.map((_) => "search_text LIKE ? ESCAPE '\\'").join(' AND ')})'} "
+      'ORDER BY name, id LIMIT 20',
+      [
+        text,
+        digits,
+        for (final word in byName) '%${word.replaceAll(r'\', r'\\').replaceAll('%', r'\%').replaceAll('_', r'\_')}%',
+      ],
+    );
+    return [
+      for (final row in rows)
+        CustomerSummary(
+          id: uuidText(row['id'] as List<int>),
+          code: row['code'] as int,
+          personType: row['person_type'] as String,
+          name: row['name'] as String,
+          tradeName: row['trade_name'] as String?,
+          documentMasked: maskDocument(row['document'] as String?),
+          city: row['city'] as String?,
+          state: row['state'] as String?,
+        ),
+    ];
+  }
 
   /// Produto pela leitura do código de barras.
   LocalProduct? productByBarcode(String code) {

@@ -1030,4 +1030,10 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Atualize a página e confira a situação do conflito. A explicação aceita até 500 caracteres.',
     retryable: false,
   ),
+  'FA961': ErrorCatalogEntry(
+    code: 'FA961',
+    message: 'Digite ao menos 3 letras do nome, o código ou o CPF/CNPJ do cliente.',
+    action: 'Complete a busca e tente de novo.',
+    retryable: false,
+  ),
 };

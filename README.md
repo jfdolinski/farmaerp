@@ -132,6 +132,18 @@ O aparelho guarda uma chave Ed25519, responde a um desafio assinado e recebe um 
 - **Primeiro tipo, os logs:** avisos e erros do PDV (nunca `info`), já sem dados pessoais, vão para `terminal_log` com o rastreio da operação. Até 5.000 esperam envio; acima disso ficam só no arquivo local. Logs entregues saem da fila local depois de 7 dias.
 - **Tipos novos:** cada tipo ganha uma procedure no banco, chamada pelo `CASE` de `app.pdv_push`. Tipo desconhecido vira conflito (FA959).
 
+**Clientes no PDV**
+
+- **Busca com internet, em dois passos:** `POST /terminals/customers/search` (nome com 3 letras ou mais, código ou CPF/CNPJ, com ou sem pontuação) devolve até 20 clientes com o documento mascarado. `GET /terminals/customers/:id` traz o escolhido inteiro. A busca vai no corpo, para o CPF não parar em log de acesso.
+- **Guardado e acompanhado:** o escolhido fica no banco local criptografado, e a central anota em `pdv_customer_cache` que este terminal o guardou. Daí em diante a descida leva as mudanças e a exclusão só desses clientes.
+- **Sem internet:** `CustomerService` busca entre os clientes já guardados no terminal e avisa que a lista não veio da central.
+- **Crediário:** quando existir, os clientes com débito descem para todos os terminais (Etapa 7).
+
+**Acompanhamento na retaguarda**
+
+- A central anota em `terminal_status` a descida concluída (`last_pull_at` e o cursor entregue), a carga inicial (`initial_load_at`) e a subida (`last_push_at`).
+- A tela Terminais mostra, para cada terminal, a carga inicial, a última descida e a última subida. Mostra também o que espera para subir (informado pelo PDV), o que espera para descer (mudanças depois do cursor, contadas até 10.000) e o link para os conflitos abertos.
+
 **Variáveis de ambiente da API**
 
 - `TERMINAL_TOKEN_SECRET`: assina desafios e tokens, com ao menos 32 caracteres. Sem ela, a API não inicia.

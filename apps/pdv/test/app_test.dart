@@ -48,6 +48,12 @@ class FakeApi implements TerminalApi {
   final pushResponses = <Object>[];
   final pushCalls = <List<OutboxItem>>[];
 
+  /// Clientes da central: a busca devolve todos; o detalhe vem de [customerData].
+  final searchResults = <CustomerSummary>[];
+  final customerData = <String, Map<String, dynamic>?>{};
+  Object? customerFailure;
+  final searchQueries = <String>[];
+
   /// Respostas da descida, em ordem: PullPage ou exceção. Vazia: nada mudou.
   final pullResponses = <Object>[];
   final pullCalls = <({String? cursor, String? until, String? after, String token})>[];
@@ -114,6 +120,28 @@ class FakeApi implements TerminalApi {
     this.lastSyncAt = lastSyncAt;
     this.outboxPending = outboxPending;
     return terminalNumber;
+  }
+
+  @override
+  Future<List<CustomerSummary>> searchCustomers({
+    required String accessToken,
+    required String query,
+  }) async {
+    _maybeFail();
+    if (customerFailure != null) throw customerFailure!;
+    searchQueries.add(query);
+    return List.of(searchResults);
+  }
+
+  @override
+  Future<PullItem> customer({
+    required String accessToken,
+    required String id,
+  }) async {
+    _maybeFail();
+    if (customerFailure != null) throw customerFailure!;
+    if (!customerData.containsKey(id)) throw const ApiException('FA006');
+    return PullItem(type: 'customer', id: id, data: customerData[id]);
   }
 
   @override

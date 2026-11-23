@@ -231,7 +231,8 @@
       "sync_change_id_uuid_v7_check",
       "sync_receipt_id_uuid_v7_check",
       "sync_conflict_id_uuid_v7_check",
-      "terminal_log_id_uuid_v7_check"
+      "terminal_log_id_uuid_v7_check",
+      "pdv_customer_cache_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -1844,7 +1845,8 @@
       "sync_change_key",
       "sync_receipt_kind_check",
       "sync_receipt_sequence_check",
-      "sync_receipt_status_check"
+      "sync_receipt_status_check",
+      "pdv_customer_cache_key"
     ]
   },
   "FA957": {
@@ -1890,5 +1892,13 @@
       "sync_conflict_resolution_check",
       "sync_conflict_receipt_key"
     ]
+  },
+  "FA961": {
+    "message": "Digite ao menos 3 letras do nome, o código ou o CPF/CNPJ do cliente.",
+    "action": "Complete a busca e tente de novo.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
   }
 }
