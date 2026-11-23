@@ -114,6 +114,8 @@ describe('download automático contra o banco real e a Sefaz falsa', () => {
     const { port } = sefaz.address() as AddressInfo;
     process.env.SEFAZ_DIST_URL = `https://localhost:${port}/dist`;
     process.env.SEFAZ_EVENT_URL = `https://localhost:${port}/event`;
+    // A rodada completa também busca NFS-e: nada pode sair para o ADN de verdade.
+    process.env.SEFAZ_ADN_URL = `https://localhost:${port}/adn`;
     process.env.SEFAZ_TEST_CA = tls.cert;
 
     const moduleFixture = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -138,6 +140,7 @@ describe('download automático contra o banco real e a Sefaz falsa', () => {
     await new Promise((resolve) => sefaz.close(resolve));
     delete process.env.SEFAZ_DIST_URL;
     delete process.env.SEFAZ_EVENT_URL;
+    delete process.env.SEFAZ_ADN_URL;
     delete process.env.SEFAZ_TEST_CA;
   });
 

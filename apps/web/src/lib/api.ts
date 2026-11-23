@@ -72,6 +72,25 @@ export async function apiFetch<T>(
   }
 }
 
+/** Arquivo da API (o XML da nota, por exemplo), repassado como veio. */
+export async function apiDownload(path: string): Promise<Response> {
+  const apiUrl = process.env.API_URL ?? "http://127.0.0.1:3001";
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  const ip = await clientIp();
+  try {
+    return await fetch(`${apiUrl}${path}`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(ip ? { "X-Forwarded-For": ip } : {}),
+      },
+    });
+  } catch {
+    return Response.json(unavailable(), { status: 503 });
+  }
+}
+
 /** Só decide o que aparece na tela: quem barra de verdade é o banco. */
 export const can = (user: CurrentUser, code: string) =>
   user.permissions.includes(code);

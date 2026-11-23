@@ -329,4 +329,14 @@ Importação, conferência e lançamento da NF-e de compra no estoque.
 - **Cancelamento:** nota em conferência passa a "Cancelada pelo emitente" e não se lança; nota já lançada ganha um alerta, e o estorno fica a critério de quem confere.
 - **Ambiente da Sefaz:** a API de produção usa a Sefaz de produção; homologação e desenvolvimento usam a homologação da Sefaz, para nenhuma ciência oficial sair de lá.
 - **Funções da rotina:** as `app.dfe_*` só respondem com `app.worker = 'dfe'` e sem usuário na sessão. Os testes usam uma Sefaz falsa (`SEFAZ_DIST_URL`, `SEFAZ_EVENT_URL` e `SEFAZ_TEST_CA`, ignoradas em produção) e desligam a rotina com `DFE_WORKER=off`.
-- **Fora por enquanto:** notas com mais de 90 dias (a distribuição não as entrega; a consulta por UF fica para depois), as manifestações conclusivas (confirmação, desconhecimento e operação não realizada) e a NFS-e.
+- **Fora por enquanto:** notas com mais de 90 dias (a distribuição não as entrega; a consulta por UF fica para depois) e as manifestações conclusivas (confirmação, desconhecimento e operação não realizada).
+
+### Notas de serviço (NFS-e)
+
+- **Origem:** a API de distribuição do Ambiente de Dados Nacional (`GET /contribuintes/DFe/{NSU}?cnpjConsulta=...&lote=true`), com o mesmo certificado A1 e a mesma chave "Download automático" da filial. Desde 2026 os municípios aderem ao padrão nacional, então o ADN entrega as notas de qualquer município.
+- **Ritmo:** lotes de até 50 documentos, um segundo entre chamadas, e uma hora de espera quando não há nada novo ou quando dá erro. A NFS-e tem NSU próprio, guardado em `branch_dfe_sync` ao lado do da NF-e.
+- **O que chega:** cada documento fica em `dfe_document` (origem `nfse`). A nota vira uma linha em `service_invoice`, com prestador, competência, serviço, ISS, retenções federais e valor líquido. O cancelamento (101101) marca "Cancelada pelo prestador"; a substituição (105102, ou a nota nova com `chSubstda`) marca a antiga como "Substituída" e liga à nova, em qualquer ordem de chegada.
+- **Leitura:** segue o modelo da NFS-e autorizada publicado pela Receita Federal (`NFSe/infNFSe`, com a DPS dentro). Só chave, número, emissão, competência, prestador, descrição, valor do serviço e valor líquido são obrigatórios; o resto fica vazio se vier fora do formato.
+- **Tela:** `/notas-servico` lista as notas em que a filial é tomadora, por competência e situação, com o total das válidas. O detalhe mostra os valores e baixa o XML original. As notas emitidas pela própria filial ficam guardadas, fora da tela, até a etapa de emissão de NFS-e.
+- **Só registro:** a nota de serviço não mexe em estoque nem em custo. Fica pronta para o contas a pagar.
+- **Testes:** um ADN falso em HTTPS (`SEFAZ_ADN_URL`, ignorada em produção).

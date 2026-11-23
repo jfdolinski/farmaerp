@@ -9,23 +9,27 @@ const ENDPOINTS = {
   1: {
     distribution: 'https://www1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx',
     event: 'https://www.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
+    nfse: 'https://adn.nfse.gov.br/contribuintes',
   },
   2: {
     distribution: 'https://hom1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx',
     event: 'https://hom1.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
+    nfse: 'https://adn.producaorestrita.nfse.gov.br/contribuintes',
   },
 } as const;
 
 export interface SefazEndpoints {
   distribution: string;
   event: string;
+  /** API de distribuição da NFS-e no Ambiente de Dados Nacional. */
+  nfse: string;
   /** Certificadora extra, só para o servidor falso dos testes. */
   ca?: string;
 }
 
 /**
  * Endereços do Ambiente Nacional. Fora da produção, os testes podem apontar para um servidor falso
- * (SEFAZ_DIST_URL, SEFAZ_EVENT_URL e SEFAZ_TEST_CA); em produção essas variáveis são ignoradas.
+ * (SEFAZ_DIST_URL, SEFAZ_EVENT_URL, SEFAZ_ADN_URL e SEFAZ_TEST_CA); em produção essas variáveis são ignoradas.
  */
 export function sefazEndpoints(env: NodeJS.ProcessEnv = process.env): SefazEndpoints {
   const environment = sefazEnvironment();
@@ -34,6 +38,7 @@ export function sefazEndpoints(env: NodeJS.ProcessEnv = process.env): SefazEndpo
   return {
     distribution: env.SEFAZ_DIST_URL || official.distribution,
     event: env.SEFAZ_EVENT_URL || official.event,
+    nfse: env.SEFAZ_ADN_URL || official.nfse,
     ca: env.SEFAZ_TEST_CA || undefined,
   };
 }

@@ -19,13 +19,24 @@ import {
   readEvent,
   readSummary,
 } from './dfe.js';
+import {
+  NFSE_BATCH_SIZE,
+  NfseDocument,
+  nfseDistributionUrl,
+  parseNfseDistribution,
+  readServiceEvent,
+  readServiceInvoice,
+} from './nfse.js';
 import { sefazEndpoints, sefazEnvironment, UF_CODES } from './sefaz-config.js';
-import { ClientCertificate, postSoap } from './soap.js';
+import { ClientCertificate, httpsCall, postSoap } from './soap.js';
 
 const TICK_MS = 60_000;
 // Uma rodada busca até 10 páginas (500 documentos) por filial; o resto fica para o minuto seguinte.
 const MAX_PAGES = 10;
 const HOUR = 60;
+// Pausa entre chamadas seguidas ao ADN, como fazem os clientes conhecidos da API.
+const ADN_PAUSE_MS = 1000;
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 interface SealedCertificate {
   company_id: string;
@@ -37,6 +48,12 @@ interface ClaimedBranch extends SealedCertificate {
   branch_id: string;
   cnpj: string;
   state: string | null;
+  last_nsu: string;
+}
+
+interface ClaimedNfseBranch extends SealedCertificate {
+  branch_id: string;
+  cnpj: string;
   last_nsu: string;
 }
 
@@ -93,6 +110,7 @@ export class DfeService implements OnApplicationBootstrap, OnModuleDestroy {
       await runWithContext({ traceId: uuidv7() }, async () => {
         await this.syncBranches();
         await this.runQueries();
+        await this.syncServiceInvoices();
       });
     } catch (error) {
       this.logger.pino.error({ context: 'DfeService', err: error }, 'rodada do download falhou');
@@ -229,6 +247,84 @@ export class DfeService implements OnApplicationBootstrap, OnModuleDestroy {
         }
       } catch (error) {
         this.logger.pino.warn({ context: 'DfeService', branchId: query.branch_id, err: error }, 'consulta por chave falhou');
+      }
+    }
+  }
+
+  /** NFS-e pelo Ambiente de Dados Nacional: mesma chave, mesma rotina, NSU próprio. */
+  async syncServiceInvoices(): Promise<void> {
+    const branches = await this.worker(async (client) =>
+      (await client.query<ClaimedNfseBranch>('SELECT * FROM app.dfe_claim_nfse_branches(10)')).rows,
+    );
+    for (const branch of branches) {
+      await this.syncServiceBranch(branch);
+    }
+  }
+
+  private async syncServiceBranch(branch: ClaimedNfseBranch): Promise<void> {
+    const finish = (result: Record<string, unknown>) =>
+      this.worker((client) => client.query('SELECT app.dfe_finish_nfse_branch($1, $2::jsonb)', [branch.branch_id, JSON.stringify(result)]));
+    let lastNsu = branch.last_nsu;
+    try {
+      const certificate = certificateOf(branch);
+      const endpoints = sefazEndpoints();
+      for (let page = 0; page < MAX_PAGES; page += 1) {
+        if (page > 0) await pause(ADN_PAUSE_MS);
+        const response = await httpsCall(
+          nfseDistributionUrl(endpoints.nfse, lastNsu, branch.cnpj),
+          { method: 'GET', headers: { Accept: 'application/json' } },
+          certificate,
+          endpoints.ca,
+        );
+        const result = parseNfseDistribution(response.status, response.body);
+        for (const skipped of result.skipped) {
+          this.logger.pino.warn({ context: 'DfeService', branchId: branch.branch_id, nsu: skipped.nsu, reason: skipped.reason }, 'documento do ADN ignorado');
+        }
+        if (result.rejected) {
+          await finish({ status: result.status, message: result.message, lastNsu, error: 'FA948', waitMinutes: HOUR });
+          return;
+        }
+        await this.handleServiceDocuments(branch.branch_id, result.documents);
+        const advanced = result.lastNsu !== null && result.lastNsu > lastNsu;
+        if (advanced) lastNsu = result.lastNsu as string;
+        // Lote cheio: pode haver mais. Lote menor, vazio ou sem avanço: acabou, volta em uma hora.
+        if (advanced && result.documents.length + result.skipped.length >= NFSE_BATCH_SIZE) continue;
+        await finish({ status: result.status, message: result.message, lastNsu, waitMinutes: HOUR });
+        return;
+      }
+      await finish({ status: 'DOCUMENTOS_LOCALIZADOS', message: null, lastNsu, waitMinutes: 1 });
+    } catch (error) {
+      this.logger.pino.warn({ context: 'DfeService', branchId: branch.branch_id, err: error }, 'download de NFS-e da filial falhou');
+      await finish({ lastNsu, error: codeOf(error), message: null, waitMinutes: 15 }).catch(() => undefined);
+    }
+  }
+
+  /** Cada documento em transação própria; processar de novo é inofensivo. */
+  private async handleServiceDocuments(branchId: string, documents: NfseDocument[]): Promise<void> {
+    for (const document of documents) {
+      try {
+        const documentId = await this.worker(async (client) => {
+          const { rows } = await client.query<{ id: string }>(
+            'SELECT app.dfe_store_nfse_document($1, $2, $3, $4, $5) AS id',
+            [branchId, document.nsu, document.type, document.accessKey, document.xml],
+          );
+          return rows[0].id;
+        });
+        if (document.type === 'NFSE') {
+          const data = readServiceInvoice(document.xml);
+          await this.worker((client) =>
+            client.query('SELECT app.nfse_record_invoice($1, $2, $3::jsonb)', [branchId, documentId, JSON.stringify(data)]),
+          );
+        } else if (document.type === 'EVENTO') {
+          const event = readServiceEvent(document.xml, document.accessKey);
+          if (event && event.kind !== 'other') {
+            await this.worker((client) =>
+              client.query('SELECT app.nfse_record_event($1, $2, $3, $4)', [branchId, event.accessKey, event.kind, event.substituteKey]),
+            );
+          }
+        }
+      } catch (error) {
+        this.logger.pino.warn({ context: 'DfeService', branchId, nsu: document.nsu, type: document.type, err: error }, 'documento do ADN não processado');
       }
     }
   }
