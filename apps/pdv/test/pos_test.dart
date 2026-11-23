@@ -193,7 +193,7 @@ void main() {
       cart.add(database.saleProductByCode('7890000000024')!);
       expect(cart.lines[1].quantityMilli, 10000);
       expect(cart.totalCents, 2580 + 2500);
-      expect(() => cart.add(database.saleProductByCode('7890000000031')!), throwsA(isA<PosException>().having((e) => e.code, 'code', 'FA971')));
+      expect(() => cart.add(database.saleProductByCode('7890000000031')!), throwsA(isA<PosException>().having((e) => e.code, 'code', 'FA986')));
       expect(() => cart.add(database.saleProductByCode('7890000000048')!), throwsA(isA<PosException>().having((e) => e.code, 'code', 'FA974')));
     });
 
@@ -374,7 +374,7 @@ void main() {
       expect(controller.cart.isEmpty, isTrue);
     });
 
-    testWidgets('produto desconhecido e controlado avisam com o código do catálogo', (tester) async {
+    testWidgets('produto desconhecido avisa com o código do catálogo; controlado pede a receita', (tester) async {
       await tester.runAsync(() => controller.login('3', '2468'));
       controller.openShift(0);
       await pump(tester);
@@ -383,7 +383,8 @@ void main() {
       expect(find.text('Produto não encontrado.'), findsOneWidget);
       controller.scan('7890000000031');
       await tester.pump();
-      expect(find.textContaining('controlados'), findsOneWidget);
+      expect(find.byKey(const Key('controlled-panel')), findsOneWidget);
+      expect(find.textContaining('é controlado (lista B1)'), findsOneWidget);
       expect(controller.cart.isEmpty, isTrue);
     });
 

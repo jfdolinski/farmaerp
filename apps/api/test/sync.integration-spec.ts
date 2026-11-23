@@ -16,6 +16,8 @@ const DEV_PASSWORD = 'farmaerp-dev-123';
 const BRANCH_CENTRO = '019a0000-0000-7000-8000-000000000005';
 const DIPIRONA = '019a0000-0000-7000-8000-000000000027';
 const DEMO_CUSTOMER = '019a0000-0000-7000-8000-000000000032';
+const CLONAZEPAM = '019a0000-0000-7000-8000-000000000033';
+const CLONAZEPAM_BATCH = '019a0000-0000-7000-8000-000000000036';
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -249,6 +251,57 @@ describe('descida para o PDV contra o banco real', () => {
     expect((await asManager(`/sales/${uuidV7()}`).expect(404)).body).toMatchObject({ code: 'FA006' });
     const asOperator = request(server()).get(`/admin/sales/${saleId}`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(OPERATOR_EMAIL)}`);
     expect((await asOperator.expect(404)).body).toMatchObject({ code: 'FA006' });
+  });
+
+  it('controlado: venda com receita e lote, pendente sem saldo e lista mascarada na retaguarda', async () => {
+    const push = (items: Json[]) =>
+      request(server()).post('/terminals/sync/push').set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`)
+        .send({ items: items.map((item) => { sequence += 1; return { id: uuidV7(), sequence, ...item }; }) });
+    const operatorId = '019a0000-0000-7000-8000-000000000009';
+    const adminId = '019a0000-0000-7000-8000-000000000008';
+    const sessionId = uuidV7();
+    await push([{ kind: 'cash_session_open', payload: { id: sessionId, operator_id: operatorId, opened_at: new Date().toISOString(), opening_float: 50 } }]).expect(200);
+    const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Sao_Paulo' });
+    const complete = {
+      id: uuidV7(), status: 'complete', pharmacist_id: adminId, prescription_type: 'notification_b', prescription_number: 'SP-123456',
+      prescription_date: today, prescriber_name: 'Dra. Fictícia', prescriber_council: 'CRM', prescriber_number: '123456',
+      prescriber_state: 'SP', buyer_name: 'Comprador Fictício', buyer_document_type: 'rg', buyer_document: '123456789',
+      buyer_issuer: 'SSP', buyer_state: 'SP',
+    };
+    const saleOf = (number: number, controlled: Json | null, batchId: string | null) => ({
+      id: uuidV7(), number, cash_session_id: sessionId, operator_id: operatorId, customer_id: null,
+      sold_at: new Date().toISOString(), fiscal_model: '65',
+      items: [{ id: uuidV7(), line: 1, product_id: CLONAZEPAM, quantity: 1, unit_price: 24.5, discount: 0, total: 24.5, batch_id: batchId, controlled }],
+      payments: [{ id: uuidV7(), method: 'cash', amount: 24.5 }],
+      subtotal: 24.5, discount_total: 0, total: 24.5,
+    });
+    const number = Math.floor(Date.now() / 1000) % 900000 + 100001;
+    const sold = saleOf(number, complete, CLONAZEPAM_BATCH);
+    expect((await push([{ kind: 'sale', payload: sold }]).expect(200)).body.results[0]).toMatchObject({ status: 'applied', code: null });
+    const pending = saleOf(number + 1, { id: uuidV7(), status: 'pending', pharmacist_id: adminId, pending_reason: 'Nota de entrada ainda não lançada' }, null);
+    expect((await push([{ kind: 'sale', payload: pending }]).expect(200)).body.results[0]).toMatchObject({ status: 'applied' });
+    const missing = saleOf(number + 2, { ...complete, id: uuidV7(), buyer_document: null }, CLONAZEPAM_BATCH);
+    expect((await push([{ kind: 'sale', payload: missing }]).expect(200)).body.results[0]).toMatchObject({ status: 'conflict', code: 'FA990' });
+
+    const asManager = (path: string) => request(server()).get(`/admin${path}`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(MANAGER_EMAIL)}`);
+    const all = (await asManager('/controlled').expect(200)).body as Json[];
+    const row = all.find((item) => item.sale_id === sold.id);
+    expect(row).toMatchObject({
+      status: 'complete', batch_number: 'CLZ01', prescriber: 'Dra. Fictícia · CRM 123456/SP', buyer_document_masked: '******789',
+      controlled_class: 'B1', pharmacist_name: 'Administrador',
+    });
+    expect(JSON.stringify(all)).not.toContain('123456789');
+    const onlyPending = (await asManager(`/controlled?status=pending&from=${today}&to=${today}`).expect(200)).body as Json[];
+    expect(onlyPending.map((item) => item.sale_id)).toContain(pending.id);
+    expect(onlyPending.every((item) => item.status === 'pending')).toBe(true);
+    expect((await asManager(`/sales/${pending.id}`).expect(200)).body.alerts).toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: 'controlled_pending' })]),
+    );
+    for (const query of ['?status=nada', '?from=ontem', '?to=2026-02-30x']) {
+      expect((await asManager(`/controlled${query}`).expect(422)).body).toMatchObject({ code: 'FA005' });
+    }
+    const asOperator = request(server()).get('/admin/controlled').set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(OPERATOR_EMAIL)}`);
+    expect((await asOperator.expect(200)).body).toEqual([]);
   });
 
   it('estoque das outras filiais e tempo sem internet para a venda sem estoque', async () => {

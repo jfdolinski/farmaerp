@@ -1168,4 +1168,40 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Tente de novo quando a conexão voltar.',
     retryable: false,
   ),
+  'FA985': ErrorCatalogEntry(
+    code: 'FA985',
+    message: 'Esta pessoa não pode liberar a venda de controlados.',
+    action: 'Chame o farmacêutico responsável para digitar o código e o PIN.',
+    retryable: false,
+  ),
+  'FA986': ErrorCatalogEntry(
+    code: 'FA986',
+    message: 'Faltam dados obrigatórios da receita, do prescritor ou do comprador.',
+    action: 'Preencha os campos marcados e confira o tipo de receita.',
+    retryable: false,
+  ),
+  'FA987': ErrorCatalogEntry(
+    code: 'FA987',
+    message: 'A receita está vencida ou com data no futuro.',
+    action: 'Confira a data da receita. Receita vencida não pode ser aviada.',
+    retryable: false,
+  ),
+  'FA988': ErrorCatalogEntry(
+    code: 'FA988',
+    message: 'O lote escolhido não tem saldo para essa quantidade.',
+    action: 'Escolha outro lote ou diminua a quantidade.',
+    retryable: false,
+  ),
+  'FA989': ErrorCatalogEntry(
+    code: 'FA989',
+    message: 'Há lote com saldo para este controlado.',
+    action: 'Escolha o lote e preencha a receita; a liberação pendente é só para estoque negativo.',
+    retryable: false,
+  ),
+  'FA990': ErrorCatalogEntry(
+    code: 'FA990',
+    message: 'Os dados do controlado vendido estão incompletos ou inválidos.',
+    action: 'A venda fica nos conflitos de sincronização. Atualize o PDV e confira com o farmacêutico.',
+    retryable: false,
+  ),
 };

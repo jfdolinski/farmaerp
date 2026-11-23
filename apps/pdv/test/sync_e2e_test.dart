@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:farmaerp_pdv/customers/customer_service.dart';
 import 'package:farmaerp_pdv/local/local_database.dart';
 import 'package:farmaerp_pdv/pos/cart.dart';
+import 'package:farmaerp_pdv/pos/controlled.dart';
 import 'package:farmaerp_pdv/pos/discount.dart';
 import 'package:farmaerp_pdv/pos/pos_auth.dart';
 import 'package:farmaerp_pdv/pos/pos_controller.dart';
@@ -163,6 +164,45 @@ void main() {
           (jsonDecode(releases.body) as List).cast<Map<String, dynamic>>().where((row) => row['reason'] == 'Teste E2E'),
           hasLength(1),
         );
+
+        // Controlado do seed (Clonazepam, lista B1): receita, comprador e lote; o administrador
+        // (código 1) tem a permissão de liberar. Na central, a lista mostra o documento mascarado.
+        pos.scan('7890000000055');
+        expect(pos.pendingControlled, isNotNull);
+        final batches = pos.controlledBatches(pos.pendingControlled!.product);
+        expect(batches.first.number, 'CLZ01');
+        final today = DateTime.now();
+        final released = await pos.releaseControlled(
+          form: PrescriptionForm(
+            type: PrescriptionType.notificationB,
+            number: 'E2E-001',
+            date: today,
+            prescriberName: 'Dra. Fictícia E2E',
+            prescriberNumber: '654321',
+            prescriberState: 'SP',
+            buyerName: 'Comprador Fictício E2E',
+            buyerDocument: '987654321',
+            buyerIssuer: 'SSP',
+            buyerState: 'SP',
+          ),
+          batchId: batches.first.id,
+          quantityMilli: 1000,
+          code: '1',
+          pin: '2580',
+        );
+        expect(released, isTrue, reason: pos.notice?.message);
+        pos.startPayment();
+        pos.addPayment(Payment(method: PaymentMethod.pix, amountCents: pos.cart.totalCents));
+        await pos.finish();
+        final controlledCode = pos.lastSale!.code;
+        await sync.push(token.value);
+        expect(database.debugSelect("SELECT result FROM outbox WHERE kind = 'sale' ORDER BY sequence DESC LIMIT 1").single['result'], 'applied');
+        final controlled = await http.get(Uri.parse('$base/admin/controlled'), headers: {'Authorization': 'Bearer $session'});
+        final dispensed = (jsonDecode(controlled.body) as List).cast<Map<String, dynamic>>().where((row) => row['sale_code'] == controlledCode).single;
+        expect(dispensed['status'], 'complete');
+        expect(dispensed['batch_number'], 'CLZ01');
+        expect(dispensed['buyer_document_masked'], '******321');
+        expect(controlled.body, isNot(contains('987654321')));
       } finally {
         await admin('/admin/products/$_dipirona/prices', {'branchId': _branch, 'price': null}, token: session);
         await admin('/admin/terminals/$terminalId/revoke', {'reason': 'Fim do teste E2E'}, token: session);

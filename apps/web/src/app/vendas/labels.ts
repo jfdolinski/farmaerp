@@ -21,6 +21,11 @@ export const ALERT_LABELS: Record<string, string> = {
   product_status: "Produto não estava ativo na filial",
   agreement_link: "Convênio sem o cliente vinculado",
   offline_zero_stock: "Vendido sem estoque com o PDV sem internet",
+  controlled_missing: "Controlado vendido sem os dados da receita",
+  controlled_release: "Controlado liberado por quem não tinha a permissão",
+  controlled_pending: "Controlado vendido com estoque negativo, pendente de dados para o SNGPC",
+  prescription_expired: "Receita vencida ou com data no futuro",
+  prescription_type: "Tipo de receita diferente do exigido pela lista do produto",
 };
 
 export const brl = (value: number | string | null) =>

@@ -5,6 +5,7 @@ import '../core/error_display.dart';
 import 'cart.dart';
 import 'money.dart';
 import 'pos_controller.dart';
+import 'controlled_dialog.dart';
 import 'pos_dialogs.dart';
 
 /// Caixa: entrada, abertura do turno e venda. Tudo funciona sem internet.
@@ -381,6 +382,8 @@ class _ItemsPanel extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
+        if (controller.pendingControlled != null)
+          ControlledPanel(controller: controller, pending: controller.pendingControlled!),
         if (controller.pendingZeroStock != null)
           ZeroStockPanel(
             controller: controller,
