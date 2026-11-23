@@ -88,6 +88,9 @@ Future<void> main() async {
     return;
   }
 
+  // Avisos e erros sobem para a central pela outbox.
+  logger.onEntry = (entry) => database.enqueueLog(entry, now: DateTime.now());
+
   final controller = TerminalController(
     api: api,
     store: store,

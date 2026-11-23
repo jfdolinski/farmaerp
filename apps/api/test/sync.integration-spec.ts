@@ -1,7 +1,7 @@
 // Descida para o PDV contra o banco real: terminal pareado de verdade, carga e incremental.
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { generateKeyPairSync, randomInt, sign } from 'node:crypto';
+import { generateKeyPairSync, randomBytes, randomInt, sign } from 'node:crypto';
 import { Writable } from 'node:stream';
 import request from 'supertest';
 import { App } from 'supertest/types.js';
@@ -10,15 +10,38 @@ import { AppLogger, createPinoLogger } from './../src/observability/app-logger.j
 import { challengeMessage, pairingProofMessage } from './../src/terminals/terminal-crypto.js';
 
 const ADMIN_EMAIL = 'admin@farmaerp.test';
+const MANAGER_EMAIL = 'gerente@farmaerp.test';
+const OPERATOR_EMAIL = 'operador@farmaerp.test';
 const DEV_PASSWORD = 'farmaerp-dev-123';
 const BRANCH_CENTRO = '019a0000-0000-7000-8000-000000000005';
 const DIPIRONA = '019a0000-0000-7000-8000-000000000027';
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
+// UUID v7, como o PDV gera.
+let clockMs = Date.now();
+function uuidV7() {
+  clockMs += 1;
+  const bytes = randomBytes(16);
+  bytes.writeUIntBE(clockMs, 0, 6);
+  bytes[6] = (bytes[6] & 0x0f) | 0x70;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+let sequence = 0;
+const logItem = (payload: Json = {}) => {
+  sequence += 1;
+  return {
+    id: uuidV7(), sequence, kind: 'log',
+    payload: { level: 'warn', time: new Date().toISOString(), msg: 'Falha de conexão com a API', error_code: 'FA001', ...payload },
+  };
+};
+
 describe('descida para o PDV contra o banco real', () => {
   let app: INestApplication<App>;
   let session: string;
+  const sessions = new Map<string, string>();
   let terminalId: string;
   let token: string;
   let ip: string;
@@ -58,10 +81,13 @@ describe('descida para o PDV contra o banco real', () => {
     await app.init();
     ip = `10.${randomInt(255)}.${randomInt(255)}.${randomInt(255)}`;
 
-    session = (
-      (await request(server()).post('/auth/login').set('X-Forwarded-For', ip)
-        .send({ email: ADMIN_EMAIL, password: DEV_PASSWORD }).expect(200)).body as Json
-    ).token as string;
+    for (const email of [ADMIN_EMAIL, MANAGER_EMAIL, OPERATOR_EMAIL]) {
+      sessions.set(email, (
+        (await request(server()).post('/auth/login').set('X-Forwarded-For', ip)
+          .send({ email, password: DEV_PASSWORD }).expect(200)).body as Json
+      ).token as string);
+    }
+    session = sessions.get(ADMIN_EMAIL)!;
 
     // Terminal de verdade: chave no aparelho, código, aprovação e token.
     const { publicKey, privateKey } = generateKeyPairSync('ed25519');
@@ -117,6 +143,41 @@ describe('descida para o PDV contra o banco real', () => {
 
     await admin('post', `/products/${DIPIRONA}/prices`).send({ branchId: BRANCH_CENTRO, price: null }).expect(201);
     expect((await pullAll(step.until)).find('product', DIPIRONA)?.data).toMatchObject({ price: 12.9 });
+  });
+
+  it('subida: aplica, não duplica e transforma o recusado em conflito visível', async () => {
+    const push = (body: Json) =>
+      request(server()).post('/terminals/sync/push').set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`).send(body);
+    const first = logItem();
+    const bad = logItem({ level: 'info' });
+    expect((await push({ items: [first, bad] }).expect(200)).body).toEqual({
+      results: [
+        { id: first.id, status: 'applied', code: null },
+        { id: bad.id, status: 'conflict', code: 'FA958' },
+      ],
+    });
+    expect((await push({ items: [first] }).expect(200)).body.results[0]).toMatchObject({ status: 'duplicate', result: 'applied' });
+    for (const body of [{}, { items: 'x' }, { items: [] }, { items: Array.from({ length: 501 }, () => logItem()) }, { items: [{ id: 'x' }] }]) {
+      expect((await push(body).expect(422)).body).toMatchObject({ code: 'FA956' });
+    }
+
+    const conflicts = (email: string, query = '') =>
+      request(server()).get(`/admin/sync/conflicts${query}`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(email)}`);
+    const mine = ((await conflicts(MANAGER_EMAIL).expect(200)).body as Json[]).find((row) => row.payload.level === 'info' && row.terminal_id === terminalId);
+    expect(mine).toMatchObject({ error_code: 'FA958', status: 'open', kind: 'log', can_resolve: true, branch_id: BRANCH_CENTRO });
+    expect((await conflicts(OPERATOR_EMAIL).expect(200)).body).toEqual([]);
+    expect((await conflicts(MANAGER_EMAIL, '?status=outro').expect(422)).body).toMatchObject({ code: 'FA005' });
+
+    const resolve = (email: string, note: unknown) =>
+      request(server()).post(`/admin/sync/conflicts/${mine!.id}/resolve`).set('X-Forwarded-For', ip)
+        .set('Authorization', `Bearer ${sessions.get(email)}`).send({ note });
+    expect((await resolve(OPERATOR_EMAIL, 'ok').expect(404)).body).toMatchObject({ code: 'FA006' });
+    expect((await resolve(MANAGER_EMAIL, ' ').expect(422)).body).toMatchObject({ code: 'FA302' });
+    expect((await resolve(MANAGER_EMAIL, 12).expect(422)).body).toMatchObject({ code: 'FA005' });
+    await resolve(MANAGER_EMAIL, 'PDV antigo, atualizado.').expect(200);
+    expect((await resolve(MANAGER_EMAIL, 'De novo').expect(409)).body).toMatchObject({ code: 'FA960' });
+    const resolved = ((await conflicts(MANAGER_EMAIL, '?status=resolved').expect(200)).body as Json[]).find((row) => row.id === mine!.id);
+    expect(resolved).toMatchObject({ status: 'resolved', resolution_note: 'PDV antigo, atualizado.', resolved_by_name: expect.any(String) });
   });
 
   it('recusa pedido fora do formato, sem token e de terminal bloqueado', async () => {

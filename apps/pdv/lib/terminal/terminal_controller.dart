@@ -57,7 +57,7 @@ class TerminalController extends ChangeNotifier {
   final String deviceName;
   final String appVersion;
 
-  /// Descida para o banco local. Roda depois de cada sinal de vida aceito.
+  /// Subida da outbox e descida para o banco local. Rodam depois de cada sinal de vida aceito.
   final SyncService? sync;
   final LocalLogger? logger;
   final Duration pollInterval;
@@ -277,6 +277,7 @@ class TerminalController extends ChangeNotifier {
       accessToken: token.value,
       appVersion: appVersion,
       lastSyncAt: sync?.lastPullAt,
+      outboxPending: sync?.outboxPending,
     );
     if (number != null && number != _terminalNumber) {
       _terminalNumber = number;
@@ -287,7 +288,7 @@ class TerminalController extends ChangeNotifier {
     }
     await _rememberStatus('active');
     _setPhase(TerminalPhase.ready);
-    await sync?.pull(token.value);
+    await sync?.run(token.value);
   }
 
   Future<AccessToken> _validToken() async {

@@ -71,6 +71,13 @@ abstract class TerminalApi {
     required String accessToken,
     required String appVersion,
     DateTime? lastSyncAt,
+    int? outboxPending,
+  });
+
+  /// Sobe um pacote da outbox, em ordem.
+  Future<List<PushResult>> push({
+    required String accessToken,
+    required List<OutboxItem> items,
   });
 
   /// Um pacote da descida. Sem cursor, a carga inteira.
@@ -216,12 +223,31 @@ class HttpTerminalApi implements TerminalApi {
     required String accessToken,
     required String appVersion,
     DateTime? lastSyncAt,
+    int? outboxPending,
   }) async {
     final json = await _post('/terminals/heartbeat', {
       'appVersion': appVersion,
       'lastSyncAt': ?lastSyncAt?.toUtc().toIso8601String(),
+      'outboxPending': ?outboxPending,
     }, accessToken: accessToken);
     return json['terminalNumber'] as int?;
+  }
+
+  @override
+  Future<List<PushResult>> push({
+    required String accessToken,
+    required List<OutboxItem> items,
+  }) async {
+    final json = await _post(
+      '/terminals/sync/push',
+      {'items': [for (final item in items) item.toJson()]},
+      accessToken: accessToken,
+      requestTimeout: pullTimeout,
+    );
+    return (json['results'] as List)
+        .cast<Map<String, dynamic>>()
+        .map(PushResult.fromJson)
+        .toList();
   }
 
   @override

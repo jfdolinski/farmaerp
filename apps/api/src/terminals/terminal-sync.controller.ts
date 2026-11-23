@@ -21,6 +21,9 @@ const gzipAsync = promisify(gzip);
 /** Itens por pacote: produto com tributação e códigos fica perto de 1 KB. */
 export const PULL_PAGE_SIZE = 1000;
 
+/** Itens por subida; o PDV também limita o pacote pelo tamanho. */
+export const PUSH_MAX_ITEMS = 500;
+
 /** Campo de texto curto e opcional da descida; o banco confere o formato. */
 function syncToken(body: Record<string, unknown>, field: string): string | null {
   const value = body[field];
@@ -69,5 +72,24 @@ export class TerminalSyncController {
     }
     res.setHeader('Content-Length', String(json.length));
     res.status(200).end(json);
+  }
+
+  /**
+   * Subida da outbox, em ordem. Cada item volta como applied, conflict (com o código do
+   * catálogo) ou duplicate. Pacote fora do formato é recusado inteiro (FA956).
+   */
+  @Post('push')
+  @HttpCode(200)
+  async push(@RequestBody() rawBody: unknown) {
+    const items = asBody(rawBody).items;
+    if (!Array.isArray(items) || items.length === 0 || items.length > PUSH_MAX_ITEMS) {
+      throw new AppError('FA956');
+    }
+    return this.database.withContext(async (client) => {
+      const { rows } = await client.query<{ result: unknown }>('SELECT app.pdv_push($1::jsonb) AS result', [
+        JSON.stringify(items),
+      ]);
+      return rows[0].result;
+    });
   }
 }

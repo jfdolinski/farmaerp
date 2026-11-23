@@ -79,6 +79,21 @@ void main() {
         await admin('/admin/products/$_dipirona/prices', {'branchId': _branch, 'price': 10.75, 'reason': 'Teste E2E'}, token: session);
         await sync.pull(token.value);
         expect(database.productByBarcode('7890000000017')?.priceCents, 1075);
+
+        // Subida: um aviso do PDV chega à central; o reenvio não duplica.
+        database.enqueueLog({
+          'level': 'warn',
+          'time': DateTime.now().toUtc().toIso8601String(),
+          'msg': 'Teste E2E da subida',
+          'error_code': 'FA001',
+          'version': '0.2.0',
+        }, now: DateTime.now());
+        final pending = database.nextOutboxBatch();
+        await sync.push(token.value);
+        expect(database.outboxPending, 0);
+        expect(database.debugSelect('SELECT result FROM outbox').single['result'], 'applied');
+        final again = await client.push(accessToken: token.value, items: pending);
+        expect(again.single.status, 'duplicate');
       } finally {
         await admin('/admin/products/$_dipirona/prices', {'branchId': _branch, 'price': null}, token: session);
         await admin('/admin/terminals/$terminalId/revoke', {'reason': 'Fim do teste E2E'}, token: session);

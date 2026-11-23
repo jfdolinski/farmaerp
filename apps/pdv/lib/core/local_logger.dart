@@ -66,6 +66,10 @@ class LocalLogger {
 
   static final _fileName = RegExp(r'^pdv-\d{8}-\d{4}\.jsonl$');
 
+  /// Recebe cada registro já sem dados sensíveis (o PDV põe avisos e erros na outbox).
+  /// Uma falha aqui é ignorada: o log nunca atrapalha o caixa.
+  void Function(Map<String, Object?> entry)? onEntry;
+
   File? _current;
   String? _currentDay;
   int _sequence = 0;
@@ -107,8 +111,7 @@ class LocalLogger {
   }) {
     try {
       final now = _clock();
-      final line = jsonEncode(
-        sanitizeLogValue({
+      final entry = sanitizeLogValue({
           ...?fields,
           'level': level.name,
           'time': now.toUtc().toIso8601String(),
@@ -116,8 +119,13 @@ class LocalLogger {
           'version': version,
           'trace_id': ?traceId,
           'msg': message,
-        }),
-      );
+        }) as Map<String, Object?>;
+      final line = jsonEncode(entry);
+      try {
+        onEntry?.call(entry);
+      } catch (_) {
+        // A fila de envio falhou: o registro continua no arquivo local.
+      }
       _fileFor(now, line.length + 1).writeAsStringSync(
         '$line\n',
         mode: FileMode.append,

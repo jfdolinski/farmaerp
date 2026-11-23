@@ -207,7 +207,75 @@ const _migrations = <String>[
   ) STRICT;
   CREATE INDEX stock_batch_product_idx ON stock_batch (product_id);
   ''',
+  // Outbox: o que sobe para a central, gravado na mesma transação da operação local.
+  '''
+  CREATE TABLE outbox (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    sequence INTEGER NOT NULL UNIQUE CHECK (sequence > 0),
+    kind TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    sent_at TEXT,
+    result TEXT CHECK (result IN ('applied', 'conflict')),
+    result_code TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT,
+    version INTEGER NOT NULL DEFAULT 1,
+    updated_by BLOB,
+    trace_id BLOB,
+    CHECK ((sent_at IS NULL) = (result IS NULL))
+  ) STRICT;
+  CREATE INDEX outbox_pending_idx ON outbox (sequence) WHERE sent_at IS NULL;
+  ''',
 ];
+
+/// Logs que esperam envio além deste número não entram na outbox: ficam só no arquivo local.
+const maxPendingLogs = 5000;
+
+/// Item da outbox pronto para subir.
+class OutboxItem {
+  const OutboxItem({
+    required this.id,
+    required this.sequence,
+    required this.kind,
+    required this.payload,
+  });
+
+  final String id;
+  final int sequence;
+  final String kind;
+  final Map<String, dynamic> payload;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'sequence': sequence,
+    'kind': kind,
+    'payload': payload,
+  };
+}
+
+/// Resposta da central para um item.
+class PushResult {
+  const PushResult({required this.id, required this.status, this.result, this.code});
+
+  factory PushResult.fromJson(Map<String, dynamic> json) => PushResult(
+    id: json['id'] as String,
+    status: json['status'] as String,
+    result: json['result'] as String?,
+    code: json['code'] as String?,
+  );
+
+  final String id;
+
+  /// applied, conflict ou duplicate (já recebido; [result] diz como ficou).
+  final String status;
+  final String? result;
+  final String? code;
+
+  /// Como o item ficou na central.
+  String get outcome => status == 'duplicate' ? (result ?? 'applied') : status;
+}
 
 /// Banco local do PDV: cópia enxuta da filial, criptografada no disco.
 class LocalDatabase {
@@ -291,7 +359,12 @@ class LocalDatabase {
 
   void close() => _db.close();
 
+  /// Executa uma operação local junto com a outbox: ou grava tudo, ou nada.
+  T transaction<T>(T Function() action) => _transaction(action);
+
   T _transaction<T>(T Function() action) {
+    // Já dentro de uma transação (operação que também grava na outbox): segue nela.
+    if (!_db.autocommit) return action();
     _db.execute('BEGIN IMMEDIATE');
     try {
       final result = action();
@@ -514,6 +587,124 @@ class LocalDatabase {
       );
     }
   }
+
+  /// Acrescenta um item na outbox. Chamado dentro de [transaction], fica na mesma transação.
+  String enqueue(
+    String kind,
+    Map<String, Object?> payload, {
+    required DateTime now,
+    String? traceId,
+  }) => _transaction(() {
+    final id = const Uuid().v7();
+    final next = _db.select('SELECT COALESCE(max(sequence), 0) + 1 AS n FROM outbox').first['n'] as int;
+    final stamp = now.toUtc().toIso8601String();
+    _db.execute(
+      'INSERT INTO outbox (id, sequence, kind, payload, created_at, updated_at, trace_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [uuidBytes(id), next, kind, jsonEncode(payload), stamp, stamp, traceId == null ? null : uuidBytes(traceId)],
+    );
+    return id;
+  });
+
+  /// Aviso ou erro do log local, para subir. Sem espaço na fila, fica só no arquivo.
+  void enqueueLog(Map<String, Object?> entry, {required DateTime now}) {
+    final level = entry['level'];
+    if (level != 'warn' && level != 'error') return;
+    final pending = _db.select(
+      "SELECT count(*) AS n FROM outbox WHERE sent_at IS NULL AND kind = 'log'",
+    ).first['n'] as int;
+    if (pending >= maxPendingLogs) return;
+    const standard = {'level', 'time', 'msg', 'trace_id', 'version', 'service', 'error_code'};
+    String? text(Object? value, int max) {
+      if (value == null) return null;
+      final string = value.toString();
+      return string.length > max ? string.substring(0, max) : string;
+    }
+
+    final fields = <String, Object?>{
+      for (final item in entry.entries)
+        if (!standard.contains(item.key))
+          item.key: item.value is String ? text(item.value, 2000) : item.value,
+    };
+    var fieldsJson = jsonEncode(fields);
+    // A central aceita até 8 KB de campos; o excesso fica só no arquivo local.
+    if (utf8.encode(fieldsJson).length > 8000) {
+      fieldsJson = jsonEncode({'truncated': true, 'keys': fields.keys.take(50).toList()});
+    }
+    final rawTrace = entry['trace_id'];
+    final traceId = rawTrace is String && Uuid.isValidUUID(fromString: rawTrace) ? rawTrace : null;
+    final rawCode = entry['error_code'];
+    final errorCode = rawCode is String && RegExp(r'^FA\d{3}$').hasMatch(rawCode) ? rawCode : null;
+    final time = entry['time'];
+    enqueue(
+      'log',
+      {
+        'level': level,
+        'time': time is String ? time : now.toUtc().toIso8601String(),
+        'msg': text(entry['msg'], 500) ?? '(sem mensagem)',
+        'error_code': ?errorCode,
+        'trace_id': ?traceId,
+        'version': ?text(entry['version'], 50),
+        'fields': jsonDecode(fieldsJson),
+      },
+      now: now,
+      traceId: traceId,
+    );
+  }
+
+  /// Quantos itens esperam envio (vai no sinal de vida).
+  int get outboxPending =>
+      _db.select('SELECT count(*) AS n FROM outbox WHERE sent_at IS NULL').first['n'] as int;
+
+  /// Próximo pacote, em ordem, limitado por quantidade e por tamanho.
+  List<OutboxItem> nextOutboxBatch({int maxItems = 100, int maxBytes = 64 * 1024}) {
+    final rows = _db.select(
+      'SELECT id, sequence, kind, payload FROM outbox WHERE sent_at IS NULL ORDER BY sequence LIMIT ?',
+      [maxItems],
+    );
+    final batch = <OutboxItem>[];
+    var bytes = 0;
+    for (final row in rows) {
+      final payload = row['payload'] as String;
+      bytes += utf8.encode(payload).length + 120;
+      if (batch.isNotEmpty && bytes > maxBytes) break;
+      batch.add(
+        OutboxItem(
+          id: uuidText(row['id'] as List<int>),
+          sequence: row['sequence'] as int,
+          kind: row['kind'] as String,
+          payload: jsonDecode(payload) as Map<String, dynamic>,
+        ),
+      );
+    }
+    return batch;
+  }
+
+  /// Grava a resposta da central. Item sem resposta continua na fila.
+  void markSent(List<OutboxItem> sent, List<PushResult> results, {required DateTime now}) =>
+      _transaction(() {
+        final stamp = now.toUtc().toIso8601String();
+        final byId = {for (final result in results) result.id: result};
+        for (final item in sent) {
+          final result = byId[item.id];
+          if (result == null) {
+            _db.execute(
+              'UPDATE outbox SET attempts = attempts + 1, updated_at = ?, version = version + 1 WHERE id = ?',
+              [stamp, uuidBytes(item.id)],
+            );
+            continue;
+          }
+          _db.execute(
+            'UPDATE outbox SET sent_at = ?, result = ?, result_code = ?, attempts = attempts + 1, '
+            'updated_at = ?, version = version + 1 WHERE id = ?',
+            [stamp, result.outcome, result.code, stamp, uuidBytes(item.id)],
+          );
+        }
+        // Logs já entregues saem da fila local depois de 7 dias; o registro fica na central.
+        _db.execute(
+          "DELETE FROM outbox WHERE kind = 'log' AND sent_at IS NOT NULL AND sent_at < ?",
+          [now.toUtc().subtract(const Duration(days: 7)).toIso8601String()],
+        );
+      });
 
   /// Produto pela leitura do código de barras.
   LocalProduct? productByBarcode(String code) {

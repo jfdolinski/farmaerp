@@ -42,6 +42,11 @@ class FakeApi implements TerminalApi {
   String? lastPublicKey;
   DateTime tokenExpiresAt = DateTime(2030);
   DateTime? lastSyncAt;
+  int? outboxPending;
+
+  /// Respostas da subida: lista de PushResult ou exceção. Vazia: tudo aplicado.
+  final pushResponses = <Object>[];
+  final pushCalls = <List<OutboxItem>>[];
 
   /// Respostas da descida, em ordem: PullPage ou exceção. Vazia: nada mudou.
   final pullResponses = <Object>[];
@@ -101,12 +106,29 @@ class FakeApi implements TerminalApi {
     required String accessToken,
     required String appVersion,
     DateTime? lastSyncAt,
+    int? outboxPending,
   }) async {
     _maybeFail();
     if (heartbeatFailure != null) throw heartbeatFailure!;
     heartbeats += 1;
     this.lastSyncAt = lastSyncAt;
+    this.outboxPending = outboxPending;
     return terminalNumber;
+  }
+
+  @override
+  Future<List<PushResult>> push({
+    required String accessToken,
+    required List<OutboxItem> items,
+  }) async {
+    _maybeFail();
+    pushCalls.add(items);
+    if (pushResponses.isEmpty) {
+      return [for (final item in items) PushResult(id: item.id, status: 'applied')];
+    }
+    final next = pushResponses.removeAt(0);
+    if (next is List<PushResult>) return next;
+    throw next;
   }
 
   @override

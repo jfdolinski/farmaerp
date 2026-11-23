@@ -228,7 +228,10 @@
       "role_limit_id_uuid_v7_check",
       "supervisor_release_id_uuid_v7_check",
       "catalog_product_image_id_uuid_v7_check",
-      "sync_change_id_uuid_v7_check"
+      "sync_change_id_uuid_v7_check",
+      "sync_receipt_id_uuid_v7_check",
+      "sync_conflict_id_uuid_v7_check",
+      "terminal_log_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -1838,7 +1841,10 @@
     "dbConstraints": [
       "sync_change_entity_check",
       "sync_change_scope_check",
-      "sync_change_key"
+      "sync_change_key",
+      "sync_receipt_kind_check",
+      "sync_receipt_sequence_check",
+      "sync_receipt_status_check"
     ]
   },
   "FA957": {
@@ -1848,5 +1854,41 @@
     "severity": "error",
     "retryable": true,
     "dbConstraints": []
+  },
+  "FA958": {
+    "message": "O registro enviado pelo terminal é inválido.",
+    "action": "Atualize o PDV. O registro fica nos conflitos de sincronização, na retaguarda.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "terminal_log_level_check",
+      "terminal_log_message_check",
+      "terminal_log_error_code_check",
+      "terminal_log_app_version_check",
+      "terminal_log_fields_check"
+    ]
+  },
+  "FA959": {
+    "message": "O terminal enviou um tipo de registro desconhecido.",
+    "action": "Atualize a API ou o PDV. O registro fica nos conflitos de sincronização, na retaguarda.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA960": {
+    "message": "Não foi possível registrar a solução do conflito.",
+    "action": "Atualize a página e confira a situação do conflito. A explicação aceita até 500 caracteres.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "sync_conflict_error_code_check",
+      "sync_conflict_status_check",
+      "sync_conflict_note_check",
+      "sync_conflict_resolution_check",
+      "sync_conflict_receipt_key"
+    ]
   }
 }

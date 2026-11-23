@@ -123,6 +123,15 @@ O aparelho guarda uma chave Ed25519, responde a um desafio assinado e recebe um 
 - **Formato:** `app.pdv_sync_format()` muda quando o que desce muda de forma; o PDV então refaz a carga inteira e limpa o que não veio.
 - **Teste de ponta a ponta:** com a API local no ar, `PDV_E2E_API=http://localhost:3001 flutter test test/sync_e2e_test.dart` dentro de `apps/pdv`.
 
+**Subida (PDV → central)**
+
+- **Outbox:** tabela `outbox` do banco local. A operação grava o item com `LocalDatabase.transaction(...)` + `enqueue(...)`: se a operação falha, o item some junto. Cada item tem UUID v7 e uma sequência local.
+- **Envio:** depois de cada sinal de vida aceito, o PDV sobe a outbox (antes da descida), em ordem, em pacotes de até 100 itens e 64 KB, por `POST /terminals/sync/push`. O sinal de vida informa quantos itens esperam envio.
+- **Na central:** `app.pdv_push` grava um recibo por item em `sync_receipt`, pelo UUID: reenvio responde `duplicate` e não aplica de novo. Item fora do formato recusa o pacote inteiro (FA956), porque é defeito do PDV.
+- **Conflitos:** item que o banco recusa (código do catálogo) vira conflito em `sync_conflict` e a fila segue. Eles aparecem em `/sincronizacao` para quem tem `sync.view`; quem tem `sync.resolve` marca como resolvido, com a explicação. O Gerente recebe as duas permissões.
+- **Primeiro tipo, os logs:** avisos e erros do PDV (nunca `info`), já sem dados pessoais, vão para `terminal_log` com o rastreio da operação. Até 5.000 esperam envio; acima disso ficam só no arquivo local. Logs entregues saem da fila local depois de 7 dias.
+- **Tipos novos:** cada tipo ganha uma procedure no banco, chamada pelo `CASE` de `app.pdv_push`. Tipo desconhecido vira conflito (FA959).
+
 **Variáveis de ambiente da API**
 
 - `TERMINAL_TOKEN_SECRET`: assina desafios e tokens, com ao menos 32 caracteres. Sem ela, a API não inicia.
