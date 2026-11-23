@@ -26,6 +26,7 @@ import { TraceMiddleware } from './observability/trace.middleware.js';
 import { StructureController } from './structure/structure.controller.js';
 import { TerminalAdminController } from './terminals/terminal-admin.controller.js';
 import { TerminalDeviceController } from './terminals/terminal-device.controller.js';
+import { TerminalSyncController } from './terminals/terminal-sync.controller.js';
 import { TerminalGuard } from './terminals/terminal.guard.js';
 
 @Module({
@@ -51,6 +52,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     FiscalController,
     StructureController,
     TerminalDeviceController,
+    TerminalSyncController,
     TerminalAdminController,
   ],
   providers: [

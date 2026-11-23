@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:farmaerp_pdv/core/secret_store.dart';
+import 'package:farmaerp_pdv/local/local_database.dart';
 import 'package:farmaerp_pdv/terminal/terminal_api.dart';
 import 'package:farmaerp_pdv/terminal/terminal_controller.dart';
 import 'package:farmaerp_pdv/terminal/terminal_identity.dart';
@@ -40,6 +41,11 @@ class FakeApi implements TerminalApi {
   String? lastKeyStorage;
   String? lastPublicKey;
   DateTime tokenExpiresAt = DateTime(2030);
+  DateTime? lastSyncAt;
+
+  /// Respostas da descida, em ordem: PullPage ou exceção. Vazia: nada mudou.
+  final pullResponses = <Object>[];
+  final pullCalls = <({String? cursor, String? until, String? after, String token})>[];
 
   void _maybeFail() {
     if (failure != null) throw failure!;
@@ -94,11 +100,30 @@ class FakeApi implements TerminalApi {
   Future<int?> heartbeat({
     required String accessToken,
     required String appVersion,
+    DateTime? lastSyncAt,
   }) async {
     _maybeFail();
     if (heartbeatFailure != null) throw heartbeatFailure!;
     heartbeats += 1;
+    this.lastSyncAt = lastSyncAt;
     return terminalNumber;
+  }
+
+  @override
+  Future<PullPage> pull({
+    required String accessToken,
+    String? cursor,
+    String? until,
+    String? after,
+  }) async {
+    _maybeFail();
+    pullCalls.add((cursor: cursor, until: until, after: after, token: accessToken));
+    if (pullResponses.isEmpty) {
+      return PullPage(format: 1, until: until ?? cursor ?? '1', items: const []);
+    }
+    final next = pullResponses.removeAt(0);
+    if (next is PullPage) return next;
+    throw next;
   }
 }
 

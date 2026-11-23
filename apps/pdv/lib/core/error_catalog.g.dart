@@ -1000,4 +1000,16 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Confira as imagens do arquivo do Catálogo: até 20 por produto, sem repetir, em JPEG, PNG ou WebP de até 5 MB.',
     retryable: false,
   ),
+  'FA956': ErrorCatalogEntry(
+    code: 'FA956',
+    message: 'Os dados da sincronização são inválidos.',
+    action: 'Atualize o PDV e tente novamente. Se continuar, informe o código e a referência ao suporte.',
+    retryable: false,
+  ),
+  'FA957': ErrorCatalogEntry(
+    code: 'FA957',
+    message: 'Não foi possível abrir os dados locais do terminal.',
+    action: 'Reinicie o terminal. Se continuar, informe o código e a referência ao suporte.',
+    retryable: true,
+  ),
 };

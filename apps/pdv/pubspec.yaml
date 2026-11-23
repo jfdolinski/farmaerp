@@ -13,6 +13,7 @@ dependencies:
   flutter_secure_storage: ^11.2.0
   http: ^1.6.0
   path_provider: ^2.1.6
+  sqlite3: 3.9.2
   uuid: ^4.6.0
 
 dev_dependencies:
@@ -22,3 +23,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+hooks:
+  user_defines:
+    sqlite3:
+      # SQLite3MultipleCiphers: o banco local fica criptografado (LGPD), sem depender de OpenSSL.
+      source: sqlite3mc

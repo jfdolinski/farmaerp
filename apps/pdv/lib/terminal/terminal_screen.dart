@@ -10,8 +10,9 @@ class TerminalScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final sync = controller.sync;
     return ListenableBuilder(
-      listenable: controller,
+      listenable: Listenable.merge([controller, ?sync]),
       builder: (context, _) => Scaffold(
         body: Center(
           child: ConstrainedBox(
@@ -71,8 +72,15 @@ class TerminalScreen extends StatelessWidget {
           ),
         ];
       case TerminalPhase.ready:
+        final sync = controller.sync;
+        final loaded = sync != null && sync.initialLoadDone;
+        final lastPullAt = sync?.lastPullAt;
         return [
-          const Icon(Icons.check_circle, size: 56, color: Colors.green),
+          Icon(
+            loaded ? Icons.check_circle : Icons.cloud_download,
+            size: 56,
+            color: loaded ? Colors.green : null,
+          ),
           const SizedBox(height: 16),
           _title(context, 'Terminal aprovado'),
           if (controller.terminalNumber != null)
@@ -80,11 +88,20 @@ class TerminalScreen extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 12),
               child: Text('Terminal número ${controller.terminalNumber}'),
             ),
-          const Text(
-            'Aguardando a carga inicial de dados da filial antes de liberar '
-            'as vendas.',
-            textAlign: TextAlign.center,
-          ),
+          if (!loaded) ..._preparing(context),
+          if (loaded) ...[
+            const Text(
+              'Dados da filial prontos neste terminal.',
+              key: Key('store-ready'),
+              textAlign: TextAlign.center,
+            ),
+            if (lastPullAt != null)
+              Text(
+                'Última atualização: ${_time(lastPullAt.toLocal())}',
+                key: const Key('last-sync'),
+                textAlign: TextAlign.center,
+              ),
+          ],
         ];
       case TerminalPhase.blocked:
         return [
@@ -137,6 +154,40 @@ class TerminalScreen extends StatelessWidget {
       ],
     ];
   }
+
+  /// Carga inicial: a venda só é liberada quando ela termina.
+  List<Widget> _preparing(BuildContext context) {
+    final sync = controller.sync;
+    final total = sync?.total;
+    final received = sync?.received ?? 0;
+    final progress = total != null && total > 0
+        ? (received / total).clamp(0.0, 1.0)
+        : null;
+    return [
+      Text(
+        'Preparando a loja',
+        key: const Key('preparing-store'),
+        style: Theme.of(context).textTheme.titleMedium,
+      ),
+      const SizedBox(height: 12),
+      LinearProgressIndicator(key: const Key('load-progress'), value: progress),
+      const SizedBox(height: 12),
+      Text(
+        total != null && total > 0
+            ? 'Recebendo os dados da filial: $received de $total.'
+            : 'Recebendo os dados da filial...',
+        textAlign: TextAlign.center,
+      ),
+      const Text(
+        'As vendas são liberadas quando a carga terminar. Isso só demora '
+        'na primeira vez.',
+        textAlign: TextAlign.center,
+      ),
+    ];
+  }
+
+  String _time(DateTime value) =>
+      '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
 
   Widget _title(BuildContext context, String text) => Padding(
     padding: const EdgeInsets.only(bottom: 12),
