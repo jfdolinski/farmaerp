@@ -24,6 +24,22 @@ const roleBody = (form: FormData) => ({
   permissions: form.getAll("permissions").map(String),
 });
 
+/** Limites de valor do perfil. Campo vazio tira o limite (vira zero). */
+export async function saveRoleLimits(_previous: RoleFormState, form: FormData): Promise<RoleFormState> {
+  const limits = Object.fromEntries(
+    form.getAll("code").map((code) => {
+      // Com vírgula, é o formato brasileiro (1.000,50); sem vírgula, o ponto é o decimal.
+      const raw = text(form, `limit:${String(code)}`);
+      const value = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
+      return [String(code), value === "" ? null : value];
+    }),
+  );
+  const result = await apiFetch(`/admin/roles/${text(form, "id")}/limits`, { method: "PUT", body: { limits } });
+  if (!result.ok) return handleFailure(result.error);
+  refresh();
+  return { done: true };
+}
+
 export async function createRole(
   _previous: RoleFormState,
   form: FormData,

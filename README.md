@@ -162,6 +162,16 @@ O UUID é a identidade do registro. O código humano serve para tela, cupom e at
 3. Na retaguarda, use `can(user, 'modulo.acao')` só para mostrar ou esconder botões.
 4. Acrescente aos testes de `db/tests/permissions.test.mjs`.
 
+### Limites de valor e liberação de supervisor
+
+- **Tipos de limite:** catálogo fixo em `limit_type` (desconto na venda em %, sangria, venda no crediário e perda ou ajuste de estoque em R$). Os de venda e de caixa ficam configuráveis agora e passam a valer no PDV.
+- **Limite por perfil:** `role_limit`, editado em `/perfis`. Quem tem vários perfis na filial fica com o maior (`app.user_limit`). Sem limite configurado, vale zero. O Administrador não tem teto. O Gerente nasce com valores de exemplo (10% de desconto, R$ 1.000 de sangria, R$ 500 de crediário e R$ 500 de perda ou ajuste).
+- **Liberação:** acima do limite, `app.require_value_release` pede um supervisor. A API confere a senha dele (código ou e-mail), com o mesmo bloqueio de cinco erros do login; o banco confere se ele faz a mesma operação na filial, se o limite dele cobre o valor e se não é a mesma pessoa. Fica em `supervisor_release`: quem pediu, quem liberou, o valor, os dois limites, o motivo e a movimentação.
+- **Estoque:** perda, ajuste e inventário passam pelo limite de perda ou ajuste, pelo valor da movimentação ao custo médio da filial. Produto sem custo médio não pede liberação.
+- **Desconto:** `app.discount_check` diz se o desconto passa sozinho, pede liberação ou só passa com `sales.discount_override` (acima do máximo do produto no motor de regras). O PDV usa a partir da Etapa 4.
+- **Auditoria:** `/liberacoes`, com `releases.view` na filial, mostra também as liberações de custo da nota de compra.
+- **Offline:** a liberação sem internet no PDV depende da sincronização de usuários e perfis, na Etapa 3.
+
 ## Produtos
 
 - **Catálogo:** tabelas globais `catalog_*`, sem grupo econômico. A API só lê; quem escreve é `npm run catalog:import`, com o papel dono das tabelas.

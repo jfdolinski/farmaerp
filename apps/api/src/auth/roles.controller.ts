@@ -7,6 +7,8 @@ import {
   Param,
   Patch,
   Post,
+  Put,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { asBody, optionalText, requireText, requireUuid } from '../common/parse.js';
@@ -37,6 +39,50 @@ export class RolesController {
       );
       return rows;
     });
+  }
+
+  /** Limites de valor de cada perfil (o Administrador não tem). */
+  @Get('role-limits')
+  roleLimits() {
+    return this.database.withContext(async (client) => (await client.query('SELECT * FROM app.role_limits()')).rows);
+  }
+
+  /** Troca os limites do perfil: { limits: { codigo: valor | null } }. Vazio tira o limite. */
+  @Put('roles/:id/limits')
+  @HttpCode(200)
+  async setRoleLimits(@Param('id') id: string, @RequestBody() rawBody: unknown) {
+    const roleId = requireUuid(id);
+    const limits = asBody(rawBody).limits;
+    if (!limits || typeof limits !== 'object' || Array.isArray(limits)) throw new AppError('FA005');
+    for (const [code, value] of Object.entries(limits as Record<string, unknown>)) {
+      const valid = value === null || value === '' || (typeof value === 'number' && Number.isFinite(value)) ||
+        (typeof value === 'string' && /^\d{1,12}(\.\d{1,2})?$/.test(value));
+      if (!/^[a-z_]{1,40}$/.test(code) || !valid) throw new AppError('FA005');
+    }
+    await this.database.withContext((client) =>
+      client.query('SELECT app.set_role_limits($1, $2::jsonb)', [roleId, JSON.stringify(limits)]),
+    );
+    return { status: 'ok' };
+  }
+
+  /** Liberações de supervisor (e as de custo da nota de compra), para auditoria. */
+  @Get('supervisor-releases')
+  releases(
+    @Query('branch') branch?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('action') action?: string,
+  ) {
+    const day = (value?: string) => {
+      if (value === undefined || value === '') return null;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) throw new AppError('FA005');
+      return value;
+    };
+    if (action !== undefined && action !== '' && !/^[a-z_]+\.[a-z_]+$/.test(action)) throw new AppError('FA005');
+    const params = [branch ? requireUuid(branch) : null, day(from), day(to), action || null];
+    return this.database.withContext(
+      async (client) => (await client.query('SELECT * FROM app.list_supervisor_releases($1, $2, $3, $4)', params)).rows,
+    );
   }
 
   @Get('roles')
