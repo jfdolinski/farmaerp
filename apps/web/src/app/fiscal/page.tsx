@@ -132,7 +132,19 @@ interface DfeRow {
   last_error: string | null;
   waiting_awareness: string;
   can_manage: boolean;
+  nfse_last_run_at: string | null;
+  nfse_next_run_at: string | null;
+  nfse_last_status: string | null;
+  nfse_last_message: string | null;
+  nfse_last_error: string | null;
 }
+
+/** Situação do ADN em português. */
+const NFSE_STATUS: Record<string, string> = {
+  DOCUMENTOS_LOCALIZADOS: "Notas recebidas",
+  NENHUM_DOCUMENTO_LOCALIZADO: "Nenhuma nota nova",
+  REJEICAO: "Consulta recusada",
+};
 
 const dateTimeText = (value: string) =>
   new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" });
@@ -146,7 +158,8 @@ function DfeStatus({ row, branchId }: { row?: DfeRow; branchId: string }) {
       <p className={styles.hint}>
         A cada hora, a filial busca na Sefaz as notas emitidas para o CNPJ dela. As notas chegam primeiro como resumo, em
         Notas, esperando a ciência; depois da ciência, o XML completo chega sozinho. Em produção, uma nota só é lançada
-        depois de confirmada pela Sefaz.
+        depois de confirmada pela Sefaz. As notas de serviço (NFS-e) chegam completas do Ambiente Nacional, em Notas de
+        serviço.
       </p>
       {!row.has_certificate && (
         <p className={styles.warning}>Sem certificado digital válido: o download não funciona até enviar um.</p>
@@ -169,6 +182,15 @@ function DfeStatus({ row, branchId }: { row?: DfeRow; branchId: string }) {
       )}
       {row.enabled && !row.last_error && row.last_message && (
         <p className={styles.hint}>Resposta da Sefaz: {row.last_message}</p>
+      )}
+      {row.enabled && row.nfse_last_run_at && (
+        <p className={row.nfse_last_error ? styles.warning : styles.hint}>
+          NFS-e: última busca em {dateTimeText(row.nfse_last_run_at)}
+          {row.nfse_last_status && ` · ${NFSE_STATUS[row.nfse_last_status] ?? row.nfse_last_status}`}
+          {row.nfse_last_error && ` · ${getError(row.nfse_last_error).message}`}
+          {row.nfse_last_message && ` · Ambiente Nacional: ${row.nfse_last_message}`}
+          {row.nfse_next_run_at && `. Próxima a partir de ${dateTimeText(row.nfse_next_run_at)}.`}
+        </p>
       )}
       {waiting > 0 && (
         <p>

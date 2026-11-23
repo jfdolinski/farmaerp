@@ -9,33 +9,39 @@ export interface ClientCertificate {
   passphrase: string;
 }
 
+export interface HttpsResult {
+  status: number;
+  body: string;
+}
+
 /**
- * Chamada SOAP 1.2 com o certificado A1 da filial no TLS. Qualquer falha de rede, resposta que não
- * seja 200 ou resposta grande demais vira FA944; a causa técnica vai só para o log, sem o certificado.
+ * Chamada HTTPS com o certificado A1 da filial no TLS. Falha de rede, tempo esgotado ou resposta
+ * grande demais vira FA944; a causa técnica vai só para o log, sem o certificado.
  */
-export function postSoap(
+export function httpsCall(
   url: string,
-  action: string,
-  envelope: string,
+  options: { method: 'GET' | 'POST'; headers?: Record<string, string | number>; body?: string },
   certificate: ClientCertificate,
   ca?: string,
-): Promise<string> {
+): Promise<HttpsResult> {
   return new Promise((resolve, reject) => {
-    const fail = (reason: string) => reject(new AppError('FA944', { cause: new Error(reason) }));
-    const body = Buffer.from(envelope, 'utf8');
+    let settled = false;
+    const fail = (reason: string) => {
+      if (settled) return;
+      settled = true;
+      reject(new AppError('FA944', { cause: new Error(reason) }));
+    };
+    const body = options.body === undefined ? undefined : Buffer.from(options.body, 'utf8');
     const req = request(
       url,
       {
-        method: 'POST',
+        method: options.method,
         pfx: certificate.pfx,
         passphrase: certificate.passphrase,
         ...(ca ? { ca } : {}),
         minVersion: 'TLSv1.2',
         timeout: TIMEOUT_MS,
-        headers: {
-          'Content-Type': `application/soap+xml; charset=utf-8; action="${action}"`,
-          'Content-Length': body.length,
-        },
+        headers: { ...options.headers, ...(body ? { 'Content-Length': body.length } : {}) },
       },
       (res) => {
         const chunks: Buffer[] = [];
@@ -50,11 +56,9 @@ export function postSoap(
           chunks.push(chunk);
         });
         res.on('end', () => {
-          if (res.statusCode !== 200) {
-            fail(`HTTP ${res.statusCode ?? 'sem código'}`);
-            return;
-          }
-          resolve(Buffer.concat(chunks).toString('utf8'));
+          if (settled) return;
+          settled = true;
+          resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8') });
         });
         res.on('error', (error) => fail(`resposta: ${error.message}`));
       },
@@ -66,4 +70,24 @@ export function postSoap(
     req.on('error', (error) => fail(`conexão: ${(error as NodeJS.ErrnoException).code ?? error.message}`));
     req.end(body);
   });
+}
+
+/** Chamada SOAP 1.2 da Sefaz. Resposta que não seja 200 também vira FA944. */
+export async function postSoap(
+  url: string,
+  action: string,
+  envelope: string,
+  certificate: ClientCertificate,
+  ca?: string,
+): Promise<string> {
+  const result = await httpsCall(
+    url,
+    { method: 'POST', headers: { 'Content-Type': `application/soap+xml; charset=utf-8; action="${action}"` }, body: envelope },
+    certificate,
+    ca,
+  );
+  if (result.status !== 200) {
+    throw new AppError('FA944', { cause: new Error(`HTTP ${result.status}`) });
+  }
+  return result.body;
 }

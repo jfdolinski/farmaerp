@@ -92,7 +92,8 @@
       "terminal_fiscal_series_terminal_active_key",
       "branch_dfe_sync_branch_key",
       "dfe_document_nsu_key",
-      "purchase_invoice_summary_key"
+      "purchase_invoice_summary_key",
+      "service_invoice_access_key"
     ]
   },
   "FA009": {
@@ -219,7 +220,8 @@
       "purchase_invoice_event_id_uuid_v7_check",
       "branch_dfe_sync_id_uuid_v7_check",
       "dfe_document_id_uuid_v7_check",
-      "purchase_invoice_summary_id_uuid_v7_check"
+      "purchase_invoice_summary_id_uuid_v7_check",
+      "service_invoice_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -1563,7 +1565,43 @@
       "purchase_invoice_summary_protocol_check",
       "purchase_invoice_summary_situation_check",
       "purchase_invoice_summary_awareness_protocol_check",
-      "purchase_invoice_summary_awareness_check"
+      "purchase_invoice_summary_awareness_check",
+      "branch_dfe_sync_nfse_last_nsu_check",
+      "branch_dfe_sync_nfse_last_status_check",
+      "branch_dfe_sync_nfse_last_message_check",
+      "branch_dfe_sync_nfse_last_error_check",
+      "dfe_document_kind_check",
+      "service_invoice_role_check",
+      "service_invoice_access_key_check",
+      "service_invoice_number_check",
+      "service_invoice_environment_check",
+      "service_invoice_provider_document_check",
+      "service_invoice_provider_name_check",
+      "service_invoice_provider_location_check",
+      "service_invoice_taker_document_check",
+      "service_invoice_service_code_check",
+      "service_invoice_municipal_code_check",
+      "service_invoice_nbs_code_check",
+      "service_invoice_description_check",
+      "service_invoice_incidence_location_check",
+      "service_invoice_service_value_check",
+      "service_invoice_discount_check",
+      "service_invoice_deductions_check",
+      "service_invoice_iss_base_check",
+      "service_invoice_iss_rate_check",
+      "service_invoice_iss_value_check",
+      "service_invoice_iss_withholding_check",
+      "service_invoice_irrf_check",
+      "service_invoice_csll_check",
+      "service_invoice_social_security_check",
+      "service_invoice_pis_check",
+      "service_invoice_cofins_check",
+      "service_invoice_pis_cofins_withholding_check",
+      "service_invoice_total_withheld_check",
+      "service_invoice_net_value_check",
+      "service_invoice_replaces_key_check",
+      "service_invoice_status_check",
+      "service_invoice_status_date_check"
     ]
   },
   "FA932": {
@@ -1693,6 +1731,14 @@
   "FA947": {
     "message": "A filial está sem estado (UF) cadastrado.",
     "action": "Informe o estado da filial na tela Empresas para o download das notas funcionar.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA948": {
+    "message": "O Ambiente Nacional da NFS-e recusou a consulta.",
+    "action": "Confira se o certificado é da mesma empresa da filial. O motivo informado aparece na tela Fiscal.",
     "httpStatus": 422,
     "severity": "warning",
     "retryable": false,

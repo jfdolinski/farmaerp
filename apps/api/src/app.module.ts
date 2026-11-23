@@ -12,6 +12,7 @@ import { DatabaseService } from './database.service.js';
 import { FiscalController } from './fiscal/fiscal.controller.js';
 import { HealthController } from './health.controller.js';
 import { PurchaseInvoicesController } from './purchases/purchase-invoices.controller.js';
+import { ServiceInvoicesController } from './purchases/service-invoices.controller.js';
 import { DfeController } from './sefaz/dfe.controller.js';
 import { DfeService } from './sefaz/dfe.service.js';
 import { SuppliersController } from './purchases/suppliers.controller.js';
@@ -43,6 +44,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     AgreementsController,
     SuppliersController,
     PurchaseInvoicesController,
+    ServiceInvoicesController,
     DfeController,
     FiscalController,
     StructureController,

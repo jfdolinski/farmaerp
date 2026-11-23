@@ -952,4 +952,10 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Informe o estado da filial na tela Empresas para o download das notas funcionar.',
     retryable: false,
   ),
+  'FA948': ErrorCatalogEntry(
+    code: 'FA948',
+    message: 'O Ambiente Nacional da NFS-e recusou a consulta.',
+    action: 'Confira se o certificado é da mesma empresa da filial. O motivo informado aparece na tela Fiscal.',
+    retryable: false,
+  ),
 };
