@@ -218,6 +218,39 @@ describe('descida para o PDV contra o banco real', () => {
     expect(monitor!.last_push_at).not.toBeNull();
   });
 
+  it('venda: turno e venda sobem pela outbox, e a retaguarda vê a venda com os alertas', async () => {
+    const push = (items: Json[]) =>
+      request(server()).post('/terminals/sync/push').set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`)
+        .send({ items: items.map((item) => { sequence += 1; return { id: uuidV7(), sequence, ...item }; }) });
+    const operatorId = '019a0000-0000-7000-8000-000000000009';
+    const sessionId = uuidV7();
+    const opened = (await push([{ kind: 'cash_session_open', payload: { id: sessionId, operator_id: operatorId, opened_at: new Date().toISOString(), opening_float: 100 } }]).expect(200)).body as Json;
+    expect(opened.results[0]).toMatchObject({ status: 'applied' });
+
+    const saleId = uuidV7();
+    const number = Math.floor(Date.now() / 1000) % 900000 + 1;
+    const sale = {
+      id: saleId, number, cash_session_id: sessionId, operator_id: operatorId, customer_id: null,
+      sold_at: new Date().toISOString(), fiscal_model: '65',
+      items: [{ id: uuidV7(), line: 1, product_id: DIPIRONA, quantity: 2, unit_price: 12.9, discount: 0, total: 25.8 }],
+      payments: [{ id: uuidV7(), method: 'pix', amount: 25.8 }],
+      subtotal: 25.8, discount_total: 0, total: 25.8,
+    };
+    expect((await push([{ kind: 'sale', payload: sale }]).expect(200)).body.results[0]).toMatchObject({ status: 'applied', code: null });
+    const bad = { ...sale, id: uuidV7(), number: number + 1, total: 1 };
+    expect((await push([{ kind: 'sale', payload: bad }]).expect(200)).body.results[0]).toMatchObject({ status: 'conflict', code: 'FA962' });
+
+    const asManager = (path: string) => request(server()).get(`/admin${path}`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(MANAGER_EMAIL)}`);
+    const listed = ((await asManager('/sales').expect(200)).body as Json[]).find((row) => row.id === saleId);
+    expect(listed).toMatchObject({ payment_methods: ['pix'], fiscal_status: 'pending', alert_count: 0, item_count: 1 });
+    const detail = (await asManager(`/sales/${saleId}`).expect(200)).body as Json;
+    expect(detail).toMatchObject({ total: 25.8, items: [{ product_id: DIPIRONA, quantity: 2, central_price: 12.9 }] });
+    expect((await asManager('/sales?from=ontem').expect(422)).body).toMatchObject({ code: 'FA005' });
+    expect((await asManager(`/sales/${uuidV7()}`).expect(404)).body).toMatchObject({ code: 'FA006' });
+    const asOperator = request(server()).get(`/admin/sales/${saleId}`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(OPERATOR_EMAIL)}`);
+    expect((await asOperator.expect(404)).body).toMatchObject({ code: 'FA006' });
+  });
+
   it('recusa pedido fora do formato, sem token e de terminal bloqueado', async () => {
     for (const body of [{ cursor: 'abc' }, { cursor: 12 }, { until: '1', after: '9:x' }, { cursor: 'x'.repeat(65) }]) {
       expect((await pull(body).expect(422)).body).toMatchObject({ code: 'FA956' });

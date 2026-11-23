@@ -29,6 +29,7 @@ const ACTIONS: Record<string, string> = {
   "stock.adjust": "Ajuste de estoque",
   "stock.count": "Inventário",
   "purchases.cost": "Custo da nota de compra",
+  "sales.discount": "Desconto na venda",
 };
 
 type SearchParams = Promise<{ de?: string; ate?: string; acao?: string }>;

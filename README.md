@@ -310,6 +310,19 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - **Status e saldo:** `app.product_availability` diz se o produto vende e se entra na compra automática em cada filial, e o aviso para o vendedor. Lote vencido não conta como saldo vendável.
 - **Seed:** em tabela com trigger de validação, confira com `NOT EXISTS` antes de incluir. O trigger roda antes do `ON CONFLICT`, e o seed roda a cada deploy de homologação.
 
+## Vendas
+
+- **Onde nasce:** no PDV, mesmo sem internet. Turno (`cash_session_open`) e venda (`sale`) sobem pela outbox, em ordem, e a central aplica com `app.sync_apply_cash_open` e `app.sync_apply_sale`.
+- **Código humano:** número do terminal + contador do terminal (`2-000123`). O contador é do PDV; a central recusa número repetido (FA963).
+- **Conflito ou alerta:**
+  - O que não fecha vira conflito e não é aplicado (FA962): totais, troco, formato, turno de outro terminal, item de outro grupo.
+  - O que fecha mas merece atenção é aplicado, porque a venda já aconteceu, e vira alerta em `sale_alert`: preço diferente do da central na hora da venda, desconto acima da regra ou do limite sem liberação válida, operador sem `sales.sell`, estoque negativo, produto que não estava ativo, convênio sem vínculo com o cliente.
+- **Estoque:** baixa por item, com o lote escolhido no PDV (controlados) ou pelo vencimento mais próximo. O que faltar sai do último lote, negativo. Produto que exige lote e ainda não tem nenhum sai sem lote, com alerta.
+- **Desconto liberado no PDV:** vira `supervisor_release` com a ação `sales.discount`, visível em `/liberacoes`.
+- **Pagamentos:** dinheiro (com troco), cartão de crédito e de débito e PIX registrados à mão, e convênio. TEF e PIX integrados entram quando os fornecedores forem escolhidos.
+- **Nota fiscal:** a venda fica com a nota pendente de emissão até a Etapa 8 (NFC-e e NF-e).
+- **Retaguarda:** `/vendas` lista por período e filial, com o filtro "Só com alerta", e mostra o detalhe com itens, lotes baixados, pagamentos e alertas. Exige `sales.view` (Gerente); o Operador de caixa tem `sales.sell`.
+
 ## Clientes
 
 - **Cadastro:** único na rede, com código humano. Pessoa física com CPF ou jurídica com CNPJ, ambos com dígito validado e sem repetir no grupo. Só nome e documento são obrigatórios.

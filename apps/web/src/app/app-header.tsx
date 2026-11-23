@@ -43,6 +43,7 @@ export function AppHeader({ user }: { user: CurrentUser }) {
           <Link href="/perfis">Perfis</Link>
         )}
         {can(user, "releases.view") && <Link href="/liberacoes">Liberações</Link>}
+        {can(user, "sales.view") && <Link href="/vendas">Vendas</Link>}
         {can(user, "sync.view") && <Link href="/sincronizacao">Sincronização</Link>}
       </nav>
       <div className={styles.nav}>

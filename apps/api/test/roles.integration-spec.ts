@@ -75,7 +75,7 @@ describe('perfis e permissões contra o banco real', () => {
     it.each([
       [ADMIN, ['users.manage', 'roles.manage', 'terminals.revoke']],
       [MANAGER, ['users.view', 'terminals.block']],
-      [OPERATOR, []],
+      [OPERATOR, ['sales.sell']],
     ])('%s recebe as permissões do perfil', async (email, expected) => {
       const me = (await call('get', '/auth/me', email).expect(200)).body as Json;
       expect(me.permissions).toEqual(expect.arrayContaining(expected));
@@ -105,7 +105,7 @@ describe('perfis e permissões contra o banco real', () => {
 
     it('catálogo e perfis podem ser lidos por quem está no grupo', async () => {
       const catalog = (await call('get', '/admin/permissions', OPERATOR).expect(200)).body as Json[];
-      expect(catalog).toHaveLength(40);
+      expect(catalog).toHaveLength(42);
       expect((await rolesOf(OPERATOR)).length).toBeGreaterThanOrEqual(4);
     });
 

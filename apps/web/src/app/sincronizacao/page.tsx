@@ -27,6 +27,8 @@ interface ConflictRow {
 
 const KINDS: Record<string, string> = {
   log: "Registro de aviso ou erro do PDV",
+  sale: "Venda",
+  cash_session_open: "Abertura de turno",
 };
 const STATUS = { abertos: "open", resolvidos: "resolved", todos: "all" } as const;
 type StatusKey = keyof typeof STATUS;
