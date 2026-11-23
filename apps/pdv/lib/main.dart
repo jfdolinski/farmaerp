@@ -11,6 +11,9 @@ import 'core/local_logger.dart';
 import 'core/secret_store.dart';
 import 'core/trace_id.dart';
 import 'local/local_database.dart';
+import 'pos/pdv_home.dart';
+import 'pos/pos_auth.dart';
+import 'pos/pos_controller.dart';
 import 'sync/sync_service.dart';
 import 'terminal/terminal_api.dart';
 import 'terminal/terminal_controller.dart';
@@ -100,7 +103,21 @@ Future<void> main() async {
     appVersion: _appVersion,
     logger: logger,
   );
-  runApp(FarmaErpPdvApp(controller: controller));
+  // Comprovante em PDF (sem impressora configurada) vai para os documentos do usuário.
+  final documents = await getApplicationDocumentsDirectory();
+  final pdfDirectory = Directory(
+    '${documents.path}${Platform.pathSeparator}FarmaERP${Platform.pathSeparator}comprovantes',
+  );
+  final pos = PosController(
+    database: database,
+    auth: PosAuth(database: database, logger: logger),
+    printer: () => configuredPrinter(database, pdfDirectory),
+    terminalNumber: () => controller.terminalNumber,
+    // A venda sobe logo, sem esperar o próximo sinal de vida.
+    onSaleSaved: () => unawaited(controller.tick()),
+    logger: logger,
+  );
+  runApp(FarmaErpPdvApp(controller: controller, pos: pos, database: database));
   unawaited(controller.start());
 }
 
@@ -112,9 +129,13 @@ LocalLogger _createLogger(Directory dataDirectory) => LocalLogger(
 );
 
 class FarmaErpPdvApp extends StatelessWidget {
-  const FarmaErpPdvApp({super.key, required this.controller});
+  const FarmaErpPdvApp({super.key, required this.controller, this.pos, this.database});
 
   final TerminalController controller;
+
+  /// Sem o caixa (testes da tela do terminal), fica só a tela do terminal.
+  final PosController? pos;
+  final LocalDatabase? database;
 
   @override
   Widget build(BuildContext context) {
@@ -125,7 +146,9 @@ class FarmaErpPdvApp extends StatelessWidget {
         environment: appEnvironment,
         child: child ?? const SizedBox.shrink(),
       ),
-      home: TerminalScreen(controller: controller),
+      home: pos == null || database == null
+          ? TerminalScreen(controller: controller)
+          : PdvHome(terminal: controller, pos: pos!, database: database!),
     );
   }
 }

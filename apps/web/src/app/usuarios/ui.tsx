@@ -7,6 +7,7 @@ import {
   createUser,
   issueTemporaryPassword,
   removeRole,
+  setPdvPin,
   setUserBranches,
   updateUser,
   UserFormState,
@@ -245,6 +246,40 @@ export function UserRoles({
           )}
         </form>
       </div>
+    </details>
+  );
+}
+
+/** PIN para entrar no PDV, inclusive sem internet. Quem define é quem pode gerar senha temporária. */
+export function PdvPin({ user }: { user: UserRow }) {
+  const [state, action, pending] = useActionState<UserFormState, FormData>(setPdvPin, {});
+  const formRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (state.done) formRef.current?.reset();
+  }, [state]);
+  return (
+    <details className={styles.reason}>
+      <summary>PIN do PDV</summary>
+      <form ref={formRef} action={action} className={styles.rowForm}>
+        <input type="hidden" name="id" value={user.id} />
+        <p className={styles.hint}>
+          De 4 a 6 números, sem repetir o mesmo número e sem sequência. Entra no PDV com o código {user.code} e este
+          PIN, mesmo sem internet. Um PIN novo substitui o anterior.
+        </p>
+        <label>
+          PIN
+          <input name="pin" type="password" inputMode="numeric" pattern="[0-9]{4,6}" required autoComplete="new-password" />
+        </label>
+        <label>
+          Repita o PIN
+          <input name="confirmation" type="password" inputMode="numeric" pattern="[0-9]{4,6}" required autoComplete="new-password" />
+        </label>
+        <button type="submit" disabled={pending}>
+          Salvar PIN
+        </button>
+        <ErrorNotice error={state.error} />
+        {state.done && <p role="status">PIN salvo. Ele chega aos PDVs da filial na próxima sincronização.</p>}
+      </form>
     </details>
   );
 }

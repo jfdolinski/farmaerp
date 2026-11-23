@@ -94,6 +94,31 @@ export async function removeRole(
   return { done: true };
 }
 
+/** PIN do PDV. Os dois campos precisam bater; as regras do PIN ficam na API. */
+export async function setPdvPin(
+  _previous: UserFormState,
+  form: FormData,
+): Promise<UserFormState> {
+  const pin = String(form.get("pin") ?? "");
+  if (pin !== String(form.get("confirmation") ?? "")) {
+    return {
+      error: {
+        code: "FA965",
+        message: "Os dois PINs digitados são diferentes.",
+        action: "Digite o mesmo PIN nos dois campos.",
+        retryable: false,
+        traceId: null,
+      },
+    };
+  }
+  const result = await apiFetch(`/admin/users/${text(form, "id")}/pin`, {
+    method: "POST",
+    body: { pin },
+  });
+  if (!result.ok) return handleFailure(result.error);
+  return { done: true };
+}
+
 export async function issueTemporaryPassword(
   _previous: UserFormState,
   form: FormData,

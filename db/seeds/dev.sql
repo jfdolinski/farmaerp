@@ -176,4 +176,14 @@ SELECT '019a0000-0000-7000-8000-000000000032'::uuid, '019a0000-0000-7000-8000-00
        'individual', '11144477735', 'Cliente Demonstração', '11999990000', 'São Paulo', 'SP'
  WHERE NOT EXISTS (SELECT 1 FROM customer WHERE id = '019a0000-0000-7000-8000-000000000032');
 
+-- PINs do PDV, só de desenvolvimento: Administrador 2580, Operador Centro 2468, Gerente Centro 1357.
+INSERT INTO user_pin (user_id, pin_hash)
+SELECT seed.user_id, seed.pin_hash
+  FROM (VALUES
+    ('019a0000-0000-7000-8000-000000000008'::uuid, 'pbkdf2-sha256$210000$CwsLCwsLCwsLCwsLCwsLCw==$Ibg1aBCVWciZ09CR/tWnqoxvfYc+vRQn4oWrfrHEPqU='),
+    ('019a0000-0000-7000-8000-000000000009'::uuid, 'pbkdf2-sha256$210000$DAwMDAwMDAwMDAwMDAwMDA==$0Y+4ZaPrEpWxpjCyiyQsgVU97GA29jxTLVuoyG8WNgc='),
+    ('019a0000-0000-7000-8000-00000000000d'::uuid, 'pbkdf2-sha256$210000$DQ0NDQ0NDQ0NDQ0NDQ0NDQ==$YLCplR765nYp6Saph4wxcPT+A3Piz/goI7ksOBlBV6s=')
+  ) AS seed (user_id, pin_hash)
+ WHERE NOT EXISTS (SELECT 1 FROM user_pin up WHERE up.user_id = seed.user_id AND up.deleted_at IS NULL);
+
 COMMIT;

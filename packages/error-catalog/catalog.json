@@ -237,7 +237,8 @@
       "sale_id_uuid_v7_check",
       "sale_item_id_uuid_v7_check",
       "sale_payment_id_uuid_v7_check",
-      "sale_alert_id_uuid_v7_check"
+      "sale_alert_id_uuid_v7_check",
+      "user_pin_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -1950,5 +1951,96 @@
     "dbConstraints": [
       "sale_terminal_number_key"
     ]
+  },
+  "FA965": {
+    "message": "O PIN precisa ter de 4 a 6 números, sem repetir o mesmo número e sem sequência.",
+    "action": "Escolha outro PIN, como 2580 ou 7391.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "user_pin_hash_check",
+      "user_pin_user_key"
+    ]
+  },
+  "FA966": {
+    "message": "Código ou PIN incorreto.",
+    "action": "Confira e digite de novo.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA967": {
+    "message": "Muitas tentativas erradas para este usuário.",
+    "action": "Aguarde 5 minutos ou peça ao gerente para entrar.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA968": {
+    "message": "Este usuário ainda não tem PIN para o PDV.",
+    "action": "Peça ao gerente para definir o PIN na retaguarda, em Usuários.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA969": {
+    "message": "Este usuário não pode vender nesta filial.",
+    "action": "Peça ao gerente para liberar a venda no perfil.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA970": {
+    "message": "Produto não encontrado.",
+    "action": "Confira o código ou busque pelo nome, princípio ativo ou fabricante.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA971": {
+    "message": "A venda de controlados chega na próxima atualização do PDV.",
+    "action": "Venda este item pelo processo atual da loja.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA972": {
+    "message": "O valor pago não cobre o total da venda.",
+    "action": "Complete o pagamento antes de finalizar.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA973": {
+    "message": "Não foi possível imprimir o comprovante.",
+    "action": "A venda foi salva. Confira a impressora e use Reimprimir.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": true,
+    "dbConstraints": []
+  },
+  "FA974": {
+    "message": "Este produto está sem preço nesta filial.",
+    "action": "Peça ao gerente para conferir o preço na retaguarda.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA975": {
+    "message": "A quantidade informada é inválida.",
+    "action": "Use um número maior que zero.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
   }
 }

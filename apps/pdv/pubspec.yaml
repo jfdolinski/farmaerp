@@ -8,13 +8,16 @@ environment:
 
 dependencies:
   cryptography: ^2.9.0
+  ffi: 2.2.0
   flutter:
     sdk: flutter
   flutter_secure_storage: ^11.2.0
   http: ^1.6.0
   path_provider: ^2.1.6
+  pdf: 3.13.1
   sqlite3: 3.9.2
   uuid: ^4.6.0
+  win32: 6.4.0
 
 dev_dependencies:
   flutter_test:

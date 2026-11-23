@@ -5,6 +5,10 @@ import 'dart:io';
 
 import 'package:farmaerp_pdv/customers/customer_service.dart';
 import 'package:farmaerp_pdv/local/local_database.dart';
+import 'package:farmaerp_pdv/pos/cart.dart';
+import 'package:farmaerp_pdv/pos/pos_auth.dart';
+import 'package:farmaerp_pdv/pos/pos_controller.dart';
+import 'package:farmaerp_pdv/pos/receipt.dart';
 import 'package:farmaerp_pdv/sync/sync_service.dart';
 import 'package:farmaerp_pdv/terminal/terminal_api.dart';
 import 'package:farmaerp_pdv/terminal/terminal_identity.dart';
@@ -107,6 +111,36 @@ void main() {
         expect(chosen['document'], '11144477735');
         await sync.pull(token.value);
         expect(database.customerById(_demoCustomer)?['name'], 'Cliente Demonstração');
+
+        // Caixa: PIN do seed (o hash desceu na carga), turno, venda e subida até a central.
+        // O número do terminal vem do sinal de vida, como no app.
+        final terminalNumber = await client.heartbeat(accessToken: token.value, appVersion: '0.1.0');
+        final printer = _MemoryPrinter();
+        final pos = PosController(
+          database: database,
+          auth: PosAuth(database: database),
+          printer: () => printer,
+          terminalNumber: () => terminalNumber,
+        );
+        await pos.login('3', '2468');
+        expect(pos.notice, isNull);
+        pos.openShift(10000);
+        pos.scan('7890000000017');
+        pos.startPayment();
+        pos.addPayment(Payment(method: PaymentMethod.cash, amountCents: 2000));
+        await pos.finish();
+        final saleCode = pos.lastSale!.code;
+        expect(printer.printed, [saleCode]);
+        await sync.push(token.value);
+        expect(database.outboxPending, 0);
+        expect(database.debugSelect("SELECT result FROM outbox WHERE kind = 'sale'").single['result'], 'applied');
+        final sales = await http.get(
+          Uri.parse('$base/admin/sales'),
+          headers: {'Authorization': 'Bearer $session'},
+        );
+        final listed = (jsonDecode(sales.body) as List).cast<Map<String, dynamic>>().where((row) => row['code'] == saleCode).toList();
+        expect(listed, hasLength(1));
+        expect(listed.single['alert_count'], 0);
       } finally {
         await admin('/admin/products/$_dipirona/prices', {'branchId': _branch, 'price': null}, token: session);
         await admin('/admin/terminals/$terminalId/revoke', {'reason': 'Fim do teste E2E'}, token: session);
@@ -119,4 +153,14 @@ void main() {
     },
     skip: _api == null ? 'defina PDV_E2E_API para rodar contra a API local' : false,
   );
+}
+
+class _MemoryPrinter implements ReceiptPrinter {
+  final printed = <String>[];
+
+  @override
+  String get description => 'memória';
+
+  @override
+  Future<void> print(String saleCode, List<ReceiptLine> lines) async => printed.add(saleCode);
 }

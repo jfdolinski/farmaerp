@@ -10,7 +10,7 @@ const EXPECTED_TABLES = [
   'product_barcode_channel', 'product_batch', 'product_batch_event', 'product_branch_status', 'product_category', 'product_cost', 'product_group', 'product_pmc',
   'product_price', 'product_rule', 'product_status_event', 'product_supplier', 'purchase_invoice', 'purchase_invoice_document', 'purchase_invoice_event', 'purchase_invoice_item', 'purchase_invoice_item_batch', 'purchase_invoice_item_cost_release', 'purchase_invoice_summary', 'region', 'role', 'role_limit', 'role_permission', 'rule_type', 'sale', 'sale_alert', 'sale_item', 'sale_payment', 'sales_channel', 'service_invoice', 'stock_balance', 'stock_movement', 'supervisor_release', 'supplier', 'sync_change', 'sync_conflict', 'sync_receipt',
   'terminal', 'terminal_event', 'terminal_fiscal_series', 'terminal_fiscal_series_event', 'terminal_log', 'terminal_pairing_request',
-  'terminal_status', 'user_account', 'user_branch', 'user_credential', 'user_role', 'user_session',
+  'terminal_status', 'user_account', 'user_branch', 'user_credential', 'user_pin', 'user_role', 'user_session',
 ];
 
 async function publicTables() {
@@ -66,6 +66,7 @@ describe('migrations', () => {
       '0030_pdv_sync_upload',
       '0031_pdv_sync_monitor',
       '0032_sales',
+      '0033_pdv_pin',
     ]);
   });
 });

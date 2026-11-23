@@ -254,7 +254,175 @@ const _migrations = <String>[
   CREATE INDEX customer_code_idx ON customer (code);
   CREATE INDEX customer_document_idx ON customer (document);
   ''',
+  // Caixa: PIN, busca de produto, turno e vendas locais (comprovante, reimpressão e fechamento).
+  '''
+  ALTER TABLE app_user ADD COLUMN pin_hash TEXT;
+
+  -- Busca por nome, princípio ativo e fabricante, sem acento. O código de barras vai em product_barcode.
+  CREATE VIRTUAL TABLE product_search USING fts5(
+    product_id UNINDEXED, name, active_ingredient, manufacturer,
+    tokenize = 'unicode61 remove_diacritics 2'
+  );
+  INSERT INTO product_search (product_id, name, active_ingredient, manufacturer)
+  SELECT id, name, active_ingredient, manufacturer FROM product;
+
+  -- Tentativas erradas de PIN por pessoa, neste terminal.
+  CREATE TABLE pin_attempt (
+    user_id BLOB PRIMARY KEY CHECK (length(user_id) = 16),
+    failures INTEGER NOT NULL,
+    locked_until TEXT
+  ) STRICT;
+
+  CREATE TABLE cash_session (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    operator_id BLOB NOT NULL,
+    operator_name TEXT NOT NULL,
+    opened_at TEXT NOT NULL,
+    opening_float_cents INTEGER NOT NULL CHECK (opening_float_cents >= 0),
+    status TEXT NOT NULL CHECK (status IN ('open', 'closed')),
+    closed_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT,
+    version INTEGER NOT NULL DEFAULT 1,
+    updated_by BLOB,
+    trace_id BLOB
+  ) STRICT;
+
+  CREATE TABLE sale (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    number INTEGER NOT NULL UNIQUE CHECK (number > 0),
+    code TEXT NOT NULL,
+    cash_session_id BLOB NOT NULL REFERENCES cash_session (id),
+    operator_id BLOB NOT NULL,
+    customer_id BLOB,
+    sold_at TEXT NOT NULL,
+    subtotal_cents INTEGER NOT NULL,
+    discount_cents INTEGER NOT NULL,
+    total_cents INTEGER NOT NULL,
+    fiscal_model TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT,
+    version INTEGER NOT NULL DEFAULT 1,
+    updated_by BLOB,
+    trace_id BLOB
+  ) STRICT;
+  CREATE INDEX sale_session_idx ON sale (cash_session_id);
+
+  CREATE TABLE sale_item (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    sale_id BLOB NOT NULL REFERENCES sale (id),
+    line INTEGER NOT NULL,
+    product_id BLOB NOT NULL,
+    product_code INTEGER NOT NULL,
+    product_name TEXT NOT NULL,
+    quantity_milli INTEGER NOT NULL,
+    unit_price_cents INTEGER NOT NULL,
+    discount_cents INTEGER NOT NULL,
+    total_cents INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT,
+    version INTEGER NOT NULL DEFAULT 1,
+    updated_by BLOB,
+    trace_id BLOB
+  ) STRICT;
+  CREATE INDEX sale_item_sale_idx ON sale_item (sale_id);
+
+  CREATE TABLE sale_payment (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    sale_id BLOB NOT NULL REFERENCES sale (id),
+    method TEXT NOT NULL,
+    amount_cents INTEGER NOT NULL,
+    change_cents INTEGER NOT NULL,
+    card_brand TEXT,
+    authorization_code TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT,
+    version INTEGER NOT NULL DEFAULT 1,
+    updated_by BLOB,
+    trace_id BLOB
+  ) STRICT;
+  CREATE INDEX sale_payment_sale_idx ON sale_payment (sale_id);
+  ''',
 ];
+
+/// Pessoa que pode entrar no PDV, com o que veio da central.
+class LocalUser {
+  const LocalUser({
+    required this.id,
+    required this.code,
+    required this.name,
+    required this.isAdmin,
+    required this.permissions,
+    required this.limits,
+    this.pinHash,
+  });
+
+  final String id;
+  final int code;
+  final String name;
+  final bool isAdmin;
+  final List<String> permissions;
+
+  /// Limites por tipo; vazio (null) é sem teto.
+  final Map<String, num?> limits;
+  final String? pinHash;
+
+  bool can(String permission) => isAdmin || permissions.contains(permission);
+}
+
+/// Produto para a venda, com o que o caixa precisa para avisar e cobrar.
+class SaleProduct {
+  const SaleProduct({
+    required this.id,
+    required this.code,
+    required this.name,
+    required this.status,
+    required this.priceCents,
+    required this.stockMilli,
+    required this.fractionMilli,
+    this.manufacturer,
+    this.activeIngredient,
+    this.controlledClass,
+    this.barcodeId,
+    this.barcodeFractionMilli,
+  });
+
+  final String id;
+  final int code;
+  final String name;
+  final String status;
+  final int? priceCents;
+  final int stockMilli;
+  final int fractionMilli;
+  final String? manufacturer;
+  final String? activeIngredient;
+  final String? controlledClass;
+
+  /// Código lido, quando o produto veio pela leitura.
+  final String? barcodeId;
+  final int? barcodeFractionMilli;
+}
+
+/// Turno aberto neste terminal.
+class LocalCashSession {
+  const LocalCashSession({
+    required this.id,
+    required this.operatorId,
+    required this.operatorName,
+    required this.openedAt,
+    required this.openingFloatCents,
+  });
+
+  final String id;
+  final String operatorId;
+  final String operatorName;
+  final DateTime openedAt;
+  final int openingFloatCents;
+}
 
 /// Documento mascarado, igual ao da central: 123.***.***-09 ou 12.345.***/****-90.
 String? maskDocument(String? document) {
@@ -518,6 +686,7 @@ class LocalDatabase {
       for (final table in ['product', 'app_user', 'fiscal']) {
         _db.execute('DELETE FROM $table WHERE seen_generation < ?', [state.generation]);
       }
+      _db.execute('DELETE FROM product_search WHERE product_id NOT IN (SELECT id FROM product)');
       _setState('initial_load_done', 1);
     }
     _setState('cursor', page.until);
@@ -533,6 +702,7 @@ class LocalDatabase {
       case 'product':
         if (data == null) {
           _db.execute('DELETE FROM product WHERE id = ?', [id]);
+          _db.execute('DELETE FROM product_search WHERE product_id = ?', [id]);
         } else {
           _upsertProduct(id, data, generation);
         }
@@ -548,10 +718,11 @@ class LocalDatabase {
           _db.execute('DELETE FROM app_user WHERE id = ?', [id]);
         } else {
           _db.execute(
-            'INSERT INTO app_user (id, code, name, is_admin, roles, permissions, limits, seen_generation) '
-            'VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET code = excluded.code, '
+            'INSERT INTO app_user (id, code, name, is_admin, roles, permissions, limits, pin_hash, seen_generation) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET code = excluded.code, '
             'name = excluded.name, is_admin = excluded.is_admin, roles = excluded.roles, '
-            'permissions = excluded.permissions, limits = excluded.limits, seen_generation = excluded.seen_generation',
+            'permissions = excluded.permissions, limits = excluded.limits, pin_hash = excluded.pin_hash, '
+            'seen_generation = excluded.seen_generation',
             [
               id,
               data['code'],
@@ -560,6 +731,7 @@ class LocalDatabase {
               jsonEncode(data['roles'] ?? const []),
               jsonEncode(data['permissions'] ?? const []),
               jsonEncode(data['limits'] ?? const {}),
+              data['pin_hash'],
               generation,
             ],
           );
@@ -608,6 +780,11 @@ class LocalDatabase {
         data['batch_required'] == true ? 1 : 0,
         generation,
       ],
+    );
+    _db.execute('DELETE FROM product_search WHERE product_id = ?', [id]);
+    _db.execute(
+      'INSERT INTO product_search (product_id, name, active_ingredient, manufacturer) VALUES (?, ?, ?, ?)',
+      [id, data['name'], data['active_ingredient'], data['manufacturer']],
     );
     _db.execute('DELETE FROM product_barcode WHERE product_id = ?', [id]);
     for (final barcode in (data['barcodes'] as List? ?? const []).cast<Map<String, dynamic>>()) {
@@ -853,6 +1030,223 @@ class LocalDatabase {
         ),
     ];
   }
+
+  /// Pessoa pelo código, para a entrada no PDV.
+  LocalUser? userByCode(int code) {
+    final rows = _db.select('SELECT * FROM app_user WHERE code = ? LIMIT 1', [code]);
+    if (rows.isEmpty) return null;
+    return _user(rows.first);
+  }
+
+  LocalUser? userById(String id) {
+    final rows = _db.select('SELECT * FROM app_user WHERE id = ?', [uuidBytes(id)]);
+    return rows.isEmpty ? null : _user(rows.first);
+  }
+
+  LocalUser _user(Row row) => LocalUser(
+    id: uuidText(row['id'] as List<int>),
+    code: row['code'] as int,
+    name: row['name'] as String,
+    isAdmin: row['is_admin'] == 1,
+    permissions: (jsonDecode(row['permissions'] as String) as List).cast<String>(),
+    limits: (jsonDecode(row['limits'] as String) as Map).map((key, value) => MapEntry(key as String, value as num?)),
+    pinHash: row['pin_hash'] as String?,
+  );
+
+  /// Tentativas erradas e bloqueio do PIN desta pessoa neste terminal.
+  ({int failures, DateTime? lockedUntil}) pinAttempts(String userId) {
+    final rows = _db.select('SELECT failures, locked_until FROM pin_attempt WHERE user_id = ?', [uuidBytes(userId)]);
+    if (rows.isEmpty) return (failures: 0, lockedUntil: null);
+    return (
+      failures: rows.first['failures'] as int,
+      lockedUntil: DateTime.tryParse(rows.first['locked_until'] as String? ?? ''),
+    );
+  }
+
+  void recordPinAttempt(String userId, {required int failures, DateTime? lockedUntil}) => _db.execute(
+    'INSERT INTO pin_attempt (user_id, failures, locked_until) VALUES (?, ?, ?) '
+    'ON CONFLICT (user_id) DO UPDATE SET failures = excluded.failures, locked_until = excluded.locked_until',
+    [uuidBytes(userId), failures, lockedUntil?.toUtc().toIso8601String()],
+  );
+
+  /// Produto pela leitura: o código de barras primeiro; sem ele, o código do produto.
+  SaleProduct? saleProductByCode(String code) {
+    final byBarcode = _db.select(
+      'SELECT p.*, COALESCE(s.quantity_milli, 0) AS stock_milli, b.id AS barcode_id, b.fraction_milli AS barcode_fraction '
+      'FROM product_barcode b JOIN product p ON p.id = b.product_id LEFT JOIN stock s ON s.product_id = p.id '
+      'WHERE b.code = ? LIMIT 1',
+      [code],
+    );
+    if (byBarcode.isNotEmpty) return _saleProduct(byBarcode.first);
+    final number = int.tryParse(code);
+    if (number == null) return null;
+    final byCode = _db.select(
+      'SELECT p.*, COALESCE(s.quantity_milli, 0) AS stock_milli, NULL AS barcode_id, NULL AS barcode_fraction '
+      'FROM product p LEFT JOIN stock s ON s.product_id = p.id WHERE p.code = ? LIMIT 1',
+      [number],
+    );
+    return byCode.isEmpty ? null : _saleProduct(byCode.first);
+  }
+
+  /// Busca por nome, princípio ativo ou fabricante; cada palavra pode ser o começo de uma palavra.
+  List<SaleProduct> searchSaleProducts(String query, {int limit = 30}) {
+    final words = query
+        .split(RegExp(r'\s+'))
+        .map((word) => word.replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), ''))
+        .where((word) => word.isNotEmpty)
+        .take(6)
+        .toList();
+    if (words.isEmpty) return const [];
+    final match = words.map((word) => '"$word"*').join(' ');
+    final rows = _db.select(
+      'SELECT p.*, COALESCE(s.quantity_milli, 0) AS stock_milli, NULL AS barcode_id, NULL AS barcode_fraction '
+      'FROM product_search f JOIN product p ON p.id = f.product_id LEFT JOIN stock s ON s.product_id = p.id '
+      'WHERE product_search MATCH ? ORDER BY bm25(product_search, 0, 10, 4, 2), p.name LIMIT ?',
+      [match, limit],
+    );
+    return rows.map(_saleProduct).toList();
+  }
+
+  SaleProduct _saleProduct(Row row) => SaleProduct(
+    id: uuidText(row['id'] as List<int>),
+    code: row['code'] as int,
+    name: row['name'] as String,
+    status: row['status'] as String,
+    priceCents: row['price_cents'] as int?,
+    stockMilli: row['stock_milli'] as int,
+    fractionMilli: row['fraction_milli'] as int,
+    manufacturer: row['manufacturer'] as String?,
+    activeIngredient: row['active_ingredient'] as String?,
+    controlledClass: row['controlled_class'] as String?,
+    barcodeId: row['barcode_id'] == null ? null : uuidText(row['barcode_id'] as List<int>),
+    barcodeFractionMilli: row['barcode_fraction'] as int?,
+  );
+
+  /// Dados da filial e da empresa (para o comprovante) e o último número que a central conhece.
+  Map<String, dynamic>? get fiscal {
+    final rows = _db.select('SELECT data FROM fiscal LIMIT 1');
+    return rows.isEmpty ? null : jsonDecode(rows.first['data'] as String) as Map<String, dynamic>;
+  }
+
+  /// Turno aberto neste terminal, se houver.
+  LocalCashSession? get openCashSession {
+    final rows = _db.select(
+      "SELECT * FROM cash_session WHERE status = 'open' AND deleted_at IS NULL ORDER BY opened_at DESC LIMIT 1",
+    );
+    if (rows.isEmpty) return null;
+    final row = rows.first;
+    return LocalCashSession(
+      id: uuidText(row['id'] as List<int>),
+      operatorId: uuidText(row['operator_id'] as List<int>),
+      operatorName: row['operator_name'] as String,
+      openedAt: DateTime.parse(row['opened_at'] as String),
+      openingFloatCents: row['opening_float_cents'] as int,
+    );
+  }
+
+  /// Abre o turno: grava aqui e põe na outbox, na mesma transação.
+  LocalCashSession openSession({
+    required LocalUser operator,
+    required int openingFloatCents,
+    required DateTime now,
+  }) => _transaction(() {
+    final id = const Uuid().v7();
+    final at = now.toUtc().toIso8601String();
+    _db.execute(
+      "INSERT INTO cash_session (id, operator_id, operator_name, opened_at, opening_float_cents, status, created_at, updated_at) "
+      "VALUES (?, ?, ?, ?, ?, 'open', ?, ?)",
+      [uuidBytes(id), uuidBytes(operator.id), operator.name, at, openingFloatCents, at, at],
+    );
+    enqueue('cash_session_open', {
+      'id': id,
+      'operator_id': operator.id,
+      'opened_at': at,
+      'opening_float': openingFloatCents / 100,
+    }, now: now);
+    return LocalCashSession(
+      id: id,
+      operatorId: operator.id,
+      operatorName: operator.name,
+      openedAt: now.toUtc(),
+      openingFloatCents: openingFloatCents,
+    );
+  });
+
+  /// Próximo número de venda do terminal: nunca repete, nem se o banco local se perder, porque a
+  /// central informa o último que recebeu.
+  int get nextSaleNumber {
+    final local = _db.select('SELECT COALESCE(max(number), 0) AS n FROM sale').first['n'] as int;
+    final central = (fiscal?['last_sale_number'] as num?)?.toInt() ?? 0;
+    return (local > central ? local : central) + 1;
+  }
+
+  /// Grava a venda e põe na outbox, na mesma transação. [payload] é o que a central confere.
+  void saveSale(Map<String, Object?> payload, {required String code, required List<Map<String, Object?>> itemRows, required DateTime now}) =>
+      _transaction(() {
+        final at = now.toUtc().toIso8601String();
+        int cents(Object? value) => toCents(value)!;
+        _db.execute(
+          'INSERT INTO sale (id, number, code, cash_session_id, operator_id, customer_id, sold_at, subtotal_cents, '
+          'discount_cents, total_cents, fiscal_model, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [
+            uuidBytes(payload['id']! as String),
+            payload['number'],
+            code,
+            uuidBytes(payload['cash_session_id']! as String),
+            uuidBytes(payload['operator_id']! as String),
+            payload['customer_id'] == null ? null : uuidBytes(payload['customer_id']! as String),
+            payload['sold_at'],
+            cents(payload['subtotal']),
+            cents(payload['discount_total']),
+            cents(payload['total']),
+            payload['fiscal_model'],
+            at,
+            at,
+          ],
+        );
+        for (final item in itemRows) {
+          _db.execute(
+            'INSERT INTO sale_item (id, sale_id, line, product_id, product_code, product_name, quantity_milli, '
+            'unit_price_cents, discount_cents, total_cents, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [
+              uuidBytes(item['id']! as String),
+              uuidBytes(payload['id']! as String),
+              item['line'],
+              uuidBytes(item['product_id']! as String),
+              item['product_code'],
+              item['product_name'],
+              item['quantity_milli'],
+              item['unit_price_cents'],
+              item['discount_cents'],
+              item['total_cents'],
+              at,
+              at,
+            ],
+          );
+        }
+        for (final payment in (payload['payments']! as List).cast<Map<String, Object?>>()) {
+          _db.execute(
+            'INSERT INTO sale_payment (id, sale_id, method, amount_cents, change_cents, card_brand, authorization_code, '
+            'created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [
+              uuidBytes(payment['id']! as String),
+              uuidBytes(payload['id']! as String),
+              payment['method'],
+              cents(payment['amount']),
+              toCents(payment['change']) ?? 0,
+              payment['card_brand'],
+              payment['authorization_code'],
+              at,
+              at,
+            ],
+          );
+        }
+        enqueue('sale', payload, now: now);
+      });
+
+  /// Configuração local do terminal (por exemplo, a impressora).
+  String? setting(String key) => _state('setting:$key');
+  void setSetting(String key, String? value) => _setState('setting:$key', value);
 
   /// Produto pela leitura do código de barras.
   LocalProduct? productByBarcode(String code) {
