@@ -343,7 +343,21 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - Impressora térmica em ESC/POS pela fila do Windows (tipo RAW, página 860 para os acentos), escolhida no ícone de impressora do caixa.
   - Sem impressora configurada, sai em PDF em `Documentos\FarmaERP\comprovantes`.
   - Falha na impressão não desfaz a venda e mostra "Reimprimir".
-- **Atalhos:** F2 vai para a leitura, F10 abre o pagamento, Esc volta.
+- **Atalhos:** F2 vai para a leitura, F4 identifica o cliente, F10 abre o pagamento, Esc volta.
+- **Desconto no item:** em R$ ou %.
+  - Dentro do limite de desconto do operador (perfis) e do máximo do produto (motor de regras, que desce com o produto e vence com a regra), vale na hora.
+  - Acima, um supervisor libera no próprio terminal com código, PIN e motivo. Ele precisa ser outra pessoa, ter limite que cubra o desconto e, acima do máximo do produto, `sales.discount_override` (dele ou do operador).
+  - A liberação vai com a venda e aparece em `/liberacoes`.
+- **Venda sem estoque:**
+  - Com o saldo local zerado, o caixa só vende se o PDV estiver sem sincronizar há mais que o tempo mínimo e o gerente (`sales.zero_stock_release`) autorizar com código e PIN. Senão recusa (FA977).
+  - O tempo mínimo é por filial (padrão 30 min, `structure.manage`) com exceção por terminal (`terminals.approve`), na tela Terminais.
+  - Produto por encomenda só avisa.
+  - A venda chega com o registro e vira o alerta "Vendido sem estoque com o PDV sem internet".
+- **Estoque nas filiais:** consulta com internet (`GET /terminals/stock/:produto`), pelo ícone de loja no item ou na busca.
+- **Cliente e convênio:**
+  - O cliente identificado vai na venda e no comprovante, com o documento mascarado.
+  - Os convênios dele descem com o cadastro.
+  - O pagamento em convênio aparece só com cliente que tenha convênio, com a matrícula. O saldo do convênio chega com o financeiro do cliente (Etapa 7).
 
 ## Clientes
 

@@ -9,7 +9,8 @@ enum PaymentMethod {
   cash('cash', 'Dinheiro'),
   creditCard('credit_card', 'Cartão de crédito'),
   debitCard('debit_card', 'Cartão de débito'),
-  pix('pix', 'PIX');
+  pix('pix', 'PIX'),
+  agreement('agreement', 'Convênio');
 
   const PaymentMethod(this.code, this.label);
 
@@ -25,6 +26,15 @@ class CartLine {
   final int unitPriceCents;
   int discountCents = 0;
 
+  /// Liberação do desconto feita no PDV por outra pessoa (supervisor).
+  ({String supervisorId, String supervisorName, String reason})? release;
+
+  /// Venda sem estoque autorizada com o PDV sem internet.
+  ({String supervisorId, String supervisorName, int minutesOffline})? zeroStockRelease;
+
+  /// Desconto em centésimos de ponto percentual (850 = 8,5%).
+  int get discountBp => grossCents == 0 ? 0 : (discountCents * 10000 / grossCents).ceil();
+
   int get grossCents => lineGrossCents(unitPriceCents, quantityMilli);
   int get totalCents => grossCents - discountCents;
 
@@ -32,23 +42,54 @@ class CartLine {
   List<String> get warnings => [
     if (product.status == 'on_order') 'Produto por encomenda',
     if (product.status == 'blocked') 'Produto bloqueado para compra: vende só o que há em estoque',
-    if (product.stockMilli <= 0) 'Sem estoque na cópia local',
+    if (zeroStockRelease != null)
+      'Sem estoque: autorizado por ${zeroStockRelease!.supervisorName} (${zeroStockRelease!.minutesOffline} min sem internet)'
+    else if (product.stockMilli <= 0)
+      'Sem estoque na cópia local',
+    if (release != null) 'Desconto liberado por ${release!.supervisorName}',
   ];
 }
 
 class Payment {
-  Payment({required this.method, required this.amountCents, this.cardBrand, this.authorizationCode});
+  Payment({
+    required this.method,
+    required this.amountCents,
+    this.cardBrand,
+    this.authorizationCode,
+    this.agreementId,
+    this.agreementName,
+    this.agreementRegistration,
+  });
 
   final PaymentMethod method;
   final int amountCents;
   final String? cardBrand;
   final String? authorizationCode;
+  final String? agreementId;
+  final String? agreementName;
+  final String? agreementRegistration;
+}
+
+/// Cliente identificado na venda (com os convênios dele).
+class SaleCustomer {
+  const SaleCustomer({required this.id, required this.name, required this.code, this.documentMasked, this.agreements = const []});
+
+  final String id;
+  final String name;
+  final int code;
+  final String? documentMasked;
+  final List<Map<String, dynamic>> agreements;
 }
 
 /// Venda em montagem.
 class Cart {
   final lines = <CartLine>[];
   final payments = <Payment>[];
+  SaleCustomer? customer;
+
+  /// Quanto deste produto já está na venda.
+  int quantityOf(String productId) =>
+      lines.where((line) => line.product.id == productId).fold(0, (sum, line) => sum + line.quantityMilli);
 
   bool get isEmpty => lines.isEmpty;
   int get subtotalCents => lines.fold(0, (sum, line) => sum + line.grossCents);
@@ -78,7 +119,7 @@ class Cart {
         ? quantityMilli
         : (quantityMilli * product.barcodeFractionMilli! / 1000).round();
     for (final line in lines) {
-      if (line.product.id == product.id && line.discountCents == 0) {
+      if (line.product.id == product.id && line.discountCents == 0 && line.zeroStockRelease == null) {
         line.quantityMilli += quantity;
         return line;
       }
@@ -91,6 +132,7 @@ class Cart {
   void clear() {
     lines.clear();
     payments.clear();
+    customer = null;
   }
 }
 
@@ -111,9 +153,9 @@ SaleDraft buildSale({
   required int number,
   required int terminalNumber,
   required DateTime now,
-  String? customerId,
 }) {
   if (cart.isEmpty) throw const PosException('FA975');
+  if (cart.payments.any((p) => p.method == PaymentMethod.agreement) && cart.customer == null) throw const PosException('FA983');
   if (cart.paidCents < cart.totalCents || cart.overpaidWithoutCash) throw const PosException('FA972');
   const uuid = Uuid();
   double money(int cents) => cents / 100;
@@ -134,7 +176,10 @@ SaleDraft buildSale({
       'discount': money(line.discountCents),
       'total': money(line.totalCents),
       'batch_id': null,
-      'release': null,
+      'release': line.release == null ? null : {'supervisor_id': line.release!.supervisorId, 'reason': line.release!.reason},
+      'zero_stock_release': line.zeroStockRelease == null
+          ? null
+          : {'supervisor_id': line.zeroStockRelease!.supervisorId, 'minutes_offline': line.zeroStockRelease!.minutesOffline},
     });
     rows.add({
       'id': id,
@@ -162,6 +207,8 @@ SaleDraft buildSale({
       'change': money(changeHere),
       'card_brand': payment.cardBrand,
       'authorization_code': payment.authorizationCode,
+      'agreement_id': payment.agreementId,
+      'agreement_registration': payment.agreementRegistration,
     });
   }
   if (change > 0) throw const PosException('FA972');
@@ -174,7 +221,7 @@ SaleDraft buildSale({
       'number': number,
       'cash_session_id': session.id,
       'operator_id': operator.id,
-      'customer_id': customerId,
+      'customer_id': cart.customer?.id,
       'sold_at': now.toUtc().toIso8601String(),
       'fiscal_model': '65',
       'items': items,

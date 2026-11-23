@@ -92,6 +92,12 @@ abstract class TerminalApi {
     required String id,
   });
 
+  /// Estoque do produto em cada filial do grupo (com internet).
+  Future<List<Map<String, dynamic>>> networkStock({
+    required String accessToken,
+    required String productId,
+  });
+
   /// Um pacote da descida. Sem cursor, a carga inteira.
   Future<PullPage> pull({
     required String accessToken,
@@ -306,6 +312,16 @@ class HttpTerminalApi implements TerminalApi {
       id: json['id'] as String,
       data: json['data'] as Map<String, dynamic>?,
     );
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> networkStock({
+    required String accessToken,
+    required String productId,
+  }) async {
+    final json = await _request('/terminals/stock/${Uri.encodeComponent(productId)}', accessToken: accessToken);
+    if (json is! List) throw const ApiException('FA000');
+    return json.cast<Map<String, dynamic>>();
   }
 
   @override

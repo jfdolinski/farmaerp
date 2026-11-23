@@ -10,6 +10,7 @@ import 'core/error_display.dart';
 import 'core/local_logger.dart';
 import 'core/secret_store.dart';
 import 'core/trace_id.dart';
+import 'customers/customer_service.dart';
 import 'local/local_database.dart';
 import 'pos/pdv_home.dart';
 import 'pos/pos_auth.dart';
@@ -115,6 +116,8 @@ Future<void> main() async {
     terminalNumber: () => controller.terminalNumber,
     // A venda sobe logo, sem esperar o próximo sinal de vida.
     onSaleSaved: () => unawaited(controller.tick()),
+    customers: CustomerService(api: api, database: database, accessToken: controller.accessToken, logger: logger),
+    networkStock: (productId) async => api.networkStock(accessToken: await controller.accessToken(), productId: productId),
     logger: logger,
   );
   runApp(FarmaErpPdvApp(controller: controller, pos: pos, database: database));

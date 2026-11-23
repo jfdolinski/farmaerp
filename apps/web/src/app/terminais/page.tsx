@@ -7,6 +7,7 @@ import { ErrorNotice } from "../error-notice";
 import {
   AddTerminal,
   ApproveForm,
+  OfflineMinutesForm,
   AutoRefresh,
   ReasonAction,
   UnblockButton,
@@ -41,6 +42,8 @@ interface MonitorRow {
   last_push_at: string | null;
   pending_changes: number | null;
   open_conflicts: number;
+  offline_minutes: number | null;
+  branch_offline_minutes: number;
 }
 
 const STATUS_LABELS = {
@@ -123,9 +126,10 @@ async function TerminalsContent() {
   const canApprove = can(user, "terminals.approve");
   const canBlock = can(user, "terminals.block");
   const canRevoke = can(user, "terminals.revoke");
+  const canStructure = can(user, "structure.manage");
   const [terminals, branches] = await Promise.all([
     apiFetch<MonitorRow[]>("/admin/terminals"),
-    apiFetch<{ id: string; name: string }[]>("/admin/branches"),
+    apiFetch<{ id: string; name: string; offline_zero_stock_minutes: number }[]>("/admin/branches"),
   ]);
 
   if (!terminals.ok) redirectIfNeeded(terminals.error, "/terminais");
@@ -136,6 +140,24 @@ async function TerminalsContent() {
       <h1>Terminais</h1>
 
       {canRequest && <AddTerminal branches={branches.ok ? branches.data : []} />}
+
+      {canStructure && branches.ok && branches.data.length > 0 && (
+        <section className={styles.card}>
+          <h2>Venda sem estoque com o PDV sem internet</h2>
+          <p className={styles.hint}>
+            Tempo mínimo sem sincronizar para o PDV aceitar vender um produto com o saldo local zerado, sempre com a
+            autorização do gerente. Cada terminal pode ter uma exceção, na tabela abaixo.
+          </p>
+          <ul className={styles.bullets}>
+            {branches.data.map((branch) => (
+              <li key={branch.id}>
+                <strong>{branch.name}</strong>{" "}
+                <OfflineMinutesForm scope="branch" id={branch.id} current={branch.offline_zero_stock_minutes} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {!canView && !canRequest && (
         <section className={styles.card}>
@@ -210,6 +232,14 @@ async function TerminalsContent() {
                             label="Recusar"
                           />
                         </>
+                      )}
+                      {terminal.status === "active" && canApprove && (
+                        <OfflineMinutesForm
+                          scope="terminal"
+                          id={terminal.id}
+                          current={terminal.offline_minutes}
+                          inherited={terminal.branch_offline_minutes}
+                        />
                       )}
                       {terminal.status === "active" && (
                         <>

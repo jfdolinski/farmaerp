@@ -144,6 +144,17 @@ class FakeApi implements TerminalApi {
     return PullItem(type: 'customer', id: id, data: customerData[id]);
   }
 
+  /// Estoque nas filiais: lista fixa, ou exceção.
+  Object networkResponse = const <Map<String, dynamic>>[];
+
+  @override
+  Future<List<Map<String, dynamic>>> networkStock({required String accessToken, required String productId}) async {
+    _maybeFail();
+    final response = networkResponse;
+    if (response is List<Map<String, dynamic>>) return response;
+    throw response;
+  }
+
   @override
   Future<List<PushResult>> push({
     required String accessToken,

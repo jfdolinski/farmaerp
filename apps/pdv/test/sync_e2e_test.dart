@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:farmaerp_pdv/customers/customer_service.dart';
 import 'package:farmaerp_pdv/local/local_database.dart';
 import 'package:farmaerp_pdv/pos/cart.dart';
+import 'package:farmaerp_pdv/pos/discount.dart';
 import 'package:farmaerp_pdv/pos/pos_auth.dart';
 import 'package:farmaerp_pdv/pos/pos_controller.dart';
 import 'package:farmaerp_pdv/pos/receipt.dart';
@@ -121,11 +122,23 @@ void main() {
           auth: PosAuth(database: database),
           printer: () => printer,
           terminalNumber: () => terminalNumber,
+          customers: customers,
+          networkStock: (productId) => client.networkStock(accessToken: token.value, productId: productId),
         );
         await pos.login('3', '2468');
         expect(pos.notice, isNull);
         pos.openShift(10000);
         pos.scan('7890000000017');
+        // Estoque nas filiais, com internet.
+        final network = await pos.stockElsewhere(pos.cart.lines.single.product);
+        expect(network!.first['own'], isTrue);
+        // Desconto de 5%: passa do limite do operador (0); o Gerente Centro (código 2, limite 10%) libera.
+        final line = pos.cart.lines.single;
+        final discount = (line.grossCents * 5 / 100).round();
+        expect(pos.applyDiscount(line, discount), DiscountNeed.release);
+        expect(await pos.releaseDiscount(line, discount, '2', '1357', 'Teste E2E'), isTrue);
+        await pos.selectCustomer(_demoCustomer);
+        expect(pos.cart.customer?.name, 'Cliente Demonstração');
         pos.startPayment();
         pos.addPayment(Payment(method: PaymentMethod.cash, amountCents: 2000));
         await pos.finish();
@@ -141,6 +154,15 @@ void main() {
         final listed = (jsonDecode(sales.body) as List).cast<Map<String, dynamic>>().where((row) => row['code'] == saleCode).toList();
         expect(listed, hasLength(1));
         expect(listed.single['alert_count'], 0);
+        expect(listed.single['customer_name'], 'Cliente Demonstração');
+        final releases = await http.get(
+          Uri.parse('$base/admin/supervisor-releases?action=sales.discount'),
+          headers: {'Authorization': 'Bearer $session'},
+        );
+        expect(
+          (jsonDecode(releases.body) as List).cast<Map<String, dynamic>>().where((row) => row['reason'] == 'Teste E2E'),
+          hasLength(1),
+        );
       } finally {
         await admin('/admin/products/$_dipirona/prices', {'branchId': _branch, 'price': null}, token: session);
         await admin('/admin/terminals/$terminalId/revoke', {'reason': 'Fim do teste E2E'}, token: session);
