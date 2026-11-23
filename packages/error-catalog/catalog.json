@@ -232,7 +232,12 @@
       "sync_receipt_id_uuid_v7_check",
       "sync_conflict_id_uuid_v7_check",
       "terminal_log_id_uuid_v7_check",
-      "pdv_customer_cache_id_uuid_v7_check"
+      "pdv_customer_cache_id_uuid_v7_check",
+      "cash_session_id_uuid_v7_check",
+      "sale_id_uuid_v7_check",
+      "sale_item_id_uuid_v7_check",
+      "sale_payment_id_uuid_v7_check",
+      "sale_alert_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -1900,5 +1905,50 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": []
+  },
+  "FA962": {
+    "message": "A venda enviada pelo terminal está inconsistente.",
+    "action": "A venda fica nos conflitos de sincronização, na retaguarda. Confira com o operador e atualize o PDV.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": [
+      "cash_session_opening_float_check",
+      "cash_session_status_check",
+      "cash_session_closing_check",
+      "sale_number_check",
+      "sale_code_check",
+      "sale_fiscal_model_check",
+      "sale_fiscal_status_check",
+      "sale_subtotal_check",
+      "sale_discount_total_check",
+      "sale_total_check",
+      "sale_item_line_check",
+      "sale_item_quantity_check",
+      "sale_item_unit_price_check",
+      "sale_item_discount_check",
+      "sale_item_total_check",
+      "sale_item_values_check",
+      "sale_item_line_key",
+      "sale_payment_method_check",
+      "sale_payment_amount_check",
+      "sale_payment_change_check",
+      "sale_payment_card_brand_check",
+      "sale_payment_authorization_check",
+      "sale_payment_registration_check",
+      "sale_payment_agreement_check",
+      "sale_alert_kind_check",
+      "stock_movement_sale_item_check"
+    ]
+  },
+  "FA963": {
+    "message": "Esta venda ou turno já foi recebido com outro registro.",
+    "action": "A venda fica nos conflitos de sincronização, na retaguarda. Confira se o terminal repetiu a numeração.",
+    "httpStatus": 409,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": [
+      "sale_terminal_number_key"
+    ]
   }
 }

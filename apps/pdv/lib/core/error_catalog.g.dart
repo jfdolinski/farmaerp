@@ -1036,4 +1036,16 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Complete a busca e tente de novo.',
     retryable: false,
   ),
+  'FA962': ErrorCatalogEntry(
+    code: 'FA962',
+    message: 'A venda enviada pelo terminal está inconsistente.',
+    action: 'A venda fica nos conflitos de sincronização, na retaguarda. Confira com o operador e atualize o PDV.',
+    retryable: false,
+  ),
+  'FA963': ErrorCatalogEntry(
+    code: 'FA963',
+    message: 'Esta venda ou turno já foi recebido com outro registro.',
+    action: 'A venda fica nos conflitos de sincronização, na retaguarda. Confira se o terminal repetiu a numeração.',
+    retryable: false,
+  ),
 };

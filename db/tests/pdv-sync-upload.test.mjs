@@ -132,7 +132,7 @@ describe('subida', () => {
       [logItem({}, { fields: ['lista'] }), 'FA958'],
       [logItem({}, { fields: { big: 'x'.repeat(9000) } }), 'FA958'],
       [logItem({}, { version: 'v'.repeat(51) }), 'FA958'],
-      [logItem({ kind: 'sale' }), 'FA959'],
+      [logItem({ kind: 'promotion' }), 'FA959'],
     ];
     const ok = logItem();
     const results = await push(a.terminal1, [...cases.map(([item]) => item), ok]);
