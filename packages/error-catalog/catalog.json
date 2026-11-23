@@ -226,7 +226,8 @@
       "service_invoice_id_uuid_v7_check",
       "limit_type_id_uuid_v7_check",
       "role_limit_id_uuid_v7_check",
-      "supervisor_release_id_uuid_v7_check"
+      "supervisor_release_id_uuid_v7_check",
+      "catalog_product_image_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -1808,6 +1809,23 @@
       "supervisor_release_value_check",
       "supervisor_release_requester_limit_check",
       "supervisor_release_releaser_limit_check"
+    ]
+  },
+  "FA955": {
+    "message": "As imagens do Catálogo são inválidas.",
+    "action": "Confira as imagens do arquivo do Catálogo: até 20 por produto, sem repetir, em JPEG, PNG ou WebP de até 5 MB.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "catalog_product_image_sort_order_check",
+      "catalog_product_image_sha256_check",
+      "catalog_product_image_width_check",
+      "catalog_product_image_height_check",
+      "catalog_product_image_full_check",
+      "catalog_product_image_thumb_check",
+      "catalog_product_image_sha256_key",
+      "catalog_product_image_main_key"
     ]
   }
 }

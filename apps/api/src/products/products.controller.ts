@@ -21,6 +21,7 @@ import {
   requireUuid,
 } from '../common/parse.js';
 import { DatabaseService } from '../database.service.js';
+import { catalogImages, withMainImage } from './catalog-images.js';
 import { AppError } from '../observability/app-error.js';
 
 const MAX_FRACTION = 9_999_999;
@@ -138,7 +139,7 @@ export class ProductsController {
         'SELECT * FROM app.search_products($1, 50, $2)',
         [query ?? '', inactive === '1'],
       );
-      return rows;
+      return withMainImage(client, rows, 'catalog_product_id');
     });
   }
 
@@ -217,8 +218,10 @@ export class ProductsController {
           LIMIT 50`,
         [productId],
       );
+      const images = await catalogImages(client, [rows[0].catalog_product_id as string | null]);
       return {
         ...rows[0],
+        images: images.map(({ id: imageId, is_main: isMain, width, height }) => ({ id: imageId, is_main: isMain, width, height })),
         barcodes: barcodes.rows,
         grid: grid.rows,
         pmc: pmc.rows,
@@ -395,7 +398,7 @@ export class ProductsController {
         'SELECT * FROM app.search_catalog($1)',
         [query ?? ''],
       );
-      return rows;
+      return withMainImage(client, rows, 'id');
     });
   }
 

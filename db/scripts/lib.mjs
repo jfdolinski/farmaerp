@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { checkPreparedImage } from './catalog-images.mjs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import argon2 from 'argon2';
@@ -100,7 +101,14 @@ export async function importCatalog(config, items) {
     try {
       for (const [index, item] of items.entries()) {
         try {
-          await client.query('SELECT app.upsert_catalog_product($1::jsonb)', [JSON.stringify(item)]);
+          const { images, ...data } = item ?? {};
+          await client.query('SELECT app.upsert_catalog_product($1::jsonb)', [JSON.stringify(data)]);
+          // Sem o campo, as imagens ficam como estão; com ele, a lista passa a ser exatamente esta.
+          if (images !== undefined) {
+            if (!Array.isArray(images)) throw new Error('"images" precisa ser uma lista.');
+            for (const image of images) checkPreparedImage(image);
+            await client.query('SELECT app.set_catalog_product_images($1, $2::jsonb)', [data.sourceKey, JSON.stringify(images)]);
+          }
         } catch (error) {
           throw new Error(
             `Item ${index + 1} (${item?.sourceKey ?? 'sem sourceKey'}) recusado: ${error.message}`,

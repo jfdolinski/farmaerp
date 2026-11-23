@@ -36,6 +36,7 @@ import {
 import { cnpjText } from "../../fornecedores/format";
 import { costText, dateTimeText } from "../../notas/format";
 import styles from "../../terminais/page.module.css";
+import { ProductGallery, ProductImage } from "../images";
 
 interface AverageCostRow {
   branch_id: string;
@@ -52,6 +53,7 @@ interface ProductDetail extends ProductValues {
   code: string;
   display_name: string;
   catalog_name: string | null;
+  images?: ProductImage[];
   active_ingredient: string | null;
   catalog_manufacturer: string | null;
   ms_registration: string | null;
@@ -179,6 +181,7 @@ async function ProductContent({
         <h2>Dados do Catálogo</h2>
         {product.catalog_product_id ? (
           <>
+            <ProductGallery images={product.images ?? []} name={product.catalog_name ?? product.display_name} />
             <p>
               <strong>{product.catalog_name}</strong>
             </p>

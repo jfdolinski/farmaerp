@@ -175,6 +175,11 @@ O UUID é a identidade do registro. O código humano serve para tela, cupom e at
 ## Produtos
 
 - **Catálogo:** tabelas globais `catalog_*`, sem grupo econômico. A API só lê; quem escreve é `npm run catalog:import`, com o papel dono das tabelas.
+- **Imagens do Catálogo:** cada item do arquivo pode trazer `"images": [{ "file": "caminho.jpg", "main": true }]`, com caminho relativo ao JSON.
+    - `npm run catalog:prepare-images -- entrada.json saida.json` converte JPEG, PNG ou WebP de até 5 MB (conferidos pelos bytes) para WebP de até 800 px e de até 200 px, sem metadados. A `sharp` é dependência só de desenvolvimento.
+    - `npm run catalog:import` aceita o arquivo já preparado em qualquer lugar, inclusive no servidor, ou prepara na hora onde a `sharp` estiver instalada.
+    - As imagens ficam em `catalog_product_image` (bytea). A mesma imagem é reconhecida pelo SHA-256 do original e não grava de novo; a que sai da lista é retirada; sem o campo `images`, nada muda.
+    - A API entrega em `GET admin/catalog-images/:id/full|thumb`, com cache longo e ETag, e a retaguarda repassa em `/imagens/:id/:tamanho`, com a sessão.
 - **Produto da loja:** único na rede. Pode existir sem Catálogo, marcado como tal, até ser vinculado.
 - **Código de barras:** não se repete no grupo. Todo produto ativo termina a transação com um principal, que precisa estar ativo na leitura do PDV. Códigos fora do padrão GTIN são marcados como internos.
 - **Fracionamento:** o do código de barras prevalece sobre o do produto. Use `app.effective_fraction`.

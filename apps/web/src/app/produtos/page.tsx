@@ -5,6 +5,7 @@ import { apiFetch, can, redirectIfNeeded, requireUser } from "@/lib/api";
 import { AppHeader } from "../app-header";
 import { ErrorNotice } from "../error-notice";
 import styles from "../terminais/page.module.css";
+import { CatalogThumb } from "./images";
 
 export const metadata: Metadata = { title: "Produtos · FarmaERP" };
 
@@ -18,6 +19,7 @@ interface ProductRow {
   active_ingredient: string | null;
   manufacturer: string | null;
   primary_barcode: string | null;
+  main_image_id: string | null;
   online_sale_blocked: boolean;
   all_inactive: boolean;
 }
@@ -98,6 +100,7 @@ async function ProductsContent({ searchParams }: { searchParams: SearchParams })
             <table>
               <thead>
                 <tr>
+                  <th>Imagem</th>
                   <th>Código</th>
                   <th>Produto</th>
                   <th>Fabricante</th>
@@ -107,6 +110,9 @@ async function ProductsContent({ searchParams }: { searchParams: SearchParams })
               <tbody>
                 {products.data.map((product) => (
                   <tr key={product.id}>
+                    <td>
+                      <CatalogThumb id={product.main_image_id} alt={product.display_name} />
+                    </td>
                     <td>{product.code}</td>
                     <td>
                       <Link href={`/produtos/${product.id}`}>{product.display_name}</Link>
