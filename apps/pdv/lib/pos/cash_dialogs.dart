@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'cash.dart';
+import 'focus_kit.dart';
 import 'money.dart';
 import 'pos_controller.dart';
 
@@ -41,6 +42,10 @@ class _CashMovementDialogState extends State<_CashMovementDialog> {
   final _reason = TextEditingController();
   final _code = TextEditingController();
   final _pin = TextEditingController();
+  final _amountFocus = FocusNode();
+  final _reasonFocus = FocusNode();
+  final _codeFocus = FocusNode();
+  final _pinFocus = FocusNode();
   bool _needsRelease = false;
 
   @override
@@ -48,7 +53,26 @@ class _CashMovementDialogState extends State<_CashMovementDialog> {
     for (final field in [_amount, _reason, _code, _pin]) {
       field.dispose();
     }
+    for (final node in [_amountFocus, _reasonFocus, _codeFocus, _pinFocus]) {
+      node.dispose();
+    }
     super.dispose();
+  }
+
+  /// Depois de um erro: o valor, o motivo, o código ou o PIN, o que estiver faltando.
+  void _focusProblem() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final FocusNode node;
+      if (_needsRelease) {
+        node = _code.text.trim().isEmpty ? _codeFocus : _pinFocus;
+      } else if ((parseCents(_amount.text) ?? 0) <= 0 || widget.controller.notice?.reference.contains('FA993') == true) {
+        node = _amountFocus;
+      } else {
+        node = _reasonFocus;
+      }
+      node.requestFocus();
+    });
   }
 
   Future<void> _confirm() async {
@@ -64,7 +88,11 @@ class _CashMovementDialogState extends State<_CashMovementDialog> {
       done = await controller.withdraw(cents, _reason.text);
       if (done == false) setState(() => _needsRelease = true);
     }
-    if (done == true && mounted) Navigator.of(context).pop();
+    if (done == true && mounted) {
+      Navigator.of(context).pop();
+    } else if (mounted) {
+      _focusProblem();
+    }
   }
 
   @override
@@ -86,18 +114,22 @@ class _CashMovementDialogState extends State<_CashMovementDialog> {
               Text(widget.withdrawal
                   ? 'Dinheiro que sai da gaveta (para o cofre ou o banco). Sai um comprovante para assinar.'
                   : 'Troco que entra na gaveta. Sai um comprovante para assinar.'),
-              TextField(
+              NumberField(
                 key: const Key('cash-amount'),
                 controller: _amount,
+                focusNode: _amountFocus,
                 autofocus: true,
+                decimal: true,
                 enabled: !_needsRelease,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                onSubmitted: (_) => _reasonFocus.requestFocus(),
                 inputFormatters: _moneyInput,
                 decoration: const InputDecoration(labelText: 'Valor (R\$)'),
               ),
               TextField(
                 key: const Key('cash-reason'),
                 controller: _reason,
+                focusNode: _reasonFocus,
+                onSubmitted: (_) => _confirm(),
                 enabled: !_needsRelease,
                 maxLength: 500,
                 decoration: InputDecoration(labelText: widget.withdrawal ? 'Motivo (por exemplo, envelope do cofre)' : 'Motivo'),
@@ -114,7 +146,9 @@ class _CashMovementDialogState extends State<_CashMovementDialog> {
                       child: TextField(
                         key: const Key('cash-release-code'),
                         controller: _code,
+                        focusNode: _codeFocus,
                         autofocus: true,
+                        onSubmitted: (_) => _pinFocus.requestFocus(),
                         keyboardType: TextInputType.number,
                         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                         decoration: const InputDecoration(labelText: 'Código de quem libera'),
@@ -125,6 +159,7 @@ class _CashMovementDialogState extends State<_CashMovementDialog> {
                       child: TextField(
                         key: const Key('cash-release-pin'),
                         controller: _pin,
+                        focusNode: _pinFocus,
                         obscureText: true,
                         keyboardType: TextInputType.number,
                         inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
@@ -211,11 +246,12 @@ class _CloseShiftDialogState extends State<_CloseShiftDialog> {
                     'Informe o que contou: a conferência com o sistema é feita pela gerência. Sem movimento, informe 0.',
                   ),
                   for (final entry in countedMethods.entries)
-                    TextField(
+                    NumberField(
                       key: Key('count-${entry.key}'),
-                      controller: _fields[entry.key],
+                      controller: _fields[entry.key]!,
+                      autofocus: entry.key == countedMethods.keys.first,
+                      decimal: true,
                       enabled: !_confirming,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       inputFormatters: _moneyInput,
                       decoration: InputDecoration(labelText: '${entry.value} (R\$)'),
                       onChanged: (_) => setState(() {}),

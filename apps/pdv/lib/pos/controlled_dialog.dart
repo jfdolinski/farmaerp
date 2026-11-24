@@ -2,15 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'controlled.dart';
+import 'focus_kit.dart';
 import 'money.dart';
 import 'pos_controller.dart';
 
 /// Aviso no caixa quando passa um controlado: abre a janela da receita ou desiste.
 class ControlledPanel extends StatelessWidget {
-  const ControlledPanel({super.key, required this.controller, required this.pending});
+  const ControlledPanel({super.key, required this.controller, required this.pending, this.focusNode});
 
   final PosController controller;
   final PendingControlled pending;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -33,6 +35,7 @@ class ControlledPanel extends StatelessWidget {
                 TextButton(key: const Key('controlled-cancel'), onPressed: controller.cancelControlled, child: const Text('Não vender')),
                 FilledButton(
                   key: const Key('controlled-open'),
+                  focusNode: focusNode,
                   onPressed: () => showControlledDialog(context, controller),
                   child: const Text('Preencher a receita'),
                 ),
@@ -76,12 +79,16 @@ class _ControlledDialogState extends State<_ControlledDialog> {
   void initState() {
     super.initState();
     _batchId = _batches.isEmpty ? null : _batches.first.id;
+    _focusProblem();
   }
 
   @override
   void dispose() {
     for (final field in [..._fields.values, _quantity, _code, _pin, _reason]) {
       field.dispose();
+    }
+    for (final node in [..._focuses.values, _reasonFocus, _codeFocus, _pinFocus]) {
+      node.dispose();
     }
     super.dispose();
   }
@@ -126,7 +133,38 @@ class _ControlledDialogState extends State<_ControlledDialog> {
             form: _form, batchId: _batchId ?? '', quantityMilli: _quantityMilli, code: _code.text, pin: _pin.text);
     _pin.clear();
     if (ok && mounted) Navigator.of(context).pop();
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+      _focusProblem();
+    }
+  }
+
+  static const _order = [
+    'number', 'date', 'prescriberName', 'prescriberNumber', 'prescriberState', 'buyerName', 'buyerDocument',
+    'buyerIssuer', 'buyerState', 'patientName', 'patientAge',
+  ];
+  final _focuses = <String, FocusNode>{};
+  final _reasonFocus = FocusNode();
+  final _codeFocus = FocusNode();
+  final _pinFocus = FocusNode();
+  FocusNode _node(String name) => _focuses.putIfAbsent(name, FocusNode.new);
+
+  /// Primeiro campo que falta (ou com problema); sem nada faltando, o código e o PIN.
+  void _focusProblem() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_pendingOnly) {
+        (_reason.text.trim().isEmpty ? _reasonFocus : _code.text.trim().isEmpty ? _codeFocus : _pinFocus).requestFocus();
+        return;
+      }
+      final errors = prescriptionErrors(_form, DateTime.now());
+      final first = _order.where(errors.containsKey).firstOrNull;
+      if (first != null) {
+        _node(first).requestFocus();
+      } else {
+        (_code.text.trim().isEmpty ? _codeFocus : _pinFocus).requestFocus();
+      }
+    });
   }
 
   Widget _text(String name, String label, {Map<String, String> errors = const {}, double width = 220, TextInputType? keyboard,
@@ -136,6 +174,7 @@ class _ControlledDialogState extends State<_ControlledDialog> {
       child: TextField(
         key: Key('rx-$name'),
         controller: _field(name),
+        focusNode: _node(name),
         keyboardType: keyboard,
         inputFormatters: formatters,
         decoration: InputDecoration(labelText: label, hintText: hint, errorText: _tried ? errors[name] : null),
@@ -184,10 +223,9 @@ class _ControlledDialogState extends State<_ControlledDialog> {
                     children: [
                       SizedBox(
                         width: 120,
-                        child: TextField(
+                        child: NumberField(
                           key: const Key('rx-quantity'),
                           controller: _quantity,
-                          keyboardType: TextInputType.number,
                           inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
                           decoration: const InputDecoration(labelText: 'Quantidade'),
                           onChanged: (_) => setState(() {}),
@@ -229,6 +267,7 @@ class _ControlledDialogState extends State<_ControlledDialog> {
                     TextField(
                       key: const Key('rx-pending-reason'),
                       controller: _reason,
+                      focusNode: _reasonFocus,
                       maxLength: 500,
                       decoration: InputDecoration(
                         labelText: 'Motivo (por exemplo, nota de entrada ainda não lançada)',
@@ -329,6 +368,7 @@ class _ControlledDialogState extends State<_ControlledDialog> {
                       child: TextField(
                         key: const Key('rx-code'),
                         controller: _code,
+                        focusNode: _codeFocus,
                         keyboardType: TextInputType.number,
                         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                         decoration: const InputDecoration(labelText: 'Código'),
@@ -339,6 +379,7 @@ class _ControlledDialogState extends State<_ControlledDialog> {
                       child: TextField(
                         key: const Key('rx-pin'),
                         controller: _pin,
+                        focusNode: _pinFocus,
                         obscureText: true,
                         keyboardType: TextInputType.number,
                         inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],

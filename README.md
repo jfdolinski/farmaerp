@@ -344,6 +344,28 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - Sem impressora configurada, sai em PDF em `Documentos\FarmaERP\comprovantes`.
   - Falha na impressão não desfaz a venda e mostra "Reimprimir".
 - **Atalhos:** F2 vai para a leitura, F3 puxa o orçamento, F4 identifica o cliente, F6 sangria, F7 suprimento, F8 fecha o caixa, F10 abre o pagamento, Esc volta.
+- **Foco:** o cursor sempre volta para o campo obrigatório da vez.
+  - Entrada: código e PIN; PIN errado volta para o PIN.
+  - Turno: fundo de troco.
+  - Venda: vendedor, leitura, painel aberto (receita do controlado, venda sem estoque) e valor do pagamento.
+  - Nas janelas, o foco começa no primeiro campo obrigatório e, num erro, vai para o campo com problema. Ao fechar a janela, volta para a tela.
+- **Campos de número** (quantidade, valores, contagem, plaquinha): ao entrar, o valor fica selecionado e o operador digita por cima.
+- **Busca de produto com autocompletar:** a partir de 3 letras, as sugestões aparecem enquanto digita. As setas escolhem, Enter adiciona e Esc fecha.
+  - O espaço vale como "%": "dip 500" acha Dipirona Sódica 500 mg, e pedaço do meio da palavra também vale.
+  - Ignora acentos e maiúsculas; o que começa as palavras vem primeiro.
+  - Código de barras, código do produto e cupom do orçamento vão direto com Enter.
+- **Consulta do produto:** o botão de informação, na busca e em cada item, mostra os dados de cadastro que o terminal tem (códigos de barras, princípio ativo, fabricante, registro no MS, NCM, CEST, lista de controlado, situação, preço, desconto máximo, fracionamento, estoque e lotes), mesmo sem internet.
+- **Cliente com autocompletar:** a partir de 3 letras, busca sozinho e Enter escolhe o marcado. Na janela do orçamento (F3), a lista de pendentes filtra enquanto digita.
+- **Fonte do PDV:** no ícone de texto da barra de cima, o tamanho (de 80% a 160%) e o tipo (fontes do sistema). Vale só para o terminal, fica no banco local e é aplicada na hora.
+- **Barra inferior fixa:**
+  - loja e número do caixa;
+  - operador e hora da abertura do turno;
+  - vendedor da venda atual;
+  - internet, envios pendentes e hora da última sincronização;
+  - data e hora;
+  - versão.
+
+  Sem valores do turno, por causa do fechamento cego.
 - **Desconto no item:** em R$ ou %.
   - Dentro do limite de desconto do operador (perfis) e do máximo do produto (motor de regras, que desce com o produto e vence com a regra), vale na hora.
   - Acima, um supervisor libera no próprio terminal com código, PIN e motivo. Ele precisa ser outra pessoa, ter limite que cubra o desconto e, acima do máximo do produto, `sales.discount_override` (dele ou do operador).

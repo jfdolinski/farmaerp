@@ -225,6 +225,8 @@ void main() {
     api.openQuoteList = [
       {'id': quoteId, 'code': 'O1-000004', 'card_number': 15, 'seller_name': 'Balconista Ana', 'customer_name': null, 'total': 20, 'item_count': 3,
        'quoted_at': '2026-11-24T12:00:00Z', 'expires_at': '2026-11-25T03:00:00Z'},
+      {'id': '019a0000-0000-7000-8000-0000000000fa', 'code': 'O1-000005', 'card_number': 16, 'seller_name': 'Gerente Centro', 'customer_name': 'Maria', 'total': 10,
+       'item_count': 1, 'quoted_at': '2026-11-24T12:10:00Z', 'expires_at': '2026-11-25T03:00:00Z'},
     ];
     api.quoteResponse['O1-000004'] = quoteData();
     await tester.binding.setSurfaceSize(const Size(1400, 900));
@@ -235,11 +237,22 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('quote-lookup')), findsOneWidget);
     expect(find.textContaining('Vendedor: Balconista Ana'), findsOneWidget);
+    expect(find.byKey(const Key('quote-O1-000005')), findsOneWidget);
+    // Filtra enquanto digita (vendedor, cliente, plaquinha ou código).
+    await tester.enterText(find.byKey(const Key('quote-key')), 'ana');
+    await tester.pump();
+    expect(find.byKey(const Key('quote-O1-000005')), findsNothing);
+    expect(tester.widget<ListTile>(find.byKey(const Key('quote-O1-000004'))).selected, isTrue);
+    await tester.enterText(find.byKey(const Key('quote-key')), 'maria');
+    await tester.pump();
+    expect(find.byKey(const Key('quote-O1-000004')), findsNothing);
+    await tester.enterText(find.byKey(const Key('quote-key')), '');
+    await tester.pump();
     await tester.tap(find.byKey(const Key('quote-O1-000004')));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('quote-lookup')), findsNothing);
     expect(find.byKey(const Key('cart-quote')), findsOneWidget);
-    expect(find.text('Vendedor: Balconista Ana'), findsOneWidget);
+    expect(tester.widget<Text>(find.byKey(const Key('seller-name'))).data, 'Vendedor: Balconista Ana');
   });
 }

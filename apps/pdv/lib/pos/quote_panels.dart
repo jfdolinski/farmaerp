@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'focus_kit.dart';
 import 'money.dart';
 import 'pos_controller.dart';
 import 'pos_dialogs.dart';
@@ -8,10 +9,13 @@ import 'pos_dialogs.dart';
 /// Vendedor da venda ou do orçamento: pedido a cada novo atendimento (código, e o PIN se a filial
 /// exigir). Identificado, mostra o nome e deixa trocar.
 class SellerPanel extends StatefulWidget {
-  const SellerPanel({super.key, required this.controller, required this.onIdentified});
+  const SellerPanel({super.key, required this.controller, required this.onIdentified, this.focusNode});
 
   final PosController controller;
   final VoidCallback onIdentified;
+
+  /// Campo do código (a tela põe o cursor nele a cada venda ou orçamento novo).
+  final FocusNode? focusNode;
 
   @override
   State<SellerPanel> createState() => _SellerPanelState();
@@ -36,6 +40,11 @@ class _SellerPanelState extends State<SellerPanel> {
     if (ok) {
       _code.clear();
       widget.onIdentified();
+    } else if (mounted) {
+      final pinRequired = widget.controller.database.sellerPinRequired;
+      final node = pinRequired && _code.text.trim().isNotEmpty ? _pinFocus : widget.focusNode;
+      node?.requestFocus();
+      if (node == widget.focusNode) selectAllText(_code);
     }
   }
 
@@ -75,7 +84,8 @@ class _SellerPanelState extends State<SellerPanel> {
                   child: TextField(
                     key: const Key('seller-code'),
                     controller: _code,
-                    autofocus: true,
+                    focusNode: widget.focusNode,
+                    autofocus: widget.focusNode == null,
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     decoration: const InputDecoration(labelText: 'Código do vendedor'),
@@ -114,9 +124,10 @@ class _SellerPanelState extends State<SellerPanel> {
 
 /// Painel lateral do terminal de orçamento: cliente, total, plaquinha e cupom.
 class QuotePanel extends StatefulWidget {
-  const QuotePanel({super.key, required this.controller});
+  const QuotePanel({super.key, required this.controller, this.dialog});
 
   final PosController controller;
+  final void Function(Future<void> Function() open)? dialog;
 
   @override
   State<QuotePanel> createState() => _QuotePanelState();
@@ -160,7 +171,9 @@ class _QuotePanelState extends State<QuotePanel> {
             if (cart.customer == null)
               OutlinedButton.icon(
                 key: const Key('identify-customer'),
-                onPressed: controller.customers == null ? null : () => showCustomerDialog(context, controller),
+                onPressed: controller.customers == null
+                    ? null
+                    : () => (widget.dialog ?? (open) => open())(() => showCustomerDialog(context, controller)),
                 icon: const Icon(Icons.person_search),
                 label: const Text('Identificar cliente (F4)'),
               )
@@ -182,10 +195,9 @@ class _QuotePanelState extends State<QuotePanel> {
               style: Theme.of(context).textTheme.displaySmall?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
-            TextField(
+            NumberField(
               key: const Key('quote-card'),
               controller: _card,
-              keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
               decoration: const InputDecoration(labelText: 'Plaquinha (número do cartão, opcional)'),
               onChanged: (_) => setState(() {}),
@@ -241,6 +253,32 @@ class _QuoteLookupDialogState extends State<_QuoteLookupDialog> {
   final _key = TextEditingController();
   List<Map<String, dynamic>>? _pending;
   bool _loading = true;
+  int _highlight = 0;
+
+  /// Pendentes que combinam com o que foi digitado (plaquinha, código, vendedor ou cliente).
+  List<Map<String, dynamic>> get _filtered {
+    final words = _key.text.toLowerCase().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    final all = _pending ?? const [];
+    if (words.isEmpty) return all;
+    return [
+      for (final quote in all)
+        if (words.every((word) => [quote['card_number'], quote['code'], quote['seller_name'], quote['customer_name']]
+            .whereType<Object>()
+            .any((value) => '$value'.toLowerCase().contains(word))))
+          quote,
+    ];
+  }
+
+  /// Enter: plaquinha ou código digitado inteiro vai direto; senão, o marcado na lista.
+  void _submit() {
+    final text = _key.text.trim();
+    final filtered = _filtered;
+    if (RegExp(r'^\d{1,4}$').hasMatch(text) || RegExp(r'^[Oo]\d+-\d{6,}$').hasMatch(text) || filtered.isEmpty) {
+      _load(text);
+    } else {
+      _load(filtered[_highlight.clamp(0, filtered.length - 1)]['code'] as String);
+    }
+  }
 
   @override
   void initState() {
@@ -282,7 +320,7 @@ class _QuoteLookupDialogState extends State<_QuoteLookupDialog> {
       listenable: controller,
       builder: (context, _) {
         final notice = controller.notice;
-        final pending = _pending ?? const [];
+        final pending = _filtered;
         return AlertDialog(
           key: const Key('quote-lookup'),
           title: const Text('Puxar orçamento'),
@@ -303,18 +341,29 @@ class _QuoteLookupDialogState extends State<_QuoteLookupDialog> {
                 Row(
                   children: [
                     Expanded(
-                      child: TextField(
-                        key: const Key('quote-key'),
-                        controller: _key,
-                        autofocus: true,
-                        decoration: const InputDecoration(labelText: 'Número da plaquinha ou código do cupom'),
-                        onSubmitted: _load,
+                      child: SuggestionKeys(
+                        onMove: (step) {
+                          if (pending.isEmpty) return;
+                          setState(() => _highlight = (_highlight + step).clamp(0, pending.length - 1));
+                        },
+                        onClose: () => Navigator.of(context).pop(),
+                        child: TextField(
+                          key: const Key('quote-key'),
+                          controller: _key,
+                          autofocus: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Plaquinha, código do cupom, vendedor ou cliente',
+                            helperText: 'A lista filtra enquanto digita; Enter puxa o marcado.',
+                          ),
+                          onChanged: (_) => setState(() => _highlight = 0),
+                          onSubmitted: (_) => _submit(),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
                     FilledButton(
                       key: const Key('quote-load'),
-                      onPressed: controller.busy ? null : () => _load(_key.text),
+                      onPressed: controller.busy ? null : _submit,
                       child: const Text('Puxar'),
                     ),
                   ],
@@ -323,7 +372,10 @@ class _QuoteLookupDialogState extends State<_QuoteLookupDialog> {
                 Text('Pendentes da loja', style: Theme.of(context).textTheme.titleSmall),
                 if (_loading) const Padding(padding: EdgeInsets.all(8), child: LinearProgressIndicator()),
                 if (!_loading && _pending != null && pending.isEmpty)
-                  const Padding(padding: EdgeInsets.all(8), child: Text('Nenhum orçamento aberto.')),
+                  Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Text(_key.text.trim().isEmpty ? 'Nenhum orçamento aberto.' : 'Nenhum pendente combina com o que foi digitado.'),
+                  ),
                 if (!_loading && _pending == null)
                   const Padding(padding: EdgeInsets.all(8), child: Text('Sem a lista agora: busque pela plaquinha ou pelo cupom.')),
                 if (pending.isNotEmpty)
@@ -332,9 +384,11 @@ class _QuoteLookupDialogState extends State<_QuoteLookupDialog> {
                     child: ListView(
                       shrinkWrap: true,
                       children: [
-                        for (final quote in pending)
+                        for (final (index, quote) in pending.indexed)
                           ListTile(
                             key: Key('quote-${quote['code']}'),
+                            selected: index == _highlight,
+                            selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
                             leading: Text(quote['card_number'] == null ? '—' : '${quote['card_number']}',
                                 style: Theme.of(context).textTheme.titleLarge),
                             title: Text('${quote['code']} · ${formatCents(((quote['total'] as num) * 100).round())}'),
