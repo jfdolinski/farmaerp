@@ -827,8 +827,8 @@ class _ItemsPanel extends StatelessWidget {
                       subtitle: Text(
                         [
                           '${formatMilli(line.quantityMilli)} × ${formatCents(line.unitPriceCents)}',
-                          if (line.discountCents > 0)
-                            'desconto ${formatCents(line.discountCents)}',
+                          if (line.manualDiscountCents > 0)
+                            'desconto ${formatCents(line.manualDiscountCents)}',
                           ...line.warnings,
                         ].join(' · '),
                       ),
@@ -1027,6 +1027,7 @@ class _PaymentPanelState extends State<_PaymentPanel> {
   Map<String, dynamic>? _agreement;
   ({String id, String code, int balanceCents})? _credit;
   final _creditCode = TextEditingController();
+  final _coupon = TextEditingController();
   final _amount = TextEditingController();
   final _brand = TextEditingController();
   final _authorization = TextEditingController();
@@ -1038,8 +1039,9 @@ class _PaymentPanelState extends State<_PaymentPanel> {
     _fillRemaining();
   }
 
+  /// O que falta, já com o desconto da forma escolhida (por exemplo, PIX com desconto).
   void _fillRemaining() {
-    final remaining = widget.controller.cart.remainingCents;
+    final remaining = widget.controller.remainingIfPaidWith(_method);
     _amount.text = formatCents(remaining).replaceFirst('R\$ ', '');
   }
 
@@ -1047,6 +1049,7 @@ class _PaymentPanelState extends State<_PaymentPanel> {
   void dispose() {
     _amount.dispose();
     _creditCode.dispose();
+    _coupon.dispose();
     _brand.dispose();
     _authorization.dispose();
     super.dispose();
@@ -1100,6 +1103,11 @@ class _PaymentPanelState extends State<_PaymentPanel> {
       _fillRemaining();
     });
     _refocusAmount();
+  }
+
+  void _applyCoupon() {
+    if (widget.controller.applyCoupon(_coupon.text)) _coupon.clear();
+    setState(_fillRemaining);
   }
 
   /// Busca o crédito e sugere o menor entre o saldo e o que falta.
@@ -1164,8 +1172,24 @@ class _PaymentPanelState extends State<_PaymentPanel> {
                       onSelected: (_) => setState(() {
                         _method = method;
                         _error = null;
+                        _fillRemaining();
                       }),
                     ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    key: const Key('coupon'),
+                    controller: _coupon,
+                    decoration: InputDecoration(labelText: cart.coupon == null ? 'Cupom de desconto' : 'Cupom ${cart.coupon}'),
+                    onSubmitted: (_) => _applyCoupon(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton(key: const Key('apply-coupon'), onPressed: _applyCoupon, child: const Text('Aplicar')),
               ],
             ),
             const SizedBox(height: 12),

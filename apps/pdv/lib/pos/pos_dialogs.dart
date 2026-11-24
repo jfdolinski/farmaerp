@@ -172,7 +172,7 @@ class _DiscountDialogState extends State<_DiscountDialog> {
         ),
       ),
       actions: [
-        if (line.discountCents > 0)
+        if (line.manualDiscountCents > 0)
           TextButton(
             onPressed: () {
               widget.controller.applyDiscount(line, 0);

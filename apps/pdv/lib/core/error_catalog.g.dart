@@ -748,6 +748,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'O nome aparece na explicação do desconto no caixa.',
     retryable: false,
   ),
+  'FA832': ErrorCatalogEntry(
+    code: 'FA832',
+    message: 'Este cupom não vale para esta venda.',
+    action: 'Confira o código, a validade e os produtos do cupom.',
+    retryable: false,
+  ),
   'FA870': ErrorCatalogEntry(
     code: 'FA870',
     message: 'Informe o motivo da devolução.',
