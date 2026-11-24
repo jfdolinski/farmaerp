@@ -433,7 +433,7 @@ describe('proteções', () => {
     }
     for (const args of [
       { cursor: 'abc' }, { cursor: '-1' }, { until: '1x' }, { after: `3:${randomUUID()}` },
-      { until: '10', after: `6:${randomUUID()}` }, { until: '10', after: '3:nada' }, { limit: 0 }, { limit: 5001 },
+      { until: '10', after: `7:${randomUUID()}` }, { until: '10', after: '3:nada' }, { limit: 0 }, { limit: 5001 },
     ]) {
       await expect(pullPage(a.terminal1, args)).rejects.toSatisfy(hasCode('FA956'));
     }

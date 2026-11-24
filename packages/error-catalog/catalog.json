@@ -249,7 +249,9 @@
       "sale_return_item_id_uuid_v7_check",
       "pdv_auth_event_id_uuid_v7_check",
       "biometric_consent_id_uuid_v7_check",
-      "face_template_id_uuid_v7_check"
+      "face_template_id_uuid_v7_check",
+      "customer_group_id_uuid_v7_check",
+      "discount_rule_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -405,7 +407,8 @@
       "product_category_name_active_key",
       "product_group_name_active_key",
       "sales_channel_name_active_key",
-      "agreement_name_active_key"
+      "agreement_name_active_key",
+      "customer_group_name_key"
     ]
   },
   "FA216": {
@@ -430,7 +433,8 @@
       "product_display_name_check",
       "customer_name_check",
       "customer_dependent_name_check",
-      "agreement_name_check"
+      "agreement_name_check",
+      "customer_group_name_check"
     ]
   },
   "FA217": {
@@ -983,7 +987,8 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": [
-      "product_rule_target_check"
+      "product_rule_target_check",
+      "discount_rule_target_check"
     ]
   },
   "FA703": {
@@ -993,7 +998,8 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": [
-      "product_rule_validity_check"
+      "product_rule_validity_check",
+      "discount_rule_validity_check"
     ]
   },
   "FA704": {
@@ -1008,7 +1014,12 @@
       "rule_type_code_check",
       "rule_type_name_check",
       "rule_type_unit_check",
-      "rule_type_range_check"
+      "rule_type_range_check",
+      "discount_rule_kind_check",
+      "discount_rule_level_check",
+      "discount_rule_stacking_check",
+      "discount_rule_payment_check",
+      "discount_rule_reason_check"
     ]
   },
   "FA801": {
@@ -2572,5 +2583,69 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": []
+  },
+  "FA826": {
+    "message": "Os campos do desconto não combinam com o tipo escolhido.",
+    "action": "Preencha só os campos do tipo: percentual, leve e pague, quantidade, forma de pagamento, grupo, convênio, valor mínimo ou cupom.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "discount_rule_fields_check"
+    ]
+  },
+  "FA827": {
+    "message": "A promoção precisa de início e fim.",
+    "action": "Informe até quando a promoção vale.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "discount_rule_promotion_check"
+    ]
+  },
+  "FA828": {
+    "message": "Já existe um cupom em vigor com este código.",
+    "action": "Use outro código ou encerre o desconto do cupom antigo.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "discount_rule_coupon_key"
+    ]
+  },
+  "FA829": {
+    "message": "O cupom deve ter de 3 a 20 letras ou números, sem espaço.",
+    "action": "Exemplo: VERAO10.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "discount_rule_coupon_check"
+    ]
+  },
+  "FA830": {
+    "message": "Valor do desconto fora da faixa.",
+    "action": "Percentual de 0,01 a 100; leve de 2 a 99 e pague menos que leve; a partir da 2ª a 99ª unidade; valor mínimo maior que zero.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "discount_rule_percent_check",
+      "discount_rule_buy_check",
+      "discount_rule_pay_check",
+      "discount_rule_min_quantity_check",
+      "discount_rule_min_total_check"
+    ]
+  },
+  "FA831": {
+    "message": "Dê um nome ao desconto, com até 80 letras.",
+    "action": "O nome aparece na explicação do desconto no caixa.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "discount_rule_name_check"
+    ]
   }
 }

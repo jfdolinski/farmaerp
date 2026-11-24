@@ -99,7 +99,7 @@ const dependentData = (body: Body) => ({
 // Datas como texto, para o dia não mudar conforme o fuso do servidor.
 const CUSTOMER_COLUMNS = `id, code, person_type, document, name, trade_name, birth_date::text AS birth_date,
   phone, email, postal_code, street, street_number, complement, district, city, city_code, state::text AS state,
-  state_registration`;
+  state_registration, customer_group_id`;
 
 /** Clientes. As regras e as permissões ficam no banco; o log nunca recebe os dados deles. */
 @Controller('admin/customers')

@@ -712,6 +712,42 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Olhe de frente para a câmera e tente de novo, ou entre de outra forma.',
     retryable: false,
   ),
+  'FA826': ErrorCatalogEntry(
+    code: 'FA826',
+    message: 'Os campos do desconto não combinam com o tipo escolhido.',
+    action: 'Preencha só os campos do tipo: percentual, leve e pague, quantidade, forma de pagamento, grupo, convênio, valor mínimo ou cupom.',
+    retryable: false,
+  ),
+  'FA827': ErrorCatalogEntry(
+    code: 'FA827',
+    message: 'A promoção precisa de início e fim.',
+    action: 'Informe até quando a promoção vale.',
+    retryable: false,
+  ),
+  'FA828': ErrorCatalogEntry(
+    code: 'FA828',
+    message: 'Já existe um cupom em vigor com este código.',
+    action: 'Use outro código ou encerre o desconto do cupom antigo.',
+    retryable: false,
+  ),
+  'FA829': ErrorCatalogEntry(
+    code: 'FA829',
+    message: 'O cupom deve ter de 3 a 20 letras ou números, sem espaço.',
+    action: 'Exemplo: VERAO10.',
+    retryable: false,
+  ),
+  'FA830': ErrorCatalogEntry(
+    code: 'FA830',
+    message: 'Valor do desconto fora da faixa.',
+    action: 'Percentual de 0,01 a 100; leve de 2 a 99 e pague menos que leve; a partir da 2ª a 99ª unidade; valor mínimo maior que zero.',
+    retryable: false,
+  ),
+  'FA831': ErrorCatalogEntry(
+    code: 'FA831',
+    message: 'Dê um nome ao desconto, com até 80 letras.',
+    action: 'O nome aparece na explicação do desconto no caixa.',
+    retryable: false,
+  ),
   'FA870': ErrorCatalogEntry(
     code: 'FA870',
     message: 'Informe o motivo da devolução.',
