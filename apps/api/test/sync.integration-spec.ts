@@ -174,6 +174,16 @@ describe('descida para o PDV contra o banco real', () => {
     const resolve = (email: string, note: unknown) =>
       request(server()).post(`/admin/sync/conflicts/${mine!.id}/resolve`).set('X-Forwarded-For', ip)
         .set('Authorization', `Bearer ${sessions.get(email)}`).send({ note });
+    // Reaplicar: o banco recusa de novo, o conflito segue aberto com o motivo da tentativa.
+    const retry = (email: string, id: string) =>
+      request(server()).post(`/admin/sync/conflicts/${id}/retry`).set('X-Forwarded-For', ip)
+        .set('Authorization', `Bearer ${sessions.get(email)}`);
+    expect((await retry(MANAGER_EMAIL, mine!.id).expect(200)).body).toEqual({ status: 'conflict', code: 'FA958' });
+    expect((await retry(OPERATOR_EMAIL, mine!.id).expect(404)).body).toMatchObject({ code: 'FA006' });
+    expect((await retry(MANAGER_EMAIL, 'nada').expect(422)).body).toMatchObject({ code: 'FA005' });
+    const retried = ((await conflicts(MANAGER_EMAIL).expect(200)).body as Json[]).find((row) => row.id === mine!.id);
+    expect(retried).toMatchObject({ status: 'open', last_retry_code: 'FA958', last_retry_by_name: expect.any(String) });
+
     expect((await resolve(OPERATOR_EMAIL, 'ok').expect(404)).body).toMatchObject({ code: 'FA006' });
     expect((await resolve(MANAGER_EMAIL, ' ').expect(422)).body).toMatchObject({ code: 'FA302' });
     expect((await resolve(MANAGER_EMAIL, 12).expect(422)).body).toMatchObject({ code: 'FA005' });

@@ -163,6 +163,26 @@ describe('rosto do funcionário', () => {
     expect(await templates(outsider.id)).toEqual([]);
   });
 
+  it('cadastro atrasado não substitui um rosto mais novo nem volta depois da revogação', async () => {
+    const someone = await person('Operador de caixa');
+    const newer = enrollment(someone.id, { enrolled_at: iso(-60000) });
+    const older = enrollment(someone.id, { enrolled_at: iso(-120000), template: fakeTemplate(3) });
+    expect(codes(await push([['face_enrollment', newer], ['face_enrollment', older]]))).toEqual([['applied', null], ['conflict', 'FA833']]);
+    expect((await templates(someone.id)).map((t) => [t.id, t.deleted_at])).toEqual([[newer.id, null]]);
+    expect((await consents(someone.id)).map((c) => c.id)).toEqual([newer.consent.id]);
+
+    // Revogou depois do cadastro que ainda não tinha chegado: o cadastro não volta.
+    const other = await person('Operador de caixa');
+    await push([['face_enrollment', enrollment(other.id, { enrolled_at: iso(-600000) })]]);
+    await revoke(a.admin, other.id);
+    const late = enrollment(other.id, { enrolled_at: iso(-300000) });
+    expect(codes(await push([['face_enrollment', late]]))).toEqual([['conflict', 'FA833']]);
+    expect(await faceOf(other.id)).toBeNull();
+    // Cadastro novo, depois da revogação, vale.
+    expect(codes(await push([['face_enrollment', enrollment(other.id)]]))).toEqual([['applied', null]]);
+    expect(await faceOf(other.id)).not.toBeNull();
+  });
+
   it('revogar apaga o rosto e o tira do PDV: a própria pessoa ou quem pode definir o PIN dela', async () => {
     const someone = await person('Operador de caixa');
     await push([['face_enrollment', enrollment(someone.id)]]);

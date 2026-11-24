@@ -6,7 +6,7 @@ import { apiFetch, can, redirectIfNeeded, requireUser } from "@/lib/api";
 import { AppHeader } from "../app-header";
 import { ErrorNotice } from "../error-notice";
 import styles from "../terminais/page.module.css";
-import { ResolveForm } from "./ui";
+import { ResolveForm, RetryForm } from "./ui";
 
 export const metadata: Metadata = { title: "Sincronização · FarmaERP" };
 
@@ -23,12 +23,21 @@ interface ConflictRow {
   resolved_by_name: string | null;
   resolution_note: string | null;
   can_resolve: boolean;
+  last_retry_at: string | null;
+  last_retry_by_name: string | null;
+  last_retry_code: string | null;
 }
 
 const KINDS: Record<string, string> = {
   log: "Registro de aviso ou erro do PDV",
   sale: "Venda",
+  sale_return: "Devolução",
+  quote: "Orçamento",
   cash_session_open: "Abertura de turno",
+  cash_movement: "Sangria ou suprimento",
+  cash_session_close: "Fechamento de turno",
+  auth_event: "Entrada no PDV",
+  face_enrollment: "Cadastro do rosto",
 };
 const STATUS = { abertos: "open", resolvidos: "resolved", todos: "all" } as const;
 type StatusKey = keyof typeof STATUS;
@@ -73,7 +82,8 @@ async function SyncContent({ searchParams }: { searchParams: SearchParams }) {
         <h2>Conflitos</h2>
         <p className={styles.hint}>
           O que os terminais enviaram e a central não pôde aceitar. Nada se perde: o registro fica aqui como chegou, e o
-          terminal segue enviando o resto. Depois de entender o caso, marque como resolvido explicando o que foi feito. A
+          terminal segue enviando o resto. Se o motivo já foi corrigido (por exemplo, a API foi atualizada), use Reaplicar: a central tenta de novo com o
+          mesmo conteúdo. Se não for o caso, marque como resolvido explicando o que foi feito. A
           situação de cada terminal fica em <Link href="/terminais">Terminais</Link>.
         </p>
         <nav className={styles.inline} aria-label="Situação">
@@ -128,11 +138,21 @@ async function SyncContent({ searchParams }: { searchParams: SearchParams }) {
                           {" "}
                           {reason.action} · Código {row.error_code}
                         </small>
+                        {row.status === "open" && row.last_retry_at && row.last_retry_code && (
+                          <small className={styles.warning}>
+                            {" "}
+                            Reaplicado em {dateTimeText(row.last_retry_at)} por {row.last_retry_by_name}, recusado de
+                            novo: {getError(row.last_retry_code).message} (código {row.last_retry_code})
+                          </small>
+                        )}
                       </td>
                       <td>
                         {row.status === "open" ? (
                           row.can_resolve ? (
-                            <ResolveForm id={row.id} />
+                            <>
+                              <RetryForm id={row.id} />
+                              <ResolveForm id={row.id} />
+                            </>
                           ) : (
                             "Aberto"
                           )

@@ -76,7 +76,7 @@ describe('migrations', () => {
       '0037_quotes',
       '0038_quote_checkout',
       '0039_sale_returns',
-      '0040_return_credit', '0041_pdv_auth', '0042_face', '0043_discounts', '0044_sale_discounts',
+      '0040_return_credit', '0041_pdv_auth', '0042_face', '0043_discounts', '0044_sale_discounts', '0045_sync_retry',
     ]);
   });
 });

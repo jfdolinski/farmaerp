@@ -1902,7 +1902,7 @@
   },
   "FA959": {
     "message": "O terminal enviou um tipo de registro desconhecido.",
-    "action": "Atualize a API ou o PDV. O registro fica nos conflitos de sincronização, na retaguarda.",
+    "action": "Atualize a API ou o PDV. O registro fica nos conflitos de sincronização, na retaguarda; depois da atualização, use Reaplicar.",
     "httpStatus": 422,
     "severity": "warning",
     "retryable": false,
@@ -1918,6 +1918,8 @@
       "sync_conflict_error_code_check",
       "sync_conflict_status_check",
       "sync_conflict_note_check",
+      "sync_conflict_last_retry_code_check",
+      "sync_conflict_last_retry_check",
       "sync_conflict_resolution_check",
       "sync_conflict_receipt_key"
     ]
@@ -2656,6 +2658,14 @@
     "message": "Este cupom não vale para esta venda.",
     "action": "Confira o código, a validade e os produtos do cupom.",
     "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA833": {
+    "message": "Este cadastro do rosto ficou para trás.",
+    "action": "A pessoa já tem um rosto mais novo ou revogou o consentimento depois. Se precisar, cadastre o rosto de novo no PDV.",
+    "httpStatus": 409,
     "severity": "warning",
     "retryable": false,
     "dbConstraints": []

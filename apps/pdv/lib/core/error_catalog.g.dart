@@ -754,6 +754,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Confira o código, a validade e os produtos do cupom.',
     retryable: false,
   ),
+  'FA833': ErrorCatalogEntry(
+    code: 'FA833',
+    message: 'Este cadastro do rosto ficou para trás.',
+    action: 'A pessoa já tem um rosto mais novo ou revogou o consentimento depois. Se precisar, cadastre o rosto de novo no PDV.',
+    retryable: false,
+  ),
   'FA870': ErrorCatalogEntry(
     code: 'FA870',
     message: 'Informe o motivo da devolução.',
@@ -1249,7 +1255,7 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
   'FA959': ErrorCatalogEntry(
     code: 'FA959',
     message: 'O terminal enviou um tipo de registro desconhecido.',
-    action: 'Atualize a API ou o PDV. O registro fica nos conflitos de sincronização, na retaguarda.',
+    action: 'Atualize a API ou o PDV. O registro fica nos conflitos de sincronização, na retaguarda; depois da atualização, use Reaplicar.',
     retryable: false,
   ),
   'FA960': ErrorCatalogEntry(
