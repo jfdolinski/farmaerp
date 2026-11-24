@@ -1,0 +1,1116 @@
+{
+  "_comment": "Casos do cálculo de descontos automáticos. O banco (app.discount_calculation) e o PDV (Dart) rodam os mesmos casos e precisam dar o mesmo resultado. Valores em centavos; ids fictícios.",
+  "base": {
+    "context": {
+      "at": "2026-11-24T15:00:00Z",
+      "today": "2026-11-24",
+      "branch_id": "b1",
+      "payment_methods": [],
+      "customer": null,
+      "agreement_ids": [],
+      "coupon": null
+    },
+    "products": {
+      "P1": {
+        "id": "P1",
+        "price_family_id": "F1",
+        "manufacturer_id": "M1",
+        "subcategory_id": "S1",
+        "category_id": "C1",
+        "department_id": "D1",
+        "pricing_group_id": "PG1",
+        "commission_group_id": "CG1"
+      },
+      "P2": {
+        "id": "P2",
+        "price_family_id": null,
+        "manufacturer_id": "M2",
+        "subcategory_id": "S2",
+        "category_id": "C2",
+        "department_id": "D1",
+        "pricing_group_id": null,
+        "commission_group_id": null
+      }
+    },
+    "rule": {
+      "branch_id": null,
+      "percent": null,
+      "buy_quantity": null,
+      "pay_quantity": null,
+      "min_quantity": null,
+      "payment_method": null,
+      "customer_group_id": null,
+      "agreement_id": null,
+      "min_total": null,
+      "coupon": null,
+      "stacking": "cumulative",
+      "valid_from": "2026-01-01T00:00:00Z",
+      "valid_to": null
+    }
+  },
+  "cases": [
+    {
+      "name": "percentual no produto; outro produto sem regra",
+      "rules": [
+        {
+          "id": "r01",
+          "name": "Dipirona 10%",
+          "kind": "product",
+          "level": "product",
+          "target_id": "P1",
+          "percent": 10
+        }
+      ],
+      "lines": [
+        {
+          "line": 1,
+          "product": "P1",
+          "quantity": 2,
+          "unit_price": 12.9
+        },
+        {
+          "line": 2,
+          "product": "P2",
+          "quantity": 1,
+          "unit_price": 5
+        }
+      ],
+      "expected": [
+        {
+          "line": 1,
+          "total_cents": 258,
+          "rules": [
+            "r01"
+          ]
+        },
+        {
+          "line": 2,
+          "total_cents": 0,
+          "rules": []
+        }
+      ]
+    },
+    {
+      "name": "promoção vencida e promoção futura não valem; a em vigor vale",
+      "rules": [
+        {
+          "id": "r01",
+          "name": "Vencida",
+          "kind": "promotion",
+          "level": "store_default",
+          "target_id": null,
+          "percent": 30,
+          "valid_from": "2026-10-01T00:00:00Z",
+          "valid_to": "2026-11-01T00:00:00Z"
+        },
+        {
+          "id": "r02",
+          "name": "Futura",
+          "kind": "promotion",
+          "level": "store_default",
+          "target_id": null,
+          "percent": 40,
+          "valid_from": "2026-12-01T00:00:00Z",
+          "valid_to": "2026-12-31T00:00:00Z"
+        },
+        {
+          "id": "r03",
+          "name": "Black Friday",
+          "kind": "promotion",
+          "level": "department",
+          "target_id": "D1",
+          "percent": 20,
+          "valid_from": "2026-11-20T00:00:00Z",
+          "valid_to": "2026-11-24T15:00:01Z"
+        }
+      ],
+      "lines": [
+        {
+          "line": 1,
+          "product": "P2",
+          "quantity": 1,
+          "unit_price": 10
+        }
+      ],
+      "expected": [
+        {
+          "line": 1,
+          "total_cents": 200,
+          "rules": [
+            "r03"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "fim da promoção é exclusivo: no instante do fim já não vale",
+      "rules": [
+        {
+          "id": "r01",
+          "name": "Acabou",
+          "kind": "promotion",
+          "level": "store_default",
+          "target_id": null,
+          "percent": 20,
+          "valid_from": "2026-11-20T00:00:00Z",
+          "valid_to": "2026-11-24T15:00:00Z"
+        }
+      ],
+      "lines": [
+        {
+          "line": 1,
+          "product": "P1",
+          "quantity": 1,
+          "unit_price": 10
+        }
+      ],
+      "expected": [
+        {
+          "line": 1,
+          "total_cents": 0,
+          "rules": []
+        }
+      ]
+    },
+    {
+      "name": "leve 3 pague 2 com 7 unidades: 2 de graça",
+      "rules": [
+        {
+          "id": "r01",
+          "name": "Leve 3 pague 2",
+          "kind": "buy_x_pay_y",
+          "level": "manufacturer",
+          "target_id": "M1",
+          "percent": null,
+          "buy_quantity": 3,
+          "pay_quantity": 2
+        }
+      ],
+      "lines": [
+        {
+          "line": 1,
+          "product": "P1",
+          "quantity": 7,
+          "unit_price": 10
+        },
+        {
+          "line": 2,
+          "product": "P2",
+          "quantity": 7,
+          "unit_price": 10
+        }
+      ],
+      "expected": [
+        {
+          "line": 1,
+          "total_cents": 2000,
+          "rules": [
+            "r01"
+          ]
+        },
+        {
+          "line": 2,
+          "total_cents": 0,
+          "rules": []
+        }
+      ]
+    },
+    {
+      "name": "progressivo: a partir da 2ª unidade 50%",
+      "rules": [
+        {
+          "id": "r01",
+          "name": "2ª unidade 50%",
+          "kind": "quantity",
+          "level": "price_family",
+          "target_id": "F1",
+          "percent": 50,
+          "min_quantity": 2
+        }
+      ],
+      "lines": [
+        {
+          "line": 1,
+          "product": "P1",
+          "quantity": 3,
+          "unit_price": 10
+        },
+        {
+          "line": 2,
+          "product": "P1",
+          "quantity": 1,
+          "unit_price": 10
+        }
+      ],
+      "expected": [
+        {
+          "line": 1,
+          "total_cents": 1000,
+          "rules": [
+            "r01"
+          ]
+        },
+        {
+          "line": 2,
+          "total_cents": 0,
+          "rules": []
+        }
+      ]
+    },
+    {
+      "name": "forma de pagamento: só se toda a venda for paga nela",
+      "rules": [
+        {
+          "id": "r01",
+          "name": "PIX 5%",
+          "kind": "payment_method",
+          "level": "store_default",
+          "target_id": null,
+          "percent": 5,
+          "payment_method": "pix"
+        }
+      ],
+      "lines": [
+        {
+          "line": 1,
+          "product": "P1",
+          "quantity": 1,
+          "unit_price": 20
+        }
+      ],
+      "variants": [
+        {
+          "context": {
+            "payment_methods": [
+              "pix"
+            ]
+          },
+          "expected": [
+            {
+              "line": 1,
+              "total_cents": 100,
+              "rules": [
+                "r01"
+              ]
+            }
+          ]
+        },
+        {
+          "context": {
+            "payment_methods": [
+              "pix",
+              "pix"
+            ]
+          },
+          "expected": [
+            {
+              "line": 1,
+              "total_cents": 100,
+              "rules": [
+                "r01"
+              ]
+            }
+          ]
+        },
+        {
+          "context": {
+            "payment_methods": [
+              "pix",
+              "cash"
+            ]
+          },
+          "expected": [
+            {
+              "line": 1,
+              "total_cents": 0,
+              "rules": []
+            }
+          ]
+        },
+        {
+          "context": {
+            "payment_methods": []
+          },
+          "expected": [
+            {
+              "line": 1,
+              "total_cents": 0,
+              "rules": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "grupo de clientes, convênio e aniversariante",
+      "rules": [
+        {
+          "id": "r01",
+          "name": "Idosos 10%",
+          "kind": "customer_group",
+          "level": "store_default",
+          "target_id": null,
+          "percent": 10,
+          "customer_group_id": "G1"
+        },
+        {
+          "id": "r02",
+          "name": "Convênio Prefeitura 8%",
+          "kind": "agreement",
+          "level": "store_default",
+          "target_id": null,
+          "percent": 8,
+          "agreement_id": "A1"
+        },
+        {
+          "id": "r03",
+          "name": "Aniversariante 15%",
+          "kind": "birthday",
+          "level": "store_default",
+          "target_id": null,
+          "percent": 15,
+          "stacking": "exclusive"
+        }
+      ],
+      "lines": [
+        {
+          "line": 1,
+          "product": "P1",
+          "quantity": 1,
+          "unit_price": 100
+        }
+      ],
+      "variants": [
+        {
+          "context": {
+            "customer": {
+              "group_id": "G1",
+              "birth_date": "1980-03-10"
+            }
+          },
+          "expected": [
+            {
+              "line": 1,
+              "total_cents": 1000,
+              "rules": [
+                "r01"
+              ]
+            }
+          ]
+        },
+        {
+          "context": {
+            "customer": {
+              "group_id": "G1",
+              "birth_date": "1980-03-10"
+            },
+            "agreement_ids": [
+              "A1"
+            ]
+          },
+          "expected": [
+            {
+              "line": 1,
+              "total_cents": 1800,
+              "rules": [
+                "r01",
+                "r02"
+              ]
+            }
+          ]
+        },
+        {
+          "context": {
+            "customer": {
+              "group_id": null,
+              "birth_date": "1980-11-03"
+            }
+          },
+          "expected": [
+            {
+              "line": 1,
+              "total_cents": 1500,
+              "rules": [
+                "r03"
+              ]
+            }
+          ]
+        },
+        {
+          "context": {
+            "customer": {
+              "group_id": "G1",
+              "birth_date": "1980-11-03"
+            },
+            "agreement_ids": [
+              "A1"
+            ]
+          },
+          "expected": [
+            {
+              "line": 1,
+              "total_cents": 1800,
+              "rules": [
+                "r01",
+                "r02"
+              ]
+            }
+          ]
+        },
+        {
+          "context": {
+            "customer": {
+              "group_id": "G2",
+              "birth_date": null
+            },
+            "agreement_ids": [
+              "A9"
+            ]
+          },
+          "expected": [
+            {
+              "line": 1,
+              "total_cents": 0,
+              "rules": []
+            }
+          ]
+        },
+        {
+          "context": {
+            "customer": null
+          },
+          "expected": [
+            {
+              "line": 1,
+              "total_cents": 0,
+              "rules": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "faixa de valor: vale a venda inteira a partir do mínimo (sobre o valor sem desconto)",
+      "rules": [
+        {
+          "id": "r01",
+          "name": "Acima de R$ 100, 5%",
+          "kind": "cart_total",
+          "level": "store_default",
+          "target_id": null,
+          "percent": 5,
+          "min_total": 100
+        }
+      ],
+      "variants": [
+        {
+          "lines": [
+            {
+              "line": 1,
+              "product": "P1",
+              "quantity": 1,
+              "unit_price": 60
+            },
+            {
+              "line": 2,
+              "product": "P2",
+              "quantity": 1,
+              "unit_price": 45
+            }
+          ],
+          "expected": [
+            {
+              "line": 1,
+              "total_cents": 300,
+              "rules": [
+                "r01"
+              ]
+            },
+            {
+              "line": 2,
+              "total_cents": 225,
+              "rules": [
+                "r01"
+              ]
+            }
+          ]
+        },
+        {
+          "lines": [
+            {
+              "line": 1,
+              "product": "P1",
+              "quantity": 1,
+              "unit_price": 60
+            },
+            {
+              "line": 2,
+              "product": "P2",
+              "quantity": 1,
+              "unit_price": 39.99
+            }
+          ],
+          "expected": [
+            {
+              "line": 1,
+              "total_cents": 0,
+              "rules": []
+            },
+            {
+              "line": 2,
+              "total_cents": 0,
+              "rules": []
+            }
+          ]
+        },
+        {
+          "lines": [
+            {
+              "line": 1,
+              "product": "P1",
+              "quantity": 1,
+              "unit_price": 60
+            },
+            {
+              "line": 2,
+              "product": "P2",
+              "quantity": 1,
+              "unit_price": 40
+            }
+          ],
+          "expected": [
+            {
+              "line": 1,
+              "total_cents": 300,
+              "rules": [
+                "r01"
+              ]
+            },
+            {
+              "line": 2,
+              "total_cents": 200,
+              "rules": [
+                "r01"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "cupom: com espaço e minúscula vale; outro código não",
+      "rules": [
+        {
+          "id": "r01",
+          "name": "Cupom VERAO10",
+          "kind": "coupon",
+          "level": "category",
+          "target_id": "C1",
+          "percent": 10,
+          "coupon": "VERAO10"
+        }
+      ],
+      "lines": [
+        {
+          "line": 1,
+          "product": "P1",
+          "quantity": 1,
+          "unit_price": 30
+        }
+      ],
+      "variants": [
+        {
+          "context": {
+            "coupon": " verao10 "
+          },
+          "expected": [
+            {
+              "line": 1,
+              "total_cents": 300,
+              "rules": [
+                "r01"
+              ]
+            }
+          ]
+        },
+        {
+          "context": {
+            "coupon": "INVERNO"
+          },
+          "expected": [
+            {
+              "line": 1,
+              "total_cents": 0,
+              "rules": []
+            }
+          ]
+        },
+        {
+          "context": {
+            "coupon": null
+          },
+          "expected": [
+            {
+              "line": 1,
+              "total_cents": 0,
+              "rules": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "acumuláveis somam; exclusiva só vale sozinha e quando dá mais",
+      "lines": [
+        {
+          "line": 1,
+          "product": "P1",
+          "quantity": 1,
+          "unit_price": 100
+        }
+      ],
+      "variants": [
+        {
+          "rules": [
+            {
+              "id": "r01",
+              "name": "Fabricante 10%",
+              "kind": "product",
+              "level": "manufacturer",
+              "target_id": "M1",
+              "percent": 10
+            },
+            {
+              "id": "r02",
+              "name": "Comissão 5%",
+              "kind": "product",
+              "level": "commission_group",
+              "target_id": "CG1",
+              "percent": 5
+            },
+            {
+              "id": "r03",
+              "name": "Exclusiva 12%",
+              "kind": "product",
+              "level": "subcategory",
+              "target_id": "S1",
+              "percent": 12,
+              "stacking": "exclusive"
+            }
+          ],
+          "expected": [
+            {
+              "line": 1,
+              "total_cents": 1500,
+              "rules": [
+                "r01",
+                "r02"
+              ]
+            }
+          ]
+        },
+        {
+          "rules": [
+            {
+              "id": "r01",
+              "name": "Fabricante 10%",
+              "kind": "product",
+              "level": "manufacturer",
+              "target_id": "M1",
+              "percent": 10
+            },
+            {
+              "id": "r02",
+              "name": "Comissão 5%",
+              "kind": "product",
+              "level": "commission_group",
+              "target_id": "CG1",
+              "percent": 5
+            },
+            {
+              "id": "r03",
+              "name": "Exclusiva 20%",
+              "kind": "product",
+              "level": "pricing_group",
+              "target_id": "PG1",
+              "percent": 20,
+              "stacking": "exclusive"
+            },
+            {
+              "id": "r04",
+              "name": "Exclusiva 18%",
+              "kind": "product",
+              "level": "pricing_group",
+              "target_id": "PG1",
+              "percent": 18,
+              "stacking": "exclusive"
+            }
+          ],
+          "expected": [
+            {
+              "line": 1,
+              "total_cents": 2000,
+              "rules": [
+                "r03"
+              ]
+            }
+          ]
+        },
+        {
+          "rules": [
+            {
+              "id": "r05",
+              "name": "Exclusiva A 15%",
+              "kind": "product",
+              "level": "store_default",
+              "target_id": null,
+              "percent": 15,
+              "stacking": "exclusive"
+            },
+            {
+              "id": "r04",
+              "name": "Exclusiva B 15%",
+              "kind": "product",
+              "level": "store_default",
+              "target_id": null,
+              "percent": 15,
+              "stacking": "exclusive"
+            },
+            {
+              "id": "r06",
+              "name": "Acumulável 15%",
+              "kind": "product",
+              "level": "store_default",
+              "target_id": null,
+              "percent": 15
+            }
+          ],
+          "expected": [
+            {
+              "line": 1,
+              "total_cents": 1500,
+              "rules": [
+                "r06"
+              ]
+            }
+          ]
+        },
+        {
+          "rules": [
+            {
+              "id": "r05",
+              "name": "Exclusiva A 15%",
+              "kind": "product",
+              "level": "store_default",
+              "target_id": null,
+              "percent": 15,
+              "stacking": "exclusive"
+            },
+            {
+              "id": "r04",
+              "name": "Exclusiva B 15%",
+              "kind": "product",
+              "level": "store_default",
+              "target_id": null,
+              "percent": 15,
+              "stacking": "exclusive"
+            }
+          ],
+          "expected": [
+            {
+              "line": 1,
+              "total_cents": 1500,
+              "rules": [
+                "r04"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "o desconto nunca passa do item",
+      "rules": [
+        {
+          "id": "r01",
+          "name": "70%",
+          "kind": "product",
+          "level": "store_default",
+          "target_id": null,
+          "percent": 70
+        },
+        {
+          "id": "r02",
+          "name": "60%",
+          "kind": "product",
+          "level": "store_default",
+          "target_id": null,
+          "percent": 60
+        },
+        {
+          "id": "r03",
+          "name": "10%",
+          "kind": "product",
+          "level": "store_default",
+          "target_id": null,
+          "percent": 10
+        }
+      ],
+      "lines": [
+        {
+          "line": 1,
+          "product": "P1",
+          "quantity": 1,
+          "unit_price": 10
+        }
+      ],
+      "expected": [
+        {
+          "line": 1,
+          "total_cents": 1000,
+          "rules": [
+            "r01",
+            "r02"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "regra de outra filial não vale; da filial vale",
+      "rules": [
+        {
+          "id": "r01",
+          "name": "Só na b2",
+          "kind": "product",
+          "level": "store_default",
+          "target_id": null,
+          "percent": 10,
+          "branch_id": "b2"
+        },
+        {
+          "id": "r02",
+          "name": "Só na b1",
+          "kind": "product",
+          "level": "store_default",
+          "target_id": null,
+          "percent": 3,
+          "branch_id": "b1"
+        }
+      ],
+      "lines": [
+        {
+          "line": 1,
+          "product": "P1",
+          "quantity": 1,
+          "unit_price": 10
+        }
+      ],
+      "expected": [
+        {
+          "line": 1,
+          "total_cents": 30,
+          "rules": [
+            "r02"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "arredondamento: metade para cima, com quantidade fracionada",
+      "rules": [
+        {
+          "id": "r01",
+          "name": "10%",
+          "kind": "product",
+          "level": "store_default",
+          "target_id": null,
+          "percent": 10
+        }
+      ],
+      "lines": [
+        {
+          "line": 1,
+          "product": "P1",
+          "quantity": 1,
+          "unit_price": 12.35
+        },
+        {
+          "line": 2,
+          "product": "P1",
+          "quantity": 0.5,
+          "unit_price": 12.35
+        },
+        {
+          "line": 3,
+          "product": "P1",
+          "quantity": 0.333,
+          "unit_price": 3.33
+        }
+      ],
+      "expected": [
+        {
+          "line": 1,
+          "total_cents": 124,
+          "rules": [
+            "r01"
+          ]
+        },
+        {
+          "line": 2,
+          "total_cents": 62,
+          "rules": [
+            "r01"
+          ]
+        },
+        {
+          "line": 3,
+          "total_cents": 11,
+          "rules": [
+            "r01"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "leve e pague e progressivo ignoram a fração da quantidade",
+      "rules": [
+        {
+          "id": "r01",
+          "name": "Leve 2 pague 1",
+          "kind": "buy_x_pay_y",
+          "level": "product",
+          "target_id": "P1",
+          "percent": null,
+          "buy_quantity": 2,
+          "pay_quantity": 1
+        },
+        {
+          "id": "r02",
+          "name": "3ª unidade 10%",
+          "kind": "quantity",
+          "level": "product",
+          "target_id": "P2",
+          "percent": 10,
+          "min_quantity": 3
+        }
+      ],
+      "lines": [
+        {
+          "line": 1,
+          "product": "P1",
+          "quantity": 3.5,
+          "unit_price": 4
+        },
+        {
+          "line": 2,
+          "product": "P2",
+          "quantity": 2.9,
+          "unit_price": 4
+        },
+        {
+          "line": 3,
+          "product": "P2",
+          "quantity": 5,
+          "unit_price": 3.33
+        }
+      ],
+      "expected": [
+        {
+          "line": 1,
+          "total_cents": 400,
+          "rules": [
+            "r01"
+          ]
+        },
+        {
+          "line": 2,
+          "total_cents": 0,
+          "rules": []
+        },
+        {
+          "line": 3,
+          "total_cents": 100,
+          "rules": [
+            "r02"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "alvos da hierarquia: subcategoria, categoria, departamento, grupo de precificação e de comissão",
+      "rules": [
+        {
+          "id": "r01",
+          "name": "Subcategoria 1%",
+          "kind": "product",
+          "level": "subcategory",
+          "target_id": "S1",
+          "percent": 1
+        },
+        {
+          "id": "r02",
+          "name": "Categoria 2%",
+          "kind": "product",
+          "level": "category",
+          "target_id": "C1",
+          "percent": 2
+        },
+        {
+          "id": "r03",
+          "name": "Outro departamento 3%",
+          "kind": "product",
+          "level": "department",
+          "target_id": "D9",
+          "percent": 3
+        },
+        {
+          "id": "r04",
+          "name": "Precificação 4%",
+          "kind": "product",
+          "level": "pricing_group",
+          "target_id": "PG1",
+          "percent": 4
+        },
+        {
+          "id": "r05",
+          "name": "Comissão 8%",
+          "kind": "product",
+          "level": "commission_group",
+          "target_id": "CG1",
+          "percent": 8
+        }
+      ],
+      "lines": [
+        {
+          "line": 1,
+          "product": "P1",
+          "quantity": 1,
+          "unit_price": 100
+        },
+        {
+          "line": 2,
+          "product": "P2",
+          "quantity": 1,
+          "unit_price": 100
+        }
+      ],
+      "expected": [
+        {
+          "line": 1,
+          "total_cents": 1500,
+          "rules": [
+            "r01",
+            "r02",
+            "r04",
+            "r05"
+          ]
+        },
+        {
+          "line": 2,
+          "total_cents": 0,
+          "rules": []
+        }
+      ]
+    }
+  ]
+}

@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { apiFetch, can, redirectIfNeeded, requireUser } from "@/lib/api";
 import { AppHeader } from "../../app-header";
 import { ErrorNotice } from "../../error-notice";
+import { CustomerGroupSelect } from "../../descontos/ui";
 import { CHANNELS, documentText, PURPOSES } from "../format";
 import {
   AgreementRow,
@@ -22,6 +23,7 @@ export const metadata: Metadata = { title: "Cliente · FarmaERP" };
 
 interface CustomerDetail extends CustomerValues {
   id: string;
+  customer_group_id: string | null;
   code: string;
   person_type: string;
   document: string;
@@ -90,6 +92,7 @@ async function CustomerContent({ params }: { params: Params }) {
   const customer = result.data;
   const canAgree = can(user, "agreements.manage");
   const agreements = canAgree ? await apiFetch<AgreementRow[]>("/admin/agreements") : null;
+  const groups = await apiFetch<{ id: string; name: string }[]>("/admin/customer-groups");
   const available = agreements?.ok
     ? agreements.data.filter((agreement) => !customer.agreements.some((link) => link.agreement_id === agreement.id))
     : [];
@@ -111,6 +114,17 @@ async function CustomerContent({ params }: { params: Params }) {
           {documentText(customer.document)}
         </p>
         <EditCustomerForm values={customer} canManage={canManage} />
+      </section>
+
+      <section className={styles.card}>
+        <h2>Grupo de clientes</h2>
+        <p className={styles.hint}>Usado nos descontos por grupo. Os grupos ficam em Descontos.</p>
+        <CustomerGroupSelect
+          customerId={customer.id}
+          current={customer.customer_group_id}
+          groups={groups?.ok ? groups.data : []}
+          canManage={canManage}
+        />
       </section>
 
       <section className={styles.card}>

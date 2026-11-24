@@ -296,6 +296,17 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 2. Chame `app.resolve_product_rule` com o código do tipo no módulo que usa a regra.
 3. Acrescente aos testes de `db/tests/product-rules.test.mjs`.
 
+**Descontos automáticos (Etapa 7)**
+
+- **Dez tipos (`discount_rule.kind`):** percentual fixo, promoção (com início e fim), leve X pague Y, progressivo por quantidade (a partir da N-ésima unidade), forma de pagamento (só quando a venda inteira é paga nela), grupo de clientes, convênio, aniversariante do mês, faixa de valor da compra (sobre o valor sem desconto) e cupom (o código é comparado em caixa alta, sem espaços).
+- **Alvo:** os mesmos níveis do motor, mais "todos os produtos" (`store_default`). Uma regra vale na rede ou em uma filial.
+- **Combinação, por item:** as acumuláveis se somam. Entre as exclusivas vale a de maior desconto (no empate, a de menor id), e ela só fica se der mais que a soma das acumuláveis (no empate, ficam as acumuláveis). Cada regra é arredondada em centavos (metade para cima), e o desconto nunca passa do item. Leve e pague e progressivo contam só as unidades inteiras.
+- **Um cálculo, dois lugares:** `app.discount_calculation(regras, itens, contexto)` é uma função pura, em JSON. O PDV faz a mesma conta em Dart, e os dois são conferidos pelos mesmos casos em `packages/discount-cases/cases.json`. `app.auto_discounts(filial, itens, contexto)` monta a conta com os cadastros da central (regras em vigor, hierarquia do produto, grupo e aniversário do cliente).
+- **Cadastro:** `/descontos`, com `rules.manage` (filial ou rede). Editar é encerrar e criar outro (`app.create_discount_rule`, `app.end_discount_rule`). O simulador (`app.simulate_discounts`, `rules.view`) mostra, para uma venda de exemplo, quais descontos valem e por quê. Erros: FA826 a FA831, além dos do motor (FA702 a FA704).
+- **Grupos de clientes:** em `/descontos`, com `customers.manage`. O grupo de cada cliente fica na ficha dele (`app.set_customer_group`). Grupo com clientes ou com desconto em vigor não sai (FA105).
+- **Descida para o PDV:** as regras em vigor ou futuras da filial e da rede descem como o 6º tipo (`discount_rule`); encerrada ou vencida desce vazia. O produto desce com a hierarquia (`discount_subject`) e o cliente guardado, com o grupo.
+- **O desconto manual do caixa** (limite do operador, máximo do produto e liberação do supervisor) continua por cima dos automáticos. A aplicação no PDV e a conferência na central chegam no PR 7A-2.
+
 ## Estoque
 
 - **Fonte da verdade:** a tabela `stock_movement`, que nunca é alterada. Correção é uma movimentação contrária, com `reversal_of` apontando para a original.
