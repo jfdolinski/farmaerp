@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 import 'package:flutter/services.dart';
 
+import '../face/face_widgets.dart';
 import '../ui/caps.dart';
 import 'focus_kit.dart';
 import 'money.dart';
@@ -106,6 +107,14 @@ class _SellerPanelState extends State<SellerPanel> {
                       decoration: const InputDecoration(labelText: 'PIN'),
                       onSubmitted: (_) => _confirm(),
                     ),
+                  ),
+                  FaceApproveButton(
+                    controller: widget.controller,
+                    onApproved: (code) {
+                      _code.text = code;
+                      _pin.clear();
+                      _confirm();
+                    },
                   ),
                 ],
                 const SizedBox(width: 8),

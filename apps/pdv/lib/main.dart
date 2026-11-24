@@ -132,6 +132,7 @@ Future<void> main() async {
   );
   // Rosto: por enquanto só no Windows (no Linux, PIN e liberação do gerente).
   final face = Platform.isWindows ? FaceService(camera: LiteFaceCamera.new, engine: OnnxFaceEngine.open) : null;
+  pos.face = face;
   runApp(FarmaErpPdvApp(
     controller: controller,
     pos: pos,

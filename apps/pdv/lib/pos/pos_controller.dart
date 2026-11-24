@@ -9,6 +9,7 @@ import '../core/error_display.dart';
 import '../core/local_logger.dart';
 import '../customers/customer_service.dart';
 import '../face/face_math.dart' show templateBytes;
+import '../face/face_service.dart';
 import '../local/local_database.dart';
 import '../terminal/terminal_api.dart';
 import 'cart.dart';
@@ -95,6 +96,9 @@ class PosController extends ChangeNotifier {
 
   final LocalDatabase database;
   final PosAuth auth;
+
+  /// Rosto no PDV (câmera e modelos), quando o terminal tem: entrada e liberações pela câmera.
+  FaceService? face;
 
   /// Impressora em uso (muda pela configuração do terminal).
   ReceiptPrinter Function() printer;

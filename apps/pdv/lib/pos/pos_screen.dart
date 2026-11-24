@@ -331,6 +331,14 @@ class _LoginViewState extends State<_LoginView> {
                   ],
                   onSubmitted: (_) => _submitRelease(),
                 ),
+                FaceApproveButton(
+                  controller: widget.controller,
+                  onApproved: (code) {
+                    _managerCode.text = code;
+                    _managerPin.clear();
+                    _submitRelease();
+                  },
+                ),
                 const SizedBox(height: 16),
                 FilledButton(
                   key: const Key('release-submit'),

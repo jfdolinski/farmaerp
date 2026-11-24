@@ -2,6 +2,7 @@ import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 import 'package:flutter/services.dart';
 
 import '../local/local_database.dart';
+import '../pos/pos_auth.dart';
 import '../pos/pos_controller.dart';
 import '../ui/caps.dart';
 import 'face_reader.dart';
@@ -342,6 +343,133 @@ class _FaceEnrollmentDialogState extends State<_FaceEnrollmentDialog> {
         if (_step == _EnrollStep.done)
           FilledButton(key: const Key('face-enroll-close'), onPressed: () => Navigator.of(context).pop(), child: const Text('Fechar')),
       ],
+    );
+  }
+}
+
+/// Lê o rosto de quem vai liberar e devolve o código dela (com o vale de uso único da câmera já
+/// dado). Nada se não reconhecer, se a pessoa não liberar pela câmera ou se a câmera falhar.
+Future<String?> showFaceApproval(BuildContext context, PosController controller) {
+  final face = controller.face;
+  if (face == null) return Future.value();
+  return showDialog<String>(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => _FaceApprovalDialog(controller: controller, face: face),
+  );
+}
+
+class _FaceApprovalDialog extends StatefulWidget {
+  const _FaceApprovalDialog({required this.controller, required this.face});
+
+  final PosController controller;
+  final FaceService face;
+
+  @override
+  State<_FaceApprovalDialog> createState() => _FaceApprovalDialogState();
+}
+
+class _FaceApprovalDialogState extends State<_FaceApprovalDialog> {
+  FaceReader _reader = FaceReader();
+  bool _closed = false;
+  bool _reading = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _read();
+  }
+
+  @override
+  void dispose() {
+    _closed = true;
+    widget.face.closeCamera();
+    super.dispose();
+  }
+
+  Future<void> _read() async {
+    if (_reading) return;
+    setState(() {
+      _reader = FaceReader();
+      _reading = true;
+      _error = null;
+    });
+    if (!await widget.face.start()) {
+      if (mounted) setState(() => _reading = false);
+      if (mounted) setState(() => _error = 'A câmera não abriu. Use o código e o PIN.');
+      return;
+    }
+    final engine = widget.face.engine!;
+    final result = await readFace(
+      camera: widget.face.camera!,
+      engine: engine,
+      reader: _reader,
+      onUpdate: () {
+        if (mounted) setState(() {});
+      },
+      cancelled: () => _closed,
+    );
+    if (_closed) return;
+    _reading = false;
+    if (result == null) {
+      if (mounted) setState(() {});
+      return;
+    }
+    final found = bestFaceMatch<LocalUser>(result, widget.controller.database.faceCandidates(engine.model));
+    if (found == null) {
+      setState(() => _error = 'Rosto não reconhecido. Tente de novo ou use o código e o PIN.');
+      return;
+    }
+    try {
+      widget.controller.auth.grantFace(found.match);
+    } on PosException {
+      setState(() => _error = '${found.match.name} libera com o PIN, não pela câmera.');
+      return;
+    }
+    if (mounted) Navigator.of(context).pop('${found.match.code}');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      key: const Key('face-approval'),
+      title: const Text('Liberar pela câmera'),
+      content: SizedBox(
+        width: 440,
+        child: _CameraView(face: widget.face, message: _error ?? _reader.message, failed: _error != null || _reader.stage == FaceStage.failed),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
+        if (!_reading)
+          FilledButton(key: const Key('face-approval-retry'), onPressed: _read, child: const Text('Tentar de novo')),
+      ],
+    );
+  }
+}
+
+/// Botão "Liberar pela câmera" ao lado do código e do PIN de quem libera. Reconhecida a pessoa,
+/// [onApproved] recebe o código dela; a tela confirma sem PIN e o vale da câmera vale no lugar.
+class FaceApproveButton extends StatelessWidget {
+  const FaceApproveButton({super.key, required this.controller, required this.onApproved});
+
+  final PosController controller;
+  final void Function(String code) onApproved;
+
+  @override
+  Widget build(BuildContext context) {
+    if (controller.face == null) return const SizedBox.shrink();
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        key: const Key('face-approve'),
+        icon: const Icon(Icons.face),
+        label: const Text('Liberar pela câmera'),
+        onPressed: () async {
+          final code = await showFaceApproval(context, controller);
+          if (code != null) onApproved(code);
+        },
+      ),
     );
   }
 }

@@ -378,6 +378,54 @@ void main() {
       await tester.binding.setSurfaceSize(null);
     });
 
+    test('vale da câmera para liberar: uma vez, até 60 s, só da pessoa reconhecida e com a permissão', () async {
+      var clock = now;
+      final auth = PosAuth(database: database, clock: () => clock);
+      // Gerente passa a liberar por qualquer forma (PIN ou câmera).
+      database.applyPage(userPage(managerId, 2, 'Gerente Centro', mode: 'any', permissions: const ['sales.sell', 'users.release_login']), now: now);
+      final manager = database.userByCode(2)!;
+      expect(() => auth.grantFace(database.userByCode(3)!), throwsA(isA<PosException>().having((e) => e.code, 'code', 'FA824')));
+      auth.grantFace(manager);
+      // Outra pessoa com o PIN vazio não aproveita o vale.
+      await expectLater(auth.verify('5', ''), throwsA(isA<PosException>().having((e) => e.code, 'code', 'FA966')));
+      expect((await auth.verify('2', '')).id, managerId);
+      // Usado: de novo sem PIN, não.
+      await expectLater(auth.verify('2', ''), throwsA(isA<PosException>().having((e) => e.code, 'code', 'FA966')));
+      auth.grantFace(manager);
+      clock = now.add(const Duration(seconds: 61));
+      await expectLater(auth.verify('2', ''), throwsA(isA<PosException>().having((e) => e.code, 'code', 'FA966')));
+      clock = now;
+      auth.grantFace(manager);
+      await expectLater(auth.verify('2', '', permission: 'sales.return'), throwsA(isA<PosException>().having((e) => e.code, 'code', 'FA969')));
+      // Só câmera: sem o vale, o PIN não serve.
+      auth.grantFace(database.userByCode(4)!);
+      expect((await auth.verify('4', '')).id, faceId);
+      await expectLater(auth.verify('4', ''), throwsA(isA<PosException>().having((e) => e.code, 'code', 'FA820')));
+      final faces = outbox('auth_event').where((e) => e['method'] == 'face').toList();
+      expect(faces.map((e) => [e['user_id'], e['purpose']]), [[managerId, 'approval'], [faceId, 'approval']]);
+    });
+
+    testWidgets('tela: o gerente libera pela câmera a entrada de quem é só câmera', (tester) async {
+      database.applyPage(userPage(managerId, 2, 'Gerente Centro', mode: 'any', permissions: const ['sales.sell', 'users.release_login', 'users.biometrics']), now: now);
+      final enroller = (await tester.runAsync(() => controller.faceEnroller('2', '2468')))!;
+      controller.enrollFace(person: database.userByCode(2)!, enroller: enroller, template: vector(11), model: 'sface-2021dec-int8', termVersion: faceTermVersion, consentedAt: now);
+      controller.info = null;
+      controller.face = FaceService(camera: FakeCamera.new, engine: () async => FakeEngine(goodRead(vector(11))));
+      await tester.binding.setSurfaceSize(const Size(1280, 1000));
+      // Sem rosto na entrada: vai pelo código, e o código 4 (só câmera) pede a liberação.
+      await tester.pumpWidget(MaterialApp(home: PosScreen(controller: controller)));
+      await tester.enterText(find.byKey(const Key('login-code')), '4');
+      await tester.pump();
+      expect(find.byKey(const Key('release-manager-code')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('face-approve')));
+      await pumpUntil(tester, () => controller.operator != null);
+      expect(controller.operator?.id, faceId);
+      final release = outbox('auth_event').where((e) => e['method'] == 'manager_release').single;
+      expect(release, containsPair('authorized_by', managerId));
+      expect(outbox('auth_event').where((e) => e['method'] == 'face' && e['user_id'] == managerId), hasLength(1));
+      await tester.binding.setSurfaceSize(null);
+    });
+
     testWidgets('tela: cadastro do rosto com quem autoriza, o termo e a leitura', (tester) async {
       final camera = FakeCamera();
       final face = FaceService(camera: () => camera, engine: () async => FakeEngine(goodRead(vector(7), front: 5)));
@@ -412,9 +460,9 @@ void main() {
 }
 
 /// Página da descida com um usuário (para testar o rosto que vem da central).
-PullPage userPage(String id, int code, String name, {String? mode, Object? face}) => PullPage(format: 3, until: '9', items: [
+PullPage userPage(String id, int code, String name, {String? mode, Object? face, List<String> permissions = const ['sales.sell']}) => PullPage(format: 3, until: '9', items: [
     PullItem(type: 'user', id: id, data: {
-      'code': code, 'name': name, 'is_admin': false, 'roles': const [], 'permissions': const ['sales.sell'],
+      'code': code, 'name': name, 'is_admin': false, 'roles': const [], 'permissions': permissions,
       'limits': const {}, 'pin_hash': auth_fixture.pin, 'auth_mode': ?mode, 'face': ?face,
     }),
   ]);
