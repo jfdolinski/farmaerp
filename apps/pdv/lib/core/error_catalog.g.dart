@@ -682,6 +682,18 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Digite quanto volta de cada item; o que não volta fica com 0.',
     retryable: false,
   ),
+  'FA872': ErrorCatalogEntry(
+    code: 'FA872',
+    message: 'Este crédito de devolução não está disponível.',
+    action: 'Confira o código: o crédito precisa ser desta loja e ainda ter saldo.',
+    retryable: false,
+  ),
+  'FA873': ErrorCatalogEntry(
+    code: 'FA873',
+    message: 'O valor passa do saldo do crédito de devolução.',
+    action: 'Use até o saldo e complete com outra forma de pagamento.',
+    retryable: false,
+  ),
   'FA880': ErrorCatalogEntry(
     code: 'FA880',
     message: 'Este código não é de um vendedor desta loja.',

@@ -464,6 +464,29 @@ describe('descida para o PDV contra o banco real', () => {
     expect((await request(server()).get('/admin/returns?from=ontem').set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(MANAGER_EMAIL)}`).expect(422)).body)
       .toMatchObject({ code: 'FA005' });
 
+    // Crédito para nova compra: o caixa acha o saldo e a venda paga com ele.
+    const creditReturn = {
+      ...refund, id: uuidV7(), number: saleNumber + 1, authorized_by: managerId, destination: 'credit', reason: 'Troca',
+      items: [{ id: uuidV7(), sale_item_id: sold.items[0].id, quantity: 1, amount: 12.9 }],
+    };
+    expect((await push([{ kind: 'sale_return', payload: creditReturn }]).expect(200)).body.results[0]).toMatchObject({ status: 'applied' });
+    const creditCode = ((await asManagerGet('/returns?destination=credit')).body as Json[]).find((row) => row.id === creditReturn.id)!.code as string;
+    expect((await asTerminal(`/return-credits/${creditCode}`).expect(200)).body).toMatchObject({ id: creditReturn.id, balance: 12.9 });
+    const exchange = {
+      ...sold, id: uuidV7(), number: saleNumber + 2,
+      items: [{ id: uuidV7(), line: 1, product_id: DIPIRONA, quantity: 1, unit_price: 12.9, discount: 0, total: 12.9 }],
+      payments: [{ id: uuidV7(), method: 'return_credit', amount: 12.9, return_id: creditReturn.id }],
+      subtotal: 12.9, total: 12.9,
+    };
+    expect((await push([{ kind: 'sale', payload: exchange }]).expect(200)).body.results[0]).toMatchObject({ status: 'applied', code: null });
+    expect((await asTerminal(`/return-credits/${creditCode}`).expect(404)).body).toMatchObject({ code: 'FA872' });
+    const credits = (await asManagerGet('/returns?destination=credit')).body as Json[];
+    expect(credits.every((row) => row.destination === 'credit')).toBe(true);
+    expect(Number(credits.find((row) => row.id === creditReturn.id)!.credit_used)).toBe(12.9);
+    expect(((await asManagerGet(`/sales/${exchange.id}`)).body as Json).payments[0]).toMatchObject({ method: 'return_credit', return_code: creditCode });
+    expect((await request(server()).get('/admin/returns?destination=vale').set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(MANAGER_EMAIL)}`).expect(422)).body)
+      .toMatchObject({ code: 'FA005' });
+
     // Prazo da filial.
     const post = (body: Json, email = ADMIN_EMAIL) =>
       request(server()).post(`/admin/branches/${BRANCH_CENTRO}/return-days`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(email)}`).send(body);

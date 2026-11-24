@@ -29,6 +29,8 @@ interface ReturnDetail {
   total: number;
   paid_at: string | null;
   paid_by_name: string | null;
+  credit_used: number | null;
+  credit_uses: { sale_id: string; sale_code: string; sold_at: string; amount: number }[];
   items: { line: number; product_id: string; product_code: number; product_name: string; quantity: number; amount: number }[];
 }
 
@@ -89,7 +91,7 @@ function ReturnView({ refund }: { refund: ReturnDetail }) {
         <p>Motivo: {refund.reason}</p>
         <p>
           <strong>{DESTINATION_LABELS[refund.destination] ?? refund.destination}</strong> · {brl(refund.total)} ·{" "}
-          {payoutText(refund.destination, paid)}
+          {payoutText(refund.destination, paid, refund.total, refund.credit_used)}
           {paid && ` em ${dateTimeText(refund.paid_at!)} por ${refund.paid_by_name}`}
         </p>
       </section>
@@ -123,6 +125,18 @@ function ReturnView({ refund }: { refund: ReturnDetail }) {
         </div>
         <p className={styles.hint}>O estoque voltou para os lotes que saíram na venda.</p>
       </section>
+      {refund.credit_uses.length > 0 && (
+        <section className={styles.card}>
+          <h2>Uso do crédito</h2>
+          <ul className={styles.bullets}>
+            {refund.credit_uses.map((use) => (
+              <li key={use.sale_id}>
+                <Link href={`/vendas/${use.sale_id}`}>Venda {use.sale_code}</Link> · {dateTimeText(use.sold_at)} · {brl(use.amount)}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </>
   );
 }

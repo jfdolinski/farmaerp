@@ -6,7 +6,7 @@ import { AppHeader } from "../app-header";
 import { ErrorNotice } from "../error-notice";
 import styles from "../terminais/page.module.css";
 import { brl, dateTimeText } from "../vendas/labels";
-import { DESTINATION_LABELS, payoutText } from "./labels";
+import { DESTINATION_FILTERS, DESTINATION_LABELS, payoutText, type DestinationFilter } from "./labels";
 
 export const metadata: Metadata = { title: "Devoluções · FarmaERP" };
 
@@ -20,6 +20,9 @@ interface ReturnRow {
   sale_code: string;
   operator_name: string;
   authorized_by_name: string | null;
+  customer_name: string | null;
+  credit_used: string | null;
+  agreement_name: string | null;
   reason: string;
   destination: string;
   total: string;
@@ -28,7 +31,7 @@ interface ReturnRow {
   alert: boolean;
 }
 
-type SearchParams = Promise<{ de?: string; ate?: string; filial?: string }>;
+type SearchParams = Promise<{ de?: string; ate?: string; filial?: string; destino?: string }>;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const today = () => new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
 
@@ -59,7 +62,8 @@ async function ReturnsContent({ searchParams }: { searchParams: SearchParams }) 
   const from = typeof params.de === "string" && DAY.test(params.de) ? params.de : today();
   const to = typeof params.ate === "string" && DAY.test(params.ate) ? params.ate : from;
   const branch = typeof params.filial === "string" ? params.filial : "";
-  const query = new URLSearchParams({ from, to, ...(branch ? { branch } : {}) });
+  const filter: DestinationFilter = params.destino && params.destino in DESTINATION_FILTERS ? (params.destino as DestinationFilter) : "todos";
+  const query = new URLSearchParams({ from, to, destination: DESTINATION_FILTERS[filter], ...(branch ? { branch } : {}) });
   const [returns, branches] = await Promise.all([
     apiFetch<ReturnRow[]>(`/admin/returns?${query.toString()}`),
     apiFetch<{ id: string; name: string }[]>("/admin/branches"),
@@ -98,8 +102,22 @@ async function ReturnsContent({ searchParams }: { searchParams: SearchParams }) 
               ))}
             </select>
           </label>
+          <label>
+            Destino
+            <select name="destino" defaultValue={filter}>
+              <option value="todos">Todos</option>
+              <option value="credito">Crédito para nova compra</option>
+              <option value="convenio">Abatimento no convênio</option>
+              <option value="dinheiro">Dinheiro</option>
+            </select>
+          </label>
           <button type="submit">Filtrar</button>
         </form>
+        {filter === "convenio" && (
+          <p className={styles.hint}>
+            Abatimentos a fazer na próxima fatura de cada convênio. O faturamento dos convênios chega na Etapa 7.
+          </p>
+        )}
         {!returns.ok && <ErrorNotice error={returns.error} />}
         {returns.ok && rows.length === 0 && <p className={styles.hint}>Nenhuma devolução no período.</p>}
         {rows.length > 0 && (
@@ -148,9 +166,11 @@ async function ReturnsContent({ searchParams }: { searchParams: SearchParams }) 
                       <td>{row.reason}</td>
                       <td>
                         {DESTINATION_LABELS[row.destination] ?? row.destination}
+                        {row.agreement_name && ` · ${row.agreement_name}`}
                         <small className={row.destination === "cash" && !row.paid ? styles.warning : styles.hint}>
-                          {payoutText(row.destination, row.paid)}
+                          {payoutText(row.destination, row.paid, Number(row.total), row.credit_used === null ? null : Number(row.credit_used))}
                         </small>
+                        {row.customer_name && <small className={styles.hint}>Cliente: {row.customer_name}</small>}
                       </td>
                       <td>
                         {brl(row.total)}

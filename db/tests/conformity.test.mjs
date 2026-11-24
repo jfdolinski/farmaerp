@@ -76,6 +76,7 @@ describe('migrations', () => {
       '0037_quotes',
       '0038_quote_checkout',
       '0039_sale_returns',
+      '0040_return_credit',
     ]);
   });
 });
