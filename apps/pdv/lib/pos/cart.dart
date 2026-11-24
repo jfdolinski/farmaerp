@@ -11,7 +11,8 @@ enum PaymentMethod {
   creditCard('credit_card', 'Cartão de crédito'),
   debitCard('debit_card', 'Cartão de débito'),
   pix('pix', 'PIX'),
-  agreement('agreement', 'Convênio');
+  agreement('agreement', 'Convênio'),
+  returnCredit('return_credit', 'Crédito de devolução');
 
   const PaymentMethod(this.code, this.label);
 
@@ -78,6 +79,9 @@ class Payment {
     this.agreementId,
     this.agreementName,
     this.agreementRegistration,
+    this.returnId,
+    this.returnCode,
+    this.creditBalanceCents,
   });
 
   final PaymentMethod method;
@@ -87,6 +91,11 @@ class Payment {
   final String? agreementId;
   final String? agreementName;
   final String? agreementRegistration;
+
+  /// Crédito de devolução usado (documento D) e o saldo dele na hora da busca.
+  final String? returnId;
+  final String? returnCode;
+  final int? creditBalanceCents;
 }
 
 /// Cliente identificado na venda (com os convênios dele).
@@ -134,6 +143,10 @@ class Cart {
 
   /// O que foi pago a mais em cartão ou PIX não vira troco: precisa ser corrigido.
   bool get overpaidWithoutCash => paidCents - totalCents > changeCents;
+
+  /// Quanto deste crédito de devolução já está lançado nesta venda.
+  int creditInCart(String returnId) =>
+      payments.where((p) => p.returnId == returnId).fold(0, (sum, p) => sum + p.amountCents);
 
   /// Quanto deste lote já está na venda (itens de controlado).
   int quantityOfBatch(String batchId) => lines
@@ -248,6 +261,7 @@ SaleDraft buildSale({
       'authorization_code': payment.authorizationCode,
       'agreement_id': payment.agreementId,
       'agreement_registration': payment.agreementRegistration,
+      'return_id': payment.returnId,
     });
   }
   if (change > 0) throw const PosException('FA972');

@@ -6,6 +6,7 @@ export const PAYMENT_LABELS: Record<string, string> = {
   debit_card: "Cartão de débito",
   pix: "PIX",
   agreement: "Convênio",
+  return_credit: "Crédito de devolução",
 };
 
 export const FISCAL_LABELS: Record<string, string> = {
@@ -29,6 +30,7 @@ export const ALERT_LABELS: Record<string, string> = {
   seller_permission: "Vendedor sem permissão de orçar ou vender na filial",
   quote_status: "Venda de orçamento que já não estava aberto",
   return_permission: "Devolução feita sem a permissão",
+  return_credit: "Crédito de devolução usado sem saldo ou fora das regras",
 };
 
 export const brl = (value: number | string | null) =>
@@ -65,6 +67,14 @@ export function alertText(kind: string, detail: Record<string, unknown>): string
     }
     case "return_permission":
       return `${label}: ${detail.return_code}${detail.late ? ", fora do prazo da loja e sem a liberação de outra pessoa" : ", sem a permissão nem a liberação de quem tem"}.`;
+    case "return_credit": {
+      const problems: Record<string, string> = {
+        balance: `passou do saldo (${brl(detail.balance as number)})`,
+        not_credit: "o documento não é de crédito",
+        other_branch: "o documento é de outra loja",
+      };
+      return `${label}: ${detail.return_code}, ${problems[detail.problem as string] ?? detail.problem}.`;
+    }
     case "negative_stock":
       return `${label}: saldo ${Number(detail.balance).toLocaleString("pt-BR")}.`;
     default:

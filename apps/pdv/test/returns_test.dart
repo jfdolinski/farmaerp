@@ -75,6 +75,7 @@ void main() {
       terminalNumber: () => 1,
       saleForReturn: (code) => api.saleForReturn(accessToken: 't', code: code),
       returnDocument: (code) => api.returnDocument(accessToken: 't', code: code),
+      returnCredit: (code) => api.returnCredit(accessToken: 't', code: code),
       clock: () => now,
     );
   });
@@ -231,5 +232,128 @@ void main() {
     expect(movement, containsPair('amount', 20.0));
     expect(movement['return_id'], isNotNull);
     expect(movement['reason'], startsWith('Devolução D1-000001'));
+  });
+
+  /// Nova venda de [quantity] Dipironas, pronta para pagar.
+  void newSale(int quantity) {
+    controller.scan('7890000000017');
+    controller.setQuantity(controller.cart.lines.single, quantity * 1000);
+    controller.startPayment();
+  }
+
+  Payment credit(({String id, String code, int balanceCents}) found, int cents) => Payment(
+    method: PaymentMethod.returnCredit, amountCents: cents, returnId: found.id, returnCode: found.code,
+    creditBalanceCents: found.balanceCents,
+  );
+
+  test('troca sem internet: o crédito feito aqui paga a nova compra até o saldo', () async {
+    final code = await sold(code: '2');
+    final sale = (await controller.findSaleForReturn(code))!;
+    final itemId = (sale['items'] as List).single['id'] as String;
+    await controller.makeReturn(sale: sale, quantities: {itemId: 1000}, reason: 'Troca', destination: 'credit');
+    api.returnCreditResponse['D1-000001'] = const ApiException('FA001');
+    // Devolução em dinheiro não é crédito.
+    newSale(2);
+    final found = (await controller.findReturnCredit(' d1-000001 '))!;
+    expect([found.code, found.balanceCents], ['D1-000001', 1000]);
+    controller.addPayment(credit(found, 1500));
+    expect(noticeCode(), 'FA873');
+    expect(controller.cart.payments, isEmpty);
+    controller.addPayment(credit(found, 600));
+    controller.addPayment(credit(found, 500));
+    expect(noticeCode(), 'FA873');
+    controller.addPayment(credit(found, 400));
+    // Já lançado por inteiro nesta venda: não acha mais saldo.
+    expect(await controller.findReturnCredit('D1-000001'), isNull);
+    expect(noticeCode(), 'FA872');
+    controller.addPayment(Payment(method: PaymentMethod.cash, amountCents: 1000));
+    await controller.finish();
+    final payload = outbox('sale').last;
+    final payments = (payload['payments']! as List).cast<Map<String, Object?>>();
+    expect(payments.where((p) => p['method'] == 'return_credit').map((p) => [p['return_id'], p['amount']]), [
+      [found.id, 6.0],
+      [found.id, 4.0],
+    ]);
+    expect(payments.where((p) => p['method'] == 'cash').single['return_id'], isNull);
+    final receipt = printer.printed[controller.lastSale!.code]!.map((l) => l.text).join('\n');
+    expect(receipt, contains('Crédito D1-000001'));
+    // Usado na venda gravada: a cópia local não tem mais saldo.
+    expect(database.localReturnCredit('D1-000001'), containsPair('balance', 0.0));
+    newSale(1);
+    expect(await controller.findReturnCredit('D1-000001'), isNull);
+    expect(noticeCode(), 'FA872');
+  });
+
+  test('crédito sem internet: só os créditos deste terminal; em dinheiro ou desconhecido, FA872', () async {
+    final code = await sold(code: '2');
+    final sale = (await controller.findSaleForReturn(code))!;
+    final itemId = (sale['items'] as List).single['id'] as String;
+    await controller.makeReturn(sale: sale, quantities: {itemId: 1000}, reason: 'x', destination: 'cash');
+    for (final key in ['D1-000001', 'D7-000003']) {
+      api.returnCreditResponse[key] = const ApiException('FA008');
+      expect(await controller.findReturnCredit(key), isNull, reason: key);
+      expect(noticeCode(), 'FA872');
+    }
+    expect(await controller.findReturnCredit('   '), isNull);
+    // Sem a busca, não lança.
+    controller.addPayment(Payment(method: PaymentMethod.returnCredit, amountCents: 100));
+    expect(noticeCode(), 'FA872');
+  });
+
+  test('crédito com internet: saldo da central menos o que este terminal usou e não enviou', () async {
+    const otherId = '019a0000-0000-7000-8000-0000000000aa';
+    await controller.login('3', '2468');
+    controller.openShift(10000);
+    api.returnCreditResponse['D9-000001'] = {'id': otherId, 'code': 'D9-000001', 'total': 15, 'used': 5, 'balance': 10};
+    newSale(1);
+    final found = (await controller.findReturnCredit('D9-000001'))!;
+    expect(found.balanceCents, 1000);
+    controller.addPayment(credit(found, 400));
+    controller.addPayment(Payment(method: PaymentMethod.cash, amountCents: 600));
+    await controller.finish();
+    newSale(1);
+    expect((await controller.findReturnCredit('D9-000001'))!.balanceCents, 600);
+    // Depois de enviada, a central já conta o uso.
+    final batch = database.nextOutboxBatch();
+    database.markSent(batch, [for (final item in batch) PushResult(id: item.id, status: 'applied')], now: now);
+    expect((await controller.findReturnCredit('D9-000001'))!.balanceCents, 1000);
+    // Recusa da central (sem saldo ou de outra loja) aparece ao operador, sem cair na cópia local.
+    api.returnCreditResponse['D9-000001'] = const ApiException('FA872');
+    expect(await controller.findReturnCredit('D9-000001'), isNull);
+    expect(noticeCode(), 'FA872');
+  });
+
+  testWidgets('tela: escolhe o crédito, busca o documento e sugere o menor entre o saldo e o que falta', (tester) async {
+    late String code;
+    await tester.runAsync(() async {
+      code = await sold(code: '2');
+      final sale = (await controller.findSaleForReturn(code))!;
+      final itemId = (sale['items'] as List).single['id'] as String;
+      await controller.makeReturn(sale: sale, quantities: {itemId: 1000}, reason: 'Troca', destination: 'credit');
+    });
+    api.returnCreditResponse['D1-000001'] = const ApiException('FA001');
+    newSale(2);
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    await tester.pumpWidget(MaterialApp(home: PosScreen(controller: controller)));
+    await tester.tap(find.byKey(const Key('method-return_credit')));
+    await tester.pump();
+    // Sem a busca, avisa e não lança.
+    await tester.tap(find.byKey(const Key('add-payment')));
+    await tester.pump();
+    expect(find.textContaining('busque o crédito'), findsOneWidget);
+    expect(controller.cart.payments, isEmpty);
+    await tester.enterText(find.byKey(const Key('credit-code')), 'd1-000001');
+    await tester.tap(find.byKey(const Key('find-credit')));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pump();
+    expect(find.text('Crédito D1-000001: saldo de R\$ 10,00'), findsOneWidget);
+    expect(tester.widget<EditableText>(find.descendant(of: find.byKey(const Key('payment-amount')), matching: find.byType(EditableText))).controller.text, '10,00');
+    await tester.tap(find.byKey(const Key('add-payment')));
+    await tester.pump();
+    expect(controller.cart.payments.single.returnCode, 'D1-000001');
+    expect(find.text('Crédito de devolução D1-000001'), findsOneWidget);
+    expect(find.text('Falta: R\$ 10,00'), findsOneWidget);
+    expect(find.byKey(const Key('credit-balance')), findsNothing);
+    await tester.binding.setSurfaceSize(null);
   });
 }

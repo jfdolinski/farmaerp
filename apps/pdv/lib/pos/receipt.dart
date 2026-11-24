@@ -107,7 +107,11 @@ List<ReceiptLine> buildReceipt({
     ReceiptLine(_twoColumns('TOTAL', formatCents(cart.totalCents)), bold: true),
     for (final payment in cart.payments) ...[
       ReceiptLine(_twoColumns(
-        payment.method == PaymentMethod.agreement ? 'Convênio ${payment.agreementName ?? ''}' : payment.method.label,
+        switch (payment.method) {
+          PaymentMethod.agreement => 'Convênio ${payment.agreementName ?? ''}',
+          PaymentMethod.returnCredit => 'Crédito ${payment.returnCode ?? ''}',
+          _ => payment.method.label,
+        },
         formatCents(payment.amountCents),
       )),
       if (payment.agreementRegistration != null) ReceiptLine('  Matrícula ${payment.agreementRegistration}'),

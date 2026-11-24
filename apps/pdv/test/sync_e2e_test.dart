@@ -129,6 +129,7 @@ void main() {
           findQuote: (key) => client.quote(accessToken: token.value, key: key),
           saleForReturn: (code) => client.saleForReturn(accessToken: token.value, code: code),
           returnDocument: (code) => client.returnDocument(accessToken: token.value, code: code),
+          returnCredit: (code) => client.returnCredit(accessToken: token.value, code: code),
         );
         await pos.login('3', '2468');
         expect(pos.notice, isNull);
@@ -297,6 +298,45 @@ void main() {
         final returned = (jsonDecode(returns.body) as List).cast<Map<String, dynamic>>().singleWhere((row) => row['code'] == refund.code);
         expect(returned['paid'], isTrue);
         expect(returned['authorized_by_name'], 'Gerente Centro');
+
+        // Troca: nova venda devolvida como crédito, e o crédito paga parte da compra seguinte.
+        expect(await pos.identifySeller('3'), isTrue, reason: pos.notice?.message);
+        pos.scan('7890000000017');
+        pos.startPayment();
+        pos.addPayment(Payment(method: PaymentMethod.cash, amountCents: pos.cart.totalCents));
+        await pos.finish();
+        await sync.push(token.value);
+        final exchanged = (await pos.findSaleForReturn(pos.lastSale!.code))!;
+        final exchangedItem = ((exchanged['items'] as List).single as Map<String, dynamic>)['id'] as String;
+        final creditReturn = await pos.makeReturn(
+          sale: exchanged, quantities: {exchangedItem: 1000}, reason: 'Troca E2E', destination: 'credit', code: '2', pin: '1357',
+        );
+        expect(creditReturn, isNotNull, reason: pos.notice?.message);
+        await sync.push(token.value);
+        expect(await pos.identifySeller('3'), isTrue, reason: pos.notice?.message);
+        pos.scan('7890000000017');
+        pos.scan('7890000000017');
+        pos.startPayment();
+        final credit = (await pos.findReturnCredit(creditReturn!.code))!;
+        expect(credit.balanceCents, creditReturn.totalCents);
+        pos.addPayment(Payment(
+          method: PaymentMethod.returnCredit, amountCents: credit.balanceCents, returnId: credit.id, returnCode: credit.code,
+          creditBalanceCents: credit.balanceCents,
+        ));
+        expect(pos.notice, isNull);
+        pos.addPayment(Payment(method: PaymentMethod.cash, amountCents: pos.cart.remainingCents));
+        await pos.finish();
+        await sync.push(token.value);
+        expect(
+          database.debugSelect("SELECT result FROM outbox WHERE kind = 'sale' ORDER BY sequence DESC LIMIT 1").single['result'],
+          'applied',
+        );
+        // Usado por inteiro: a central não acha mais saldo, e a lista mostra o uso.
+        expect(await pos.findReturnCredit(creditReturn.code), isNull);
+        expect(pos.notice?.reference, contains('FA872'));
+        final credits = await http.get(Uri.parse('$base/admin/returns?destination=credit'), headers: {'Authorization': 'Bearer $session'});
+        final creditRow = (jsonDecode(credits.body) as List).cast<Map<String, dynamic>>().singleWhere((row) => row['code'] == creditReturn.code);
+        expect(num.parse('${creditRow['credit_used']}') * 100, creditReturn.totalCents);
       } finally {
         await admin('/admin/products/$_dipirona/prices', {'branchId': _branch, 'price': null}, token: session);
         await admin('/admin/terminals/$terminalId/revoke', {'reason': 'Fim do teste E2E'}, token: session);

@@ -4,6 +4,7 @@ import { appPool, closePools, createFixtures, hasCode, ownerPool, setTerminal, s
 
 // Devolução: documento, destino do valor, estoque de volta e a sangria que paga em dinheiro.
 let a;
+let b;
 let operator;
 let manager;
 let session;
@@ -86,19 +87,19 @@ async function push(entries, terminal = a.terminal1) {
   }
 }
 const codes = (results) => results.map((r) => [r.status, r.code]);
-const person = async (roleName) => {
-  const user = (await ownerPool.query('INSERT INTO user_account (economic_group_id, name) VALUES ($1, $2) RETURNING *', [a.group.id, `${roleName} ${tag()}`])).rows[0];
-  await ownerPool.query('INSERT INTO user_branch (user_id, branch_id) VALUES ($1, $2)', [user.id, a.branch1.id]);
-  const role = (await ownerPool.query('SELECT id FROM role WHERE economic_group_id = $1 AND name = $2', [a.group.id, roleName])).rows[0];
-  await ownerPool.query('INSERT INTO user_role (user_id, role_id, branch_id) VALUES ($1, $2, $3)', [user.id, role.id, a.branch1.id]);
+const person = async (roleName, groupFixture = a) => {
+  const user = (await ownerPool.query('INSERT INTO user_account (economic_group_id, name) VALUES ($1, $2) RETURNING *', [groupFixture.group.id, `${roleName} ${tag()}`])).rows[0];
+  await ownerPool.query('INSERT INTO user_branch (user_id, branch_id) VALUES ($1, $2)', [user.id, groupFixture.branch1.id]);
+  const role = (await ownerPool.query('SELECT id FROM role WHERE economic_group_id = $1 AND name = $2', [groupFixture.group.id, roleName])).rows[0];
+  await ownerPool.query('INSERT INTO user_role (user_id, role_id, branch_id) VALUES ($1, $2, $3)', [user.id, role.id, groupFixture.branch1.id]);
   return user;
 };
-const product = async (controlledClass = null) => {
+const product = async (controlledClass = null, owner = a.admin) => {
   const sourceKey = `dev-${tag()}`;
   const catalogId = (await ownerPool.query('SELECT app.upsert_catalog_product($1::jsonb) AS id', [JSON.stringify({
     sourceKey, name: `Produto ${sourceKey}`, ...(controlledClass ? { controlledClass } : {}),
   })])).rows[0].id;
-  return committed(a.admin, async (client) => {
+  return committed(owner, async (client) => {
     const barcode = gtin();
     const { rows } = await client.query('SELECT app.create_product($1::jsonb) AS id', [JSON.stringify({
       displayName: `Produto ${sourceKey}`, barcode, catalogProductId: catalogId,
@@ -141,7 +142,7 @@ const alerts = async (saleId) => (await ownerPool.query(
 )).rows.map((r) => r.detail);
 
 beforeAll(async () => {
-  ({ a } = await createFixtures());
+  ({ a, b } = await createFixtures());
   operator = await person('Operador de caixa');
   manager = await person('Gerente');
   session = uuidV7();
@@ -316,7 +317,7 @@ describe('PDV e retaguarda', () => {
     const sold = sale([{ product: plain, quantity: 2 }]);
     const done = refund(sold, [[0, 1, 10]], { operator_id: operator.id, authorized_by: manager.id });
     await push([['sale', sold], ['sale_return', done]]);
-    const listed = (await readAs(a.admin, 'SELECT * FROM app.list_returns($1, NULL, NULL)', [a.branch1.id])).find((r) => r.id === done.id);
+    const listed = (await readAs(a.admin, 'SELECT * FROM app.list_returns($1, NULL, NULL, NULL)', [a.branch1.id])).find((r) => r.id === done.id);
     expect(listed).toMatchObject({ destination: 'cash', paid: false, item_count: 1, alert: false, authorized_by_name: manager.name });
     const detail = (await readAs(a.admin, 'SELECT app.return_detail($1) AS d', [done.id]))[0].d;
     expect(detail).toMatchObject({ code: listed.code, total: 10, items: [{ line: 1, quantity: 1, amount: 10 }] });
@@ -338,5 +339,118 @@ describe('PDV e retaguarda', () => {
     expect(fiscal).toMatchObject({ return_days: 15 });
     expect(Number(fiscal.last_return_number)).toBeGreaterThan(0);
     await committed(a.admin, (client) => client.query('SELECT app.set_branch_return_days($1, 7)', [a.branch1.id]));
+  });
+});
+
+describe('crédito da devolução na nova compra', () => {
+  const paidWith = (credit, creditAmount, total) => {
+    const s = sale([{ product: plain, quantity: total / 10 }]);
+    s.payments = [
+      { id: uuidV7(), method: 'return_credit', amount: creditAmount, return_id: credit.id },
+      ...(total > creditAmount ? [{ id: uuidV7(), method: 'cash', amount: total - creditAmount }] : []),
+    ];
+    return s;
+  };
+  const creditAlerts = async (saleId) => (await ownerPool.query(
+    "SELECT detail FROM sale_alert WHERE sale_id = $1 AND kind = 'return_credit'", [saleId],
+  )).rows.map((r) => r.detail);
+  const lookup = (code) => asTerminal('SELECT app.pdv_return_credit($1) AS c', [code]).then((r) => r.c);
+
+  it('paga parte da compra; o saldo diminui; acima do saldo ou de devolução em dinheiro vira alerta', async () => {
+    const original = sale([{ product: plain, quantity: 4 }]);
+    const credit = refund(original, [[0, 2, 20]], { destination: 'credit' });
+    const cash = refund(original, [[0, 1, 10]]);
+    await push([['sale', original], ['sale_return', credit], ['sale_return', cash]]);
+    const code = (await returnRow(credit.id)).code;
+    expect(await lookup(code.toLowerCase())).toMatchObject({ id: credit.id, total: 20, used: 0, balance: 20 });
+
+    const first = paidWith(credit, 15, 30);
+    expect(codes(await push([['sale', first]]))).toEqual([['applied', null]]);
+    expect(await creditAlerts(first.id)).toEqual([]);
+    expect(await lookup(code)).toMatchObject({ used: 15, balance: 5 });
+
+    const over = paidWith(credit, 10, 10);
+    const notCredit = paidWith(cash, 10, 10);
+    expect(codes(await push([['sale', over], ['sale', notCredit]])).map(([s]) => s)).toEqual(['applied', 'applied']);
+    expect(await creditAlerts(over.id)).toEqual([{ return_code: code, problem: 'balance', amount: 10, balance: 5 }]);
+    expect((await creditAlerts(notCredit.id))[0]).toMatchObject({ problem: 'not_credit' });
+    await expect(lookup(code)).rejects.toSatisfy(hasCode('FA872'));
+    await expect(lookup((await returnRow(cash.id)).code)).rejects.toSatisfy(hasCode('FA872'));
+    await expect(lookup('D9-999999')).rejects.toSatisfy(hasCode('FA872'));
+
+    // Retaguarda: o filtro pelo destino, o saldo usado e as vendas que usaram.
+    const credits = await readAs(a.admin, "SELECT * FROM app.list_returns($1, NULL, NULL, 'credit')", [a.branch1.id]);
+    expect(credits.every((r) => r.destination === 'credit')).toBe(true);
+    expect(Number(credits.find((r) => r.id === credit.id).credit_used)).toBe(25);
+    const detail = (await readAs(a.admin, 'SELECT app.return_detail($1) AS d', [credit.id]))[0].d;
+    expect(detail.credit_uses.map((u) => [u.sale_id, u.amount])).toEqual([[first.id, 15], [over.id, 10]]);
+    const saleDetail = (await readAs(a.admin, 'SELECT app.sale_detail($1) AS d', [first.id]))[0].d;
+    expect(saleDetail.payments[0]).toMatchObject({ method: 'return_credit', return_code: code });
+  });
+
+  it('pagar exatamente o saldo não é alerta; outra loja não acha e vira alerta; pagamento apagado devolve o saldo', async () => {
+    const original = sale([{ product: plain, quantity: 4 }]);
+    const credit = refund(original, [[0, 2, 20]], { destination: 'credit' });
+    const cash = refund(original, [[0, 1, 10]]);
+    await push([['sale', original], ['sale_return', credit], ['sale_return', cash]]);
+    const code = (await returnRow(credit.id)).code;
+    // Devolução em dinheiro sem uso também não é crédito.
+    await expect(lookup((await returnRow(cash.id)).code)).rejects.toSatisfy(hasCode('FA872'));
+    const part = paidWith(credit, 15, 20);
+    const rest = paidWith(credit, 5, 10);
+    await push([['sale', part], ['sale', rest]]);
+    expect(await creditAlerts(rest.id)).toEqual([]);
+    await expect(lookup(code)).rejects.toSatisfy(hasCode('FA872'));
+    // Pagamento apagado (exclusão lógica) não conta no uso.
+    await ownerPool.query('UPDATE sale_payment SET deleted_at = now() WHERE sale_id = $1 AND method = $2', [rest.id, 'return_credit']);
+    expect(await lookup(code)).toMatchObject({ used: 15, balance: 5 });
+
+    // Em outra loja do grupo: a busca não acha; a venda que usa vale com o alerta.
+    const otherSession = uuidV7();
+    await push([['cash_session_open', { id: otherSession, operator_id: operator.id, opened_at: iso(), opening_float: 0 }]], a.terminal2);
+    await expect(asTerminal('SELECT app.pdv_return_credit($1) AS c', [code], a.terminal2)).rejects.toSatisfy(hasCode('FA872'));
+    const elsewhere = paidWith(credit, 5, 10);
+    elsewhere.cash_session_id = otherSession;
+    expect(codes(await push([['sale', elsewhere]], a.terminal2))).toEqual([['applied', null]]);
+    expect(await creditAlerts(elsewhere.id)).toEqual([{ return_code: code, problem: 'other_branch', amount: 5, balance: 5 }]);
+  });
+
+  it('pagamento com crédito é imutável', async () => {
+    const original = sale([{ product: plain, quantity: 1 }]);
+    const credit = refund(original, [[0, 1, 10]], { destination: 'credit' });
+    const used = paidWith(credit, 10, 10);
+    await push([['sale', original], ['sale_return', credit], ['sale', used]]);
+    const other = refund(sale([{ product: plain, quantity: 1 }]), [[0, 1, 10]], { destination: 'credit' });
+    await expect(ownerPool.query('UPDATE sale_payment SET return_id = $1 WHERE sale_id = $2', [other.id, used.id]))
+      .rejects.toSatisfy(hasCode('FA104'));
+  });
+
+  it('crédito de outro grupo: conflito', async () => {
+    const outsider = await person('Gerente', b);
+    const outsiderProduct = await product(null, b.admin);
+    const outsiderSession = uuidV7();
+    await push([['cash_session_open', { id: outsiderSession, operator_id: outsider.id, opened_at: iso(), opening_float: 0 }]], b.terminal1);
+    const outsiderSale = sale([{ product: outsiderProduct, quantity: 1 }], { cash_session_id: outsiderSession, operator_id: outsider.id });
+    const outsiderCredit = refund(outsiderSale, [[0, 1, 10]], { destination: 'credit', cash_session_id: outsiderSession, operator_id: outsider.id });
+    expect(codes(await push([['sale', outsiderSale], ['sale_return', outsiderCredit]], b.terminal1)).map(([s]) => s)).toEqual(['applied', 'applied']);
+    expect(codes(await push([['sale', paidWith(outsiderCredit, 10, 10)]]))).toEqual([['conflict', 'FA004']]);
+  });
+
+  it('fora do formato ou de outro grupo: conflito', async () => {
+    const original = sale([{ product: plain, quantity: 2 }]);
+    const credit = refund(original, [[0, 1, 10]], { destination: 'credit' });
+    await push([['sale', original], ['sale_return', credit]]);
+    const noId = paidWith(credit, 10, 10);
+    delete noId.payments[0].return_id;
+    const cashWithId = sale([{ product: plain, quantity: 1 }]);
+    cashWithId.payments[0].return_id = credit.id;
+    const badId = paidWith(credit, 10, 10);
+    badId.payments[0].return_id = 'nada';
+    expect(codes(await push([['sale', noId], ['sale', cashWithId], ['sale', badId]]))).toEqual([
+      ['conflict', 'FA962'], ['conflict', 'FA962'], ['conflict', 'FA962'],
+    ]);
+    const unknown = paidWith(credit, 10, 10);
+    unknown.payments[0].return_id = uuidV7();
+    expect(codes(await push([['sale', unknown]]))).toEqual([['conflict', 'FA004']]);
   });
 });

@@ -20,6 +20,16 @@ export class TerminalReturnsController {
     });
   }
 
+  /** Crédito de devolução para pagar a compra: da loja, de crédito e com saldo. */
+  @Get('return-credits/:code')
+  credit(@Param('code') code: string) {
+    if (code.length > 30) throw new AppError('FA872');
+    return this.database.withContext(async (client) => {
+      const { rows } = await client.query<{ result: unknown }>('SELECT app.pdv_return_credit($1) AS result', [code]);
+      return rows[0].result;
+    });
+  }
+
   @Get('returns/:code')
   document(@Param('code') code: string) {
     if (code.length > 30) throw new AppError('FA896');

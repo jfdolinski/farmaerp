@@ -880,6 +880,8 @@ class _PaymentPanel extends StatefulWidget {
 class _PaymentPanelState extends State<_PaymentPanel> {
   PaymentMethod _method = PaymentMethod.cash;
   Map<String, dynamic>? _agreement;
+  ({String id, String code, int balanceCents})? _credit;
+  final _creditCode = TextEditingController();
   final _amount = TextEditingController();
   final _brand = TextEditingController();
   final _authorization = TextEditingController();
@@ -899,6 +901,7 @@ class _PaymentPanelState extends State<_PaymentPanel> {
   @override
   void dispose() {
     _amount.dispose();
+    _creditCode.dispose();
     _brand.dispose();
     _authorization.dispose();
     super.dispose();
@@ -918,6 +921,11 @@ class _PaymentPanelState extends State<_PaymentPanel> {
       setState(() => _error = 'Escolha o convênio do cliente.');
       return;
     }
+    final credit = _method == PaymentMethod.returnCredit ? _credit : null;
+    if (_method == PaymentMethod.returnCredit && credit == null) {
+      setState(() => _error = 'Digite o código do documento de devolução e busque o crédito.');
+      return;
+    }
     widget.controller.addPayment(
       Payment(
         method: _method,
@@ -931,15 +939,38 @@ class _PaymentPanelState extends State<_PaymentPanel> {
         agreementId: agreement?['agreement_id'] as String?,
         agreementName: agreement?['name'] as String?,
         agreementRegistration: agreement?['registration'] as String?,
+        returnId: credit?.id,
+        returnCode: credit?.code,
+        creditBalanceCents: credit?.balanceCents,
       ),
     );
     setState(() {
       _error = null;
+      if (credit != null && widget.controller.cart.creditInCart(credit.id) > 0) {
+        _credit = null;
+        _creditCode.clear();
+      }
       _brand.clear();
       _authorization.clear();
       _fillRemaining();
     });
     _refocusAmount();
+  }
+
+  /// Busca o crédito e sugere o menor entre o saldo e o que falta.
+  Future<void> _findCredit() async {
+    final found = await widget.controller.findReturnCredit(_creditCode.text);
+    if (!mounted) return;
+    setState(() {
+      _credit = found;
+      if (found == null) return;
+      _error = null;
+      final cart = widget.controller.cart;
+      final available = found.balanceCents - cart.creditInCart(found.id);
+      final suggested = available < cart.remainingCents ? available : cart.remainingCents;
+      _amount.text = formatCents(suggested).replaceFirst('R\$ ', '');
+    });
+    if (found != null) _refocusAmount();
   }
 
   /// Volta para o valor, com o que falta selecionado.
@@ -961,7 +992,8 @@ class _PaymentPanelState extends State<_PaymentPanel> {
     final ready =
         cart.paidCents >= cart.totalCents && !cart.overpaidWithoutCash;
     return Card(
-      child: Padding(
+      // Rolável: com o crédito ou o cartão, os campos podem passar da altura da tela.
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -984,11 +1016,41 @@ class _PaymentPanelState extends State<_PaymentPanel> {
                       key: Key('method-${method.code}'),
                       label: Text(method.label),
                       selected: _method == method,
-                      onSelected: (_) => setState(() => _method = method),
+                      onSelected: (_) => setState(() {
+                        _method = method;
+                        _error = null;
+                      }),
                     ),
               ],
             ),
             const SizedBox(height: 12),
+            if (_method == PaymentMethod.returnCredit) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      key: const Key('credit-code'),
+                      controller: _creditCode,
+                      autofocus: true,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: const InputDecoration(labelText: 'Documento de devolução (D...)'),
+                      onSubmitted: (_) => _findCredit(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton(
+                    key: const Key('find-credit'),
+                    onPressed: controller.busy ? null : _findCredit,
+                    child: const Text('Buscar crédito'),
+                  ),
+                ],
+              ),
+              if (_credit != null)
+                Text(
+                  'Crédito ${_credit!.code}: saldo de ${formatCents(_credit!.balanceCents - cart.creditInCart(_credit!.id))}',
+                  key: const Key('credit-balance'),
+                ),
+            ],
             NumberField(
               key: const Key('payment-amount'),
               controller: _amount,
@@ -1046,7 +1108,11 @@ class _PaymentPanelState extends State<_PaymentPanel> {
             for (final payment in cart.payments)
               ListTile(
                 dense: true,
-                title: Text(payment.method.label),
+                title: Text(
+                  payment.returnCode == null
+                      ? payment.method.label
+                      : '${payment.method.label} ${payment.returnCode}',
+                ),
                 subtitle:
                     payment.cardBrand == null &&
                         payment.authorizationCode == null

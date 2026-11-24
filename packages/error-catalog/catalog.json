@@ -1947,7 +1947,8 @@
       "sale_payment_registration_check",
       "sale_payment_agreement_check",
       "sale_alert_kind_check",
-      "stock_movement_sale_item_check"
+      "stock_movement_sale_item_check",
+      "sale_payment_return_check"
     ]
   },
   "FA963": {
@@ -2478,6 +2479,22 @@
   "FA871": {
     "message": "Escolha a quantidade de pelo menos um item.",
     "action": "Digite quanto volta de cada item; o que não volta fica com 0.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA872": {
+    "message": "Este crédito de devolução não está disponível.",
+    "action": "Confira o código: o crédito precisa ser desta loja e ainda ter saldo.",
+    "httpStatus": 404,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA873": {
+    "message": "O valor passa do saldo do crédito de devolução.",
+    "action": "Use até o saldo e complete com outra forma de pagamento.",
     "httpStatus": 422,
     "severity": "warning",
     "retryable": false,

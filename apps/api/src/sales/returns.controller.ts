@@ -5,6 +5,7 @@ import { DatabaseService } from '../database.service.js';
 import { AppError } from '../observability/app-error.js';
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const DESTINATIONS = new Set(['credit', 'agreement', 'cash', 'all']);
 
 function optionalDay(value?: string): string | null {
   if (value === undefined || value === '') return null;
@@ -21,10 +22,16 @@ export class ReturnsController {
   ) {}
 
   @Get('returns')
-  list(@Query('branch') branch?: string, @Query('from') from?: string, @Query('to') to?: string) {
-    const params = [branch ? requireUuid(branch) : null, optionalDay(from), optionalDay(to)];
+  list(
+    @Query('branch') branch?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('destination') destination = 'all',
+  ) {
+    if (!DESTINATIONS.has(destination)) throw new AppError('FA005');
+    const params = [branch ? requireUuid(branch) : null, optionalDay(from), optionalDay(to), destination === 'all' ? null : destination];
     return this.database.withContext(
-      async (client) => (await client.query('SELECT * FROM app.list_returns($1, $2, $3)', params)).rows,
+      async (client) => (await client.query('SELECT * FROM app.list_returns($1, $2, $3, $4)', params)).rows,
     );
   }
 

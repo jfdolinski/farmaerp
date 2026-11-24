@@ -60,6 +60,7 @@ class PosController extends ChangeNotifier {
     this.findQuote,
     this.saleForReturn,
     this.returnDocument,
+    this.returnCredit,
     this.logger,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now;
@@ -80,6 +81,9 @@ class PosController extends ChangeNotifier {
   /// Devolução (com internet): a venda pelo código do comprovante e o documento para a sangria.
   final Future<Map<String, dynamic>> Function(String code)? saleForReturn;
   final Future<Map<String, dynamic>> Function(String code)? returnDocument;
+
+  /// Crédito de devolução pelo código D (com internet; sem internet, os créditos deste terminal).
+  final Future<Map<String, dynamic>> Function(String code)? returnCredit;
 
   /// Controlados do orçamento esperando a receita, um por vez.
   final controlledQueue = <PendingControlled>[];
@@ -679,6 +683,41 @@ class PosController extends ChangeNotifier {
     }
   }
 
+  /// Crédito de devolução para pagar a compra: o saldo da central menos o que este terminal
+  /// usou e ainda não enviou; sem internet, os créditos feitos aqui. Devolve o saldo sem contar esta venda.
+  Future<({String id, String code, int balanceCents})?> findReturnCredit(String code) async {
+    final value = code.trim().toUpperCase();
+    if (value.isEmpty) return null;
+    Map<String, dynamic>? found;
+    var balanceCents = 0;
+    final lookup = returnCredit;
+    var offline = lookup == null;
+    if (lookup != null) {
+      try {
+        found = await lookup(value);
+        balanceCents = ((found['balance'] as num) * 100).round() - database.unsentReturnCreditCents(found['id'] as String);
+      } on ApiException catch (error) {
+        if (!const {'FA001', 'FA008', 'FA009'}.contains(error.code)) {
+          notice = ErrorDisplay.fromCode(error.code, traceId: error.traceId);
+          notifyListeners();
+          return null;
+        }
+        offline = true;
+      }
+    }
+    if (offline) {
+      found = database.localReturnCredit(value);
+      if (found != null) balanceCents = ((found['balance'] as num) * 100).round();
+    }
+    if (found == null || balanceCents - cart.creditInCart(found['id'] as String) <= 0) {
+      _fail('FA872');
+      return null;
+    }
+    notice = null;
+    notifyListeners();
+    return (id: found['id'] as String, code: found['code'] as String, balanceCents: balanceCents);
+  }
+
   /// Venda para devolver: da central (com internet; qualquer caixa da loja) ou, sem internet, deste terminal.
   Future<Map<String, dynamic>?> findSaleForReturn(String code) async {
     final value = code.trim();
@@ -1041,6 +1080,12 @@ class PosController extends ChangeNotifier {
   void addPayment(Payment payment) {
     if (payment.amountCents <= 0) return _fail('FA972');
     if (payment.method == PaymentMethod.agreement && cart.customer == null) return _fail('FA983');
+    if (payment.method == PaymentMethod.returnCredit) {
+      final returnId = payment.returnId;
+      final balance = payment.creditBalanceCents;
+      if (returnId == null || balance == null) return _fail('FA872');
+      if (cart.creditInCart(returnId) + payment.amountCents > balance) return _fail('FA873');
+    }
     reprice();
     cart.payments.add(payment);
     notice = null;

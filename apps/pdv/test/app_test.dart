@@ -158,6 +158,7 @@ class FakeApi implements TerminalApi {
   /// Devolução: venda por código e documento para a sangria; resposta por código, ou exceção.
   final saleForReturnResponse = <String, Object>{};
   final returnDocumentResponse = <String, Object>{};
+  final returnCreditResponse = <String, Object>{};
 
   @override
   Future<Map<String, dynamic>> saleForReturn({required String accessToken, required String code}) async {
@@ -171,6 +172,14 @@ class FakeApi implements TerminalApi {
   Future<Map<String, dynamic>> returnDocument({required String accessToken, required String code}) async {
     _maybeFail();
     final response = returnDocumentResponse[code] ?? const ApiException('FA896');
+    if (response is Map<String, dynamic>) return response;
+    throw response;
+  }
+
+  @override
+  Future<Map<String, dynamic>> returnCredit({required String accessToken, required String code}) async {
+    _maybeFail();
+    final response = returnCreditResponse[code] ?? const ApiException('FA872');
     if (response is Map<String, dynamic>) return response;
     throw response;
   }

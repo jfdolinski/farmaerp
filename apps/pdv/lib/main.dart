@@ -122,6 +122,7 @@ Future<void> main() async {
     openQuotes: () async => api.openQuotes(accessToken: await controller.accessToken()),
     saleForReturn: (code) async => api.saleForReturn(accessToken: await controller.accessToken(), code: code),
     returnDocument: (code) async => api.returnDocument(accessToken: await controller.accessToken(), code: code),
+    returnCredit: (code) async => api.returnCredit(accessToken: await controller.accessToken(), code: code),
     findQuote: (key) async => api.quote(accessToken: await controller.accessToken(), key: key),
     logger: logger,
   );

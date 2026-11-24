@@ -431,6 +431,11 @@ const _migrations = <String>[
   CREATE INDEX sale_return_item_sale_item_idx ON sale_return_item (sale_item_id);
   ALTER TABLE cash_movement ADD COLUMN return_id BLOB;
   ''',
+  // Crédito de devolução usado como pagamento numa nova compra.
+  '''
+  ALTER TABLE sale_payment ADD COLUMN return_id BLOB;
+  CREATE INDEX sale_payment_return_idx ON sale_payment (return_id) WHERE return_id IS NOT NULL;
+  ''',
 ];
 
 /// Pessoa que pode entrar no PDV, com o que veio da central.
@@ -1470,6 +1475,40 @@ class LocalDatabase {
     };
   }
 
+  /// Crédito de devolução feito neste terminal, com o que as vendas daqui já usaram (para quando não há internet).
+  Map<String, dynamic>? localReturnCredit(String code) {
+    final rows = _db.select(
+      "SELECT r.*, COALESCE((SELECT SUM(p.amount_cents) FROM sale_payment p WHERE p.return_id = r.id AND p.method = 'return_credit'), 0) AS used "
+      "FROM sale_return r WHERE r.code = ? AND r.destination = 'credit' LIMIT 1",
+      [code.trim().toUpperCase()],
+    );
+    if (rows.isEmpty) return null;
+    final row = rows.first;
+    final total = row['total_cents'] as int;
+    final used = row['used'] as int;
+    return {
+      'id': uuidText(row['id'] as List<int>),
+      'code': row['code'],
+      'total': total / 100,
+      'used': used / 100,
+      'balance': (total - used) / 100,
+    };
+  }
+
+  /// Quanto deste crédito as vendas daqui ainda não enviadas usaram (a central ainda não conhece).
+  int unsentReturnCreditCents(String returnId) {
+    var cents = 0;
+    for (final row in _db.select("SELECT payload FROM outbox WHERE sent_at IS NULL AND kind = 'sale'")) {
+      final payload = jsonDecode(row['payload'] as String) as Map<String, dynamic>;
+      for (final payment in (payload['payments'] as List? ?? const []).cast<Map<String, dynamic>>()) {
+        if (payment['method'] == 'return_credit' && payment['return_id'] == returnId) {
+          cents += ((payment['amount'] as num) * 100).round();
+        }
+      }
+    }
+    return cents;
+  }
+
   /// Próximo número de orçamento deste terminal (continua do que a central conhece).
   int get nextQuoteNumber {
     final local = _db.select('SELECT COALESCE(max(number), 0) AS n FROM quote').first['n'] as int;
@@ -1553,7 +1592,7 @@ class LocalDatabase {
         for (final payment in (payload['payments']! as List).cast<Map<String, Object?>>()) {
           _db.execute(
             'INSERT INTO sale_payment (id, sale_id, method, amount_cents, change_cents, card_brand, authorization_code, '
-            'created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            'return_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [
               uuidBytes(payment['id']! as String),
               uuidBytes(payload['id']! as String),
@@ -1562,6 +1601,7 @@ class LocalDatabase {
               toCents(payment['change']) ?? 0,
               payment['card_brand'],
               payment['authorization_code'],
+              payment['return_id'] == null ? null : uuidBytes(payment['return_id']! as String),
               at,
               at,
             ],

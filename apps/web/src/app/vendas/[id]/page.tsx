@@ -52,6 +52,8 @@ interface SaleDetail {
     authorization_code: string | null;
     agreement_name: string | null;
     agreement_registration: string | null;
+    return_id: string | null;
+    return_code: string | null;
   }[];
   alerts: { kind: string; line: number | null; detail: Record<string, unknown> }[];
 }
@@ -191,6 +193,12 @@ function SaleView({ sale }: { sale: SaleDetail }) {
               {payment.authorization_code && ` · autorização ${payment.authorization_code}`}
               {payment.agreement_name && ` · ${payment.agreement_name}`}
               {payment.agreement_registration && ` · matrícula ${payment.agreement_registration}`}
+              {payment.return_id && (
+                <>
+                  {" · "}
+                  <Link href={`/devolucoes/${payment.return_id}`}>{payment.return_code}</Link>
+                </>
+              )}
             </li>
           ))}
         </ul>

@@ -411,7 +411,7 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - O operador digita o código do comprovante da venda. Com internet, vale venda de qualquer caixa da loja; sem internet, só as deste terminal.
   - Escolhe quanto volta de cada item. O valor é a parte do total do item; a última devolução do item fecha no centavo.
   - Informa o motivo e o destino do valor:
-    - crédito para nova compra (o uso na compra chega no próximo PR);
+    - crédito para nova compra (veja "Crédito de devolução" abaixo);
     - abatimento na fatura do convênio (só se a venda teve convênio; o faturamento é da Etapa 7);
     - dinheiro ao cliente.
   - Sai o comprovante com o documento `D<terminal>-<número>` em código de barras.
@@ -425,7 +425,18 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - **Na central:** a devolução sobe pela outbox (`sale_return`) e é conferida no banco. Erros dão FA891 a FA894 e FA897.
   - O estoque volta para os lotes que saíram na venda.
   - Sem a permissão (ou fora do prazo sem a liberação de outra pessoa), a devolução vale e fica o alerta na venda.
-- **Retaguarda:** `/devolucoes` lista por período e filial, com destino, situação do pagamento e quem liberou. O detalhe da venda mostra as devoluções dela.
+- **Retaguarda:** `/devolucoes` lista por período, filial e destino, com a situação do pagamento, o saldo do crédito, o cliente, o convênio a abater e quem liberou. O detalhe da venda mostra as devoluções dela.
+  - O filtro "Abatimento no convênio" é a lista dos abatimentos a fazer na próxima fatura de cada convênio. O faturamento em si chega na Etapa 7.
+
+**Crédito de devolução**
+
+- **No pagamento:** forma "Crédito de devolução". O operador digita (ou lê) o documento `D...` e busca o crédito.
+  - O valor sugerido é o menor entre o saldo e o que falta. Acima do saldo, não lança (FA873). O resto vai em outra forma de pagamento.
+  - Com internet, o saldo vem da central, menos o que este terminal usou e ainda não enviou. Sem internet, valem só os créditos feitos neste terminal.
+  - Crédito usado por inteiro, de outra loja, em dinheiro ou desconhecido: FA872.
+  - O comprovante mostra "Crédito D...". A venda leva o `return_id` em cada pagamento com crédito.
+- **Na central:** o crédito vale só na loja da devolução. Pagamento acima do saldo, de outra loja ou com documento que não é de crédito vale (a venda já aconteceu) e fica o alerta "Crédito de devolução usado sem saldo ou fora das regras".
+- **Retaguarda:** o detalhe da devolução mostra o uso do crédito (venda, data e valor), e o pagamento no detalhe da venda leva ao documento.
 
 **Sangria, suprimento e fechamento**
 
