@@ -164,6 +164,51 @@ List<ReceiptLine> buildQuoteReceipt({
   ];
 }
 
+/// Destino do valor devolvido, como sai no comprovante e na tela.
+const returnDestinationLabels = {
+  'credit': 'Crédito para nova compra',
+  'agreement': 'Abatimento na fatura do convênio',
+  'cash': 'Dinheiro ao cliente',
+};
+
+/// Comprovante da devolução: o documento (com código de barras) que a sangria pede quando o valor
+/// volta em dinheiro, ou que vale como crédito para nova compra.
+List<ReceiptLine> buildReturnReceipt({
+  required Map<String, dynamic>? fiscal,
+  required String code,
+  required String saleCode,
+  required List<({String name, int quantityMilli, int amountCents})> items,
+  required int totalCents,
+  required String destination,
+  required String reason,
+  required String operatorName,
+  String? authorizerName,
+  required DateTime at,
+  required int terminalNumber,
+}) => [
+  ..._cashHeader(fiscal, 'DEVOLUÇÃO', at, terminalNumber),
+  ReceiptLine(_twoColumns('Documento $code', 'Venda $saleCode'), bold: true),
+  for (final item in items) ...[
+    for (final text in _wrap(item.name)) ReceiptLine(text),
+    ReceiptLine(_twoColumns('  ${formatMilli(item.quantityMilli)} un', formatCents(item.amountCents))),
+  ],
+  ReceiptLine('-' * receiptWidth),
+  ReceiptLine(_twoColumns('TOTAL DEVOLVIDO', formatCents(totalCents)), bold: true),
+  ReceiptLine('Destino: ${returnDestinationLabels[destination] ?? destination}'),
+  for (final text in _wrap(switch (destination) {
+    'cash' => 'O valor sai do caixa por uma sangria de devolução com este documento.',
+    'credit' => 'Apresente este documento na próxima compra nesta loja.',
+    _ => 'O valor é abatido na próxima fatura do convênio.',
+  })) ReceiptLine(text),
+  for (final text in _wrap('Motivo: $reason')) ReceiptLine(text),
+  ReceiptLine('Operador: $operatorName'),
+  if (authorizerName != null) ReceiptLine('Liberada por: $authorizerName'),
+  ReceiptLine.barcode(code),
+  const ReceiptLine(''),
+  const ReceiptLine('______________________________', center: true),
+  const ReceiptLine('Cliente', center: true),
+];
+
 /// Cabeçalho comum dos comprovantes de caixa.
 List<ReceiptLine> _cashHeader(Map<String, dynamic>? fiscal, String title, DateTime at, int terminalNumber) {
   final branch = (fiscal?['branch'] as Map?) ?? const {};

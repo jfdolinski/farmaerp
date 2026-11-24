@@ -28,6 +28,7 @@ export const ALERT_LABELS: Record<string, string> = {
   prescription_type: "Tipo de receita diferente do exigido pela lista do produto",
   seller_permission: "Vendedor sem permissão de orçar ou vender na filial",
   quote_status: "Venda de orçamento que já não estava aberto",
+  return_permission: "Devolução feita sem a permissão",
 };
 
 export const brl = (value: number | string | null) =>
@@ -62,6 +63,8 @@ export function alertText(kind: string, detail: Record<string, unknown>): string
       };
       return `Orçamento ${detail.quote_code}: ${reasons[detail.status as string] ?? detail.status}.`;
     }
+    case "return_permission":
+      return `${label}: ${detail.return_code}${detail.late ? ", fora do prazo da loja e sem a liberação de outra pessoa" : ", sem a permissão nem a liberação de quem tem"}.`;
     case "negative_stock":
       return `${label}: saldo ${Number(detail.balance).toLocaleString("pt-BR")}.`;
     default:

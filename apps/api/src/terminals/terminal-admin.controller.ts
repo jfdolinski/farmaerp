@@ -26,7 +26,7 @@ export class TerminalAdminController {
   branches() {
     return this.database.withContext(async (client) => {
       const { rows } = await client.query(
-        'SELECT id, name, state, pmc_region, offline_zero_stock_minutes, quote_validity_days, seller_pin_required FROM v_branch ORDER BY name',
+        'SELECT id, name, state, pmc_region, offline_zero_stock_minutes, quote_validity_days, seller_pin_required, return_days FROM v_branch ORDER BY name',
       );
       return rows;
     });

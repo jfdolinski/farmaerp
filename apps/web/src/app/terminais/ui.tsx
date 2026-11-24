@@ -9,6 +9,7 @@ import {
   changeTerminalStatus,
   setOfflineMinutes,
   setSaleSettings,
+  setReturnDays,
   setTerminalProfile,
   claimPairing,
   LookupState,
@@ -293,6 +294,32 @@ export function ProfileForm({ id, current }: { id: string; current: string }) {
         </button>
         <ErrorNotice error={state.error} />
         {state.done && <p role="status">Salvo. O PDV muda de modo na próxima sincronização.</p>}
+      </form>
+    </details>
+  );
+}
+
+/** Prazo de devolução da filial: depois dele, só com a liberação de outra pessoa com a permissão. */
+export function ReturnDaysForm({ id, days }: { id: string; days: number }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(setReturnDays, {});
+  return (
+    <details className={styles.reason}>
+      <summary>Devolução: {days === 0 ? "só no dia da venda" : `até ${days} ${days === 1 ? "dia" : "dias"} depois da venda`}</summary>
+      <form action={action} className={styles.rowForm}>
+        <input type="hidden" name="id" value={id} />
+        <p className={styles.hint}>
+          Dentro do prazo, quem tem a permissão &ldquo;Fazer devolução&rdquo; faz sozinho. Depois do prazo, a devolução precisa da
+          liberação de outra pessoa com a permissão.
+        </p>
+        <label>
+          Prazo em dias (0 a 365)
+          <input name="days" type="number" min={0} max={365} defaultValue={days} required />
+        </label>
+        <button type="submit" disabled={pending}>
+          Salvar
+        </button>
+        <ErrorNotice error={state.error} />
+        {state.done && <p role="status">Salvo. Chega ao PDV na próxima sincronização.</p>}
       </form>
     </details>
   );

@@ -10,6 +10,7 @@ import {
   OfflineMinutesForm,
   SaleSettingsForm,
   ProfileForm,
+  ReturnDaysForm,
   AutoRefresh,
   ReasonAction,
   UnblockButton,
@@ -131,7 +132,7 @@ async function TerminalsContent() {
   const canStructure = can(user, "structure.manage");
   const [terminals, branches] = await Promise.all([
     apiFetch<MonitorRow[]>("/admin/terminals"),
-    apiFetch<{ id: string; name: string; offline_zero_stock_minutes: number; quote_validity_days: number; seller_pin_required: boolean }[]>("/admin/branches"),
+    apiFetch<{ id: string; name: string; offline_zero_stock_minutes: number; quote_validity_days: number; seller_pin_required: boolean; return_days: number }[]>("/admin/branches"),
   ]);
 
   if (!terminals.ok) redirectIfNeeded(terminals.error, "/terminais");
@@ -163,15 +164,16 @@ async function TerminalsContent() {
 
       {canStructure && branches.ok && branches.data.length > 0 && (
         <section className={styles.card}>
-          <h2>Orçamento e vendedor</h2>
+          <h2>Orçamento, vendedor e devolução</h2>
           <p className={styles.hint}>
-            Por quanto tempo o orçamento vale no caixa e se o vendedor digita o PIN junto com o código.
+            Por quanto tempo o orçamento vale no caixa, se o vendedor digita o PIN junto com o código e o prazo de devolução.
           </p>
           <ul className={styles.bullets}>
             {branches.data.map((branch) => (
               <li key={branch.id}>
                 <strong>{branch.name}</strong>{" "}
-                <SaleSettingsForm id={branch.id} days={branch.quote_validity_days} pin={branch.seller_pin_required} />
+                <SaleSettingsForm id={branch.id} days={branch.quote_validity_days} pin={branch.seller_pin_required} />{" "}
+                <ReturnDaysForm id={branch.id} days={branch.return_days} />
               </li>
             ))}
           </ul>

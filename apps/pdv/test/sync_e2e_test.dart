@@ -127,6 +127,8 @@ void main() {
           networkStock: (productId) => client.networkStock(accessToken: token.value, productId: productId),
           openQuotes: () => client.openQuotes(accessToken: token.value),
           findQuote: (key) => client.quote(accessToken: token.value, key: key),
+          saleForReturn: (code) => client.saleForReturn(accessToken: token.value, code: code),
+          returnDocument: (code) => client.returnDocument(accessToken: token.value, code: code),
         );
         await pos.login('3', '2468');
         expect(pos.notice, isNull);
@@ -271,6 +273,30 @@ void main() {
         final done = (jsonDecode(converted.body) as List).cast<Map<String, dynamic>>().singleWhere((row) => row['code'] == quoteCode);
         expect(done['sale_code'], pos.lastSale!.code);
         expect((await pos.findQuote!(quoteCode).then<Object>((v) => v, onError: (Object e) => e)), isA<ApiException>().having((e) => e.code, 'code', 'FA886'));
+
+        // Devolução da venda do orçamento: a venda vem da central, o Operador Centro não tem a
+        // permissão e o Gerente Centro libera; o valor vai em dinheiro e a sangria com o documento paga.
+        final soldCode = pos.lastSale!.code;
+        final forReturn = (await pos.findSaleForReturn(soldCode))!;
+        expect(forReturn['late'], isFalse);
+        final itemId = ((forReturn['items'] as List).first as Map<String, dynamic>)['id'] as String;
+        final refund = await pos.makeReturn(
+          sale: forReturn, quantities: {itemId: 1000}, reason: 'Teste E2E', destination: 'cash', code: '2', pin: '1357',
+        );
+        expect(refund, isNotNull, reason: pos.notice?.message);
+        final document = (await pos.findReturnDocument(refund!.code))!;
+        expect(await pos.withdraw(refund.totalCents, 'Devolução ${refund.code}', returnId: document['id'] as String), isFalse);
+        expect(await pos.releaseWithdrawal(refund.totalCents, 'Devolução ${refund.code}', '2', '1357', returnId: document['id'] as String), isTrue);
+        await sync.push(token.value);
+        expect(
+          database.debugSelect("SELECT result FROM outbox WHERE kind IN ('sale_return', 'cash_movement') ORDER BY sequence DESC LIMIT 2")
+              .map((r) => r['result']),
+          ['applied', 'applied'],
+        );
+        final returns = await http.get(Uri.parse('$base/admin/returns'), headers: {'Authorization': 'Bearer $session'});
+        final returned = (jsonDecode(returns.body) as List).cast<Map<String, dynamic>>().singleWhere((row) => row['code'] == refund.code);
+        expect(returned['paid'], isTrue);
+        expect(returned['authorized_by_name'], 'Gerente Centro');
       } finally {
         await admin('/admin/products/$_dipirona/prices', {'branchId': _branch, 'price': null}, token: session);
         await admin('/admin/terminals/$terminalId/revoke', {'reason': 'Fim do teste E2E'}, token: session);

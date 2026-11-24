@@ -343,7 +343,7 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - Impressora térmica em ESC/POS pela fila do Windows (tipo RAW, página 860 para os acentos), escolhida no ícone de impressora do caixa.
   - Sem impressora configurada, sai em PDF em `Documentos\FarmaERP\comprovantes`.
   - Falha na impressão não desfaz a venda e mostra "Reimprimir".
-- **Atalhos:** F2 vai para a leitura, F3 puxa o orçamento, F4 identifica o cliente, F6 sangria, F7 suprimento, F8 fecha o caixa, F10 abre o pagamento, Esc volta.
+- **Atalhos:** F2 vai para a leitura, F3 puxa o orçamento, F4 identifica o cliente, F6 sangria, F7 suprimento, F8 fecha o caixa, F9 devolução, F10 abre o pagamento, Esc volta.
 - **Foco:** o cursor sempre volta para o campo obrigatório da vez.
   - Entrada: código e PIN; PIN errado volta para o PIN.
   - Turno: fundo de troco.
@@ -404,6 +404,28 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - Mensagens próprias: não encontrado nesta loja (FA885), já virou venda (FA886), vencido (FA887), plaquinha usada em outro orçamento (FA888), venda em andamento (FA889) e sem internet (FA890; aí o operador passa os produtos do cupom um a um).
   - A venda leva o orçamento (`quote_id`). Na central, o orçamento aberto, válido na hora da venda e da mesma loja vira venda. Senão, a venda vale e fica o alerta "Venda de orçamento que já não estava aberto".
 - **Recálculo:** a venda é recalculada a cada mudança (itens, quantidade, cliente, forma de pagamento): preço atual da loja e o desconto de cada item na mesma fração. Se o total mudar com pagamento lançado, o pagamento é refeito. As regras por cliente e por forma de pagamento entram nesse mesmo recálculo na Etapa 7.
+
+**Devolução**
+
+- **No caixa (F9):** só na loja da compra e vinculada à venda.
+  - O operador digita o código do comprovante da venda. Com internet, vale venda de qualquer caixa da loja; sem internet, só as deste terminal.
+  - Escolhe quanto volta de cada item. O valor é a parte do total do item; a última devolução do item fecha no centavo.
+  - Informa o motivo e o destino do valor:
+    - crédito para nova compra (o uso na compra chega no próximo PR);
+    - abatimento na fatura do convênio (só se a venda teve convênio; o faturamento é da Etapa 7);
+    - dinheiro ao cliente.
+  - Sai o comprovante com o documento `D<terminal>-<número>` em código de barras.
+- **Quem faz:** quem tem "Fazer devolução" (`sales.return`, perfil Gerente). Sem ela, outra pessoa com a permissão libera com código e PIN (FA895).
+- **Prazo:** é parâmetro da filial, em dias (padrão 7, em Terminais). Fora do prazo, sempre precisa da liberação de outra pessoa com a permissão (FA898).
+- **Controlado** não volta no caixa (FA893); fica para a manutenção do SNGPC (Etapa 8).
+- **Dinheiro:** sai por uma sangria de devolução, que pede o documento.
+  - O valor vem do documento e, na central, a devolução fica paga: o ciclo se fecha.
+  - Documento já pago, de crédito, de outra loja ou com valor diferente: a sangria vale (o dinheiro já saiu) e vira alerta do caixa.
+  - Depois de uma devolução em dinheiro, a sangria já abre com o documento.
+- **Na central:** a devolução sobe pela outbox (`sale_return`) e é conferida no banco. Erros dão FA891 a FA894 e FA897.
+  - O estoque volta para os lotes que saíram na venda.
+  - Sem a permissão (ou fora do prazo sem a liberação de outra pessoa), a devolução vale e fica o alerta na venda.
+- **Retaguarda:** `/devolucoes` lista por período e filial, com destino, situação do pagamento e quem liberou. O detalhe da venda mostra as devoluções dela.
 
 **Sangria, suprimento e fechamento**
 

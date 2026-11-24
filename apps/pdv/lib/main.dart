@@ -120,6 +120,8 @@ Future<void> main() async {
     customers: CustomerService(api: api, database: database, accessToken: controller.accessToken, logger: logger),
     networkStock: (productId) async => api.networkStock(accessToken: await controller.accessToken(), productId: productId),
     openQuotes: () async => api.openQuotes(accessToken: await controller.accessToken()),
+    saleForReturn: (code) async => api.saleForReturn(accessToken: await controller.accessToken(), code: code),
+    returnDocument: (code) async => api.returnDocument(accessToken: await controller.accessToken(), code: code),
     findQuote: (key) async => api.quote(accessToken: await controller.accessToken(), key: key),
     logger: logger,
   );

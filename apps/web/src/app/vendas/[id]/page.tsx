@@ -5,6 +5,7 @@ import { apiFetch, can, redirectIfNeeded, requireUser } from "@/lib/api";
 import { AppHeader } from "../../app-header";
 import { ErrorNotice } from "../../error-notice";
 import styles from "../../terminais/page.module.css";
+import { DESTINATION_LABELS, payoutText } from "../../devolucoes/labels";
 import { alertText, brl, dateTimeText, FISCAL_LABELS, PAYMENT_LABELS } from "../labels";
 
 export const metadata: Metadata = { title: "Venda · FarmaERP" };
@@ -22,6 +23,7 @@ interface SaleDetail {
   seller_name: string | null;
   quote_id: string | null;
   quote_code: string | null;
+  returns: { id: string; code: string; returned_at: string; total: number; destination: string; reason: string; paid: boolean }[];
   customer_name: string | null;
   customer_code: number | null;
   fiscal_model: string | null;
@@ -193,6 +195,21 @@ function SaleView({ sale }: { sale: SaleDetail }) {
           ))}
         </ul>
       </section>
+
+      {sale.returns.length > 0 && (
+        <section className={styles.card}>
+          <h2>Devoluções</h2>
+          <ul className={styles.bullets}>
+            {sale.returns.map((refund) => (
+              <li key={refund.id}>
+                <Link href={`/devolucoes/${refund.id}`}>{refund.code}</Link> · {dateTimeText(refund.returned_at)} ·{" "}
+                {brl(refund.total)} · {DESTINATION_LABELS[refund.destination] ?? refund.destination} (
+                {payoutText(refund.destination, refund.paid).toLowerCase()}) · {refund.reason}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </>
   );
 }

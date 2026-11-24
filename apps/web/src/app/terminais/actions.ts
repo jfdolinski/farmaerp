@@ -90,6 +90,14 @@ export async function setTerminalProfile(
   return post(`/admin/terminals/${text(form, "id")}/profile`, { profile: text(form, "profile") });
 }
 
+export async function setReturnDays(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const raw = text(form, "days");
+  return post(`/admin/branches/${text(form, "id")}/return-days`, { days: raw === "" ? null : Number(raw) });
+}
+
 export async function setSaleSettings(
   _previous: ActionState,
   form: FormData,
