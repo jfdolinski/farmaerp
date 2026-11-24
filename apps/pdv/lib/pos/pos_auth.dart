@@ -84,6 +84,17 @@ class PosAuth {
     final user = userByCodeText(codeText);
     // Código desconhecido e PIN errado dão a mesma mensagem: não revela quem existe.
     if (user == null) throw const PosException('FA966');
+    // Reconhecida pela câmera agora há pouco: o vale vale uma vez, no lugar do PIN.
+    final ticket = _faceTicket;
+    if (pin.isEmpty && ticket != null && ticket.userId == user.id) {
+      _faceTicket = null;
+      final now = _clock();
+      if (now.difference(ticket.at) <= faceTicketValidity) {
+        if (permission != null && !user.can(permission)) throw const PosException('FA969');
+        _record(user, 'success', purpose, AuthMethod.face.code, now: now);
+        return user;
+      }
+    }
     if (!allowedMethods(user.authMode).contains(AuthMethod.pin)) throw const PosException('FA820');
     if (user.pinHash == null) throw const PosException('FA968');
 
@@ -129,6 +140,16 @@ class PosAuth {
     _record(user, 'success', purpose, 'manager_release', authorizedBy: manager.id, now: _clock());
     logger?.info('Entrada liberada pelo gerente', fields: {'user_code': user.code, 'manager_code': manager.code});
     return user;
+  }
+
+  /// Vale de uso único da câmera para uma liberação: a próxima conferência dessa pessoa sem PIN,
+  /// em até [faceTicketValidity], passa como "câmera". Só quem pode entrar pela câmera recebe.
+  ({String userId, DateTime at})? _faceTicket;
+  static const faceTicketValidity = Duration(seconds: 60);
+
+  void grantFace(LocalUser user) {
+    if (!allowedMethods(user.authMode).contains(AuthMethod.face)) throw const PosException('FA824');
+    _faceTicket = (userId: user.id, at: _clock());
   }
 
   /// Pessoa reconhecida pela câmera (com prova de vida). Quem não entra pela câmera recebe FA824.

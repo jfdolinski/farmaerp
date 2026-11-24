@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 import 'package:flutter/services.dart';
 
 import '../core/error_display.dart';
+import '../face/face_widgets.dart';
 import '../local/local_database.dart';
 import '../terminal/terminal_api.dart';
 import '../ui/caps.dart';
@@ -156,6 +157,14 @@ class _DiscountDialogState extends State<_DiscountDialog> {
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
               ),
+              FaceApproveButton(
+                controller: widget.controller,
+                onApproved: (code) {
+                  _code.text = code;
+                  _pin.clear();
+                  _apply();
+                },
+              ),
               TextField(key: const Key('release-reason'), controller: _reason, decoration: const InputDecoration(labelText: 'Motivo')),
             ],
             if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, key: const Key('discount-error'))),
@@ -261,6 +270,14 @@ class _ZeroStockPanelState extends State<ZeroStockPanel> {
                   ),
                 ),
               ],
+            ),
+            FaceApproveButton(
+              controller: widget.controller,
+              onApproved: (code) {
+                _code.text = code;
+                _pin.clear();
+                _approve();
+              },
             ),
             const SizedBox(height: 8),
             Row(

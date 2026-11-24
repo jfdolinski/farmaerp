@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 import 'package:flutter/services.dart';
 
+import '../face/face_widgets.dart';
 import '../ui/caps.dart';
 import 'controlled.dart';
 import 'focus_kit.dart';
@@ -389,6 +390,14 @@ class _ControlledDialogState extends State<_ControlledDialog> {
                       ),
                     ),
                   ]),
+                  FaceApproveButton(
+                    controller: widget.controller,
+                    onApproved: (code) {
+                      _code.text = code;
+                      _pin.clear();
+                      _release();
+                    },
+                  ),
                 ],
               ),
             ),
