@@ -130,7 +130,7 @@ Documento de estruturação da base do sistema. Stack: Flutter (PDV, multiplataf
 - Pagamento misto: dinheiro, PIX, cartão/TEF, crediário, cashback, convênio, vale-crédito.
 - Margem mínima (parâmetro futuro, desligado): custo médio vs preço vendido, calculada sobre a venda inteira e sem considerar desconto de PBM; abaixo do mínimo, trava, com liberação do gerente conforme parâmetro.
 - Finalização com escolha do modelo de nota: 65 imprime o cupom; 55 abre os campos obrigatórios (CPF/CNPJ, endereço, IE) puxando do cadastro, transmite à Sefaz e abre a DANFE A4. Comprovante por WhatsApp.
-- Pós-venda: troca e devolução só na loja da compra (por questão fiscal), vinculadas à venda original; o cliente escolhe vale-crédito (válido na rede) ou estorno no meio original.
+- Pós-venda: troca e devolução só na loja da compra (por questão fiscal), vinculadas à venda original; o cliente escolhe vale-crédito (válido só na loja da devolução), abatimento na fatura do convênio ou estorno no meio original.
 - Orçamento com plaquinhas ou cupom, sangria em três níveis, fechamento com conferência cega (já definidos).
 
 ## Etapa 5 – Autenticação
