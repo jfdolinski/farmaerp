@@ -50,7 +50,7 @@ void main() {
     test('guarda o cliente escolhido e acha sem internet por nome, código ou documento', () {
       database.saveCustomer(PullItem(type: 'customer', id: joaoId, data: joao()));
       database.saveCustomer(PullItem(type: 'customer', id: mariaId, data: maria()));
-      expect(database.schemaVersion, 6);
+      expect(database.schemaVersion, 7);
       expect(database.customerById(joaoId), containsPair('document', '11144477735'));
       expect(database.customerById(joaoId)?.containsKey('search_text'), isFalse);
 

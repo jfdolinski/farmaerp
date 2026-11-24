@@ -8,6 +8,8 @@ import {
   approveTerminal,
   changeTerminalStatus,
   setOfflineMinutes,
+  setSaleSettings,
+  setTerminalProfile,
   claimPairing,
   LookupState,
   lookupPairing,
@@ -263,6 +265,65 @@ export function OfflineMinutesForm({
             Usar o tempo da filial
           </button>
         )}
+        <ErrorNotice error={state.error} />
+        {state.done && <p role="status">Salvo. Chega ao PDV na próxima sincronização.</p>}
+      </form>
+    </details>
+  );
+}
+
+/** Troca o perfil do terminal aprovado: o PDV muda de modo na próxima sincronização. */
+export function ProfileForm({ id, current }: { id: string; current: string }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(setTerminalProfile, {});
+  return (
+    <details className={styles.reason}>
+      <summary>Mudar o perfil</summary>
+      <form action={action} className={styles.rowForm}>
+        <input type="hidden" name="id" value={id} />
+        <label>
+          Perfil
+          <select name="profile" defaultValue={current}>
+            <option value="cashier">Caixa</option>
+            <option value="quote">Orçamento</option>
+            <option value="self_service">Autoatendimento</option>
+          </select>
+        </label>
+        <button type="submit" disabled={pending}>
+          Salvar
+        </button>
+        <ErrorNotice error={state.error} />
+        {state.done && <p role="status">Salvo. O PDV muda de modo na próxima sincronização.</p>}
+      </form>
+    </details>
+  );
+}
+
+/** Validade do orçamento e PIN do vendedor, por filial. */
+export function SaleSettingsForm({ id, days, pin }: { id: string; days: number; pin: boolean }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(setSaleSettings, {});
+  return (
+    <details className={styles.reason}>
+      <summary>
+        {days === 0 ? "Orçamento vale até o fim do dia" : `Orçamento vale ${days} ${days === 1 ? "dia" : "dias"}`} ·{" "}
+        {pin ? "vendedor digita o PIN" : "vendedor só com o código"}
+      </summary>
+      <form action={action} className={styles.rowForm}>
+        <input type="hidden" name="id" value={id} />
+        <p className={styles.hint}>
+          A validade conta da data do orçamento e termina no fim do dia (0: só no dia). O vendedor se identifica com o
+          código a cada orçamento e a cada venda; com o PIN ligado, ninguém usa o código de outro.
+        </p>
+        <label>
+          Validade em dias (0 a 90)
+          <input name="days" type="number" min={0} max={90} defaultValue={days} required />
+        </label>
+        <label>
+          <input name="pin" type="checkbox" value="1" defaultChecked={pin} />
+          Exigir o PIN do vendedor
+        </label>
+        <button type="submit" disabled={pending}>
+          Salvar
+        </button>
         <ErrorNotice error={state.error} />
         {state.done && <p role="status">Salvo. Chega ao PDV na próxima sincronização.</p>}
       </form>

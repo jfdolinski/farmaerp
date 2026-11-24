@@ -129,6 +129,8 @@ void main() {
         await pos.login('3', '2468');
         expect(pos.notice, isNull);
         pos.openShift(10000);
+        // Cada venda pede o vendedor: o próprio Operador Centro atende.
+        expect(await pos.identifySeller('3'), isTrue, reason: pos.notice?.message);
         pos.scan('7890000000017');
         // Estoque nas filiais, com internet.
         final network = await pos.stockElsewhere(pos.cart.lines.single.product);
@@ -167,6 +169,7 @@ void main() {
 
         // Controlado do seed (Clonazepam, lista B1): receita, comprador e lote; o administrador
         // (código 1) tem a permissão de liberar. Na central, a lista mostra o documento mascarado.
+        expect(await pos.identifySeller('3'), isTrue);
         pos.scan('7890000000055');
         expect(pos.pendingControlled, isNotNull);
         final batches = pos.controlledBatches(pos.pendingControlled!.product);
@@ -225,6 +228,26 @@ void main() {
         expect(cashCount['method'], 'cash');
         expect(cashCount['counted'], 10);
         expect(cashCount['difference'], closeTo((cashCount['counted'] as num) - (cashCount['expected'] as num), 0.001));
+
+        // Orçamento: o terminal vira de orçamento pela retaguarda; o PDV muda de modo na descida,
+        // o vendedor monta, entrega a plaquinha e o orçamento chega à central.
+        await admin('/admin/terminals/$terminalId/profile', {'profile': 'quote'}, token: session);
+        await sync.pull(token.value);
+        expect(pos.quoteMode, isTrue);
+        expect(await pos.identifySeller('3'), isTrue);
+        pos.scan('7890000000017');
+        expect(await pos.finishQuote(cardNumber: 21), isTrue, reason: pos.notice?.message);
+        final quoteCode = pos.lastQuote!.code;
+        expect(printer.printed, contains(quoteCode));
+        await sync.push(token.value);
+        expect(database.debugSelect("SELECT result FROM outbox WHERE kind = 'quote'").single['result'], 'applied');
+        final quotes = await http.get(Uri.parse('$base/admin/quotes?status=open'), headers: {'Authorization': 'Bearer $session'});
+        final quote = (jsonDecode(quotes.body) as List).cast<Map<String, dynamic>>().singleWhere((row) => row['code'] == quoteCode);
+        expect(quote['card_number'], 21);
+        expect(quote['seller_name'], 'Operador Centro');
+        await admin('/admin/terminals/$terminalId/profile', {'profile': 'cashier'}, token: session);
+        await sync.pull(token.value);
+        expect(pos.quoteMode, isFalse);
       } finally {
         await admin('/admin/products/$_dipirona/prices', {'branchId': _branch, 'price': null}, token: session);
         await admin('/admin/terminals/$terminalId/revoke', {'reason': 'Fim do teste E2E'}, token: session);

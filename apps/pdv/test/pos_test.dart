@@ -70,6 +70,7 @@ LocalDatabase seeded() {
         'company': {'trade_name': 'Farmácia Demonstração', 'legal_name': 'Farmácia Demonstração Ltda'},
         'series': const [],
         'last_sale_number': 7,
+        'fixed_seller_id': operatorId,
       }),
       user(operatorId, 3, 'Operador Centro', pin: fastHash),
       user(managerId, 5, 'Gerente Centro', pin: fastHash, permissions: const ['sales.sell', 'sales.view']),

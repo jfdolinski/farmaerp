@@ -375,6 +375,26 @@ const _migrations = <String>[
   ALTER TABLE cash_session ADD COLUMN closed_by BLOB;
   ALTER TABLE cash_session ADD COLUMN counted TEXT;
   ''',
+  // Orçamento (terminal de orçamento) e o vendedor da venda.
+  '''
+  CREATE TABLE quote (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    number INTEGER NOT NULL UNIQUE CHECK (number > 0),
+    code TEXT NOT NULL,
+    seller_id BLOB NOT NULL,
+    customer_id BLOB,
+    card_number INTEGER,
+    quoted_at TEXT NOT NULL,
+    total_cents INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT,
+    version INTEGER NOT NULL DEFAULT 1,
+    updated_by BLOB,
+    trace_id BLOB
+  ) STRICT;
+  ALTER TABLE sale ADD COLUMN seller_id BLOB;
+  ''',
 ];
 
 /// Pessoa que pode entrar no PDV, com o que veio da central.
@@ -1237,6 +1257,47 @@ class LocalDatabase {
 
   /// Próximo número de venda do terminal: nunca repete, nem se o banco local se perder, porque a
   /// central informa o último que recebeu.
+  /// Perfil do terminal na central: `quote` (orçamento), `cashier` (caixa) ou `self_service`.
+  String get terminalProfile => fiscal?['terminal_profile'] as String? ?? 'cashier';
+
+  /// A filial pede o PIN do vendedor junto com o código?
+  bool get sellerPinRequired => fiscal?['seller_pin_required'] == true;
+
+  /// Dias de validade do orçamento (0: até o fim do dia).
+  int get quoteValidityDays => (fiscal?['quote_validity_days'] as num?)?.toInt() ?? 0;
+
+  /// Vendedor fixo do terminal (autoatendimento).
+  String? get fixedSellerId => fiscal?['fixed_seller_id'] as String?;
+
+  /// Próximo número de orçamento deste terminal (continua do que a central conhece).
+  int get nextQuoteNumber {
+    final local = _db.select('SELECT COALESCE(max(number), 0) AS n FROM quote').first['n'] as int;
+    final central = (fiscal?['last_quote_number'] as num?)?.toInt() ?? 0;
+    return (local > central ? local : central) + 1;
+  }
+
+  /// Grava o orçamento e põe na outbox, na mesma transação.
+  void saveQuote(Map<String, Object?> payload, {required String code, required DateTime now}) => _transaction(() {
+    final at = now.toUtc().toIso8601String();
+    _db.execute(
+      'INSERT INTO quote (id, number, code, seller_id, customer_id, card_number, quoted_at, total_cents, created_at, updated_at) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        uuidBytes(payload['id']! as String),
+        payload['number'],
+        code,
+        uuidBytes(payload['seller_id']! as String),
+        payload['customer_id'] == null ? null : uuidBytes(payload['customer_id']! as String),
+        payload['card_number'],
+        payload['quoted_at'],
+        toCents(payload['total'])!,
+        at,
+        at,
+      ],
+    );
+    enqueue('quote', payload, now: now);
+  });
+
   int get nextSaleNumber {
     final local = _db.select('SELECT COALESCE(max(number), 0) AS n FROM sale').first['n'] as int;
     final central = (fiscal?['last_sale_number'] as num?)?.toInt() ?? 0;
@@ -1250,7 +1311,7 @@ class LocalDatabase {
         int cents(Object? value) => toCents(value)!;
         _db.execute(
           'INSERT INTO sale (id, number, code, cash_session_id, operator_id, customer_id, sold_at, subtotal_cents, '
-          'discount_cents, total_cents, fiscal_model, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          'discount_cents, total_cents, fiscal_model, created_at, updated_at, seller_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
           [
             uuidBytes(payload['id']! as String),
             payload['number'],
@@ -1265,6 +1326,7 @@ class LocalDatabase {
             payload['fiscal_model'],
             at,
             at,
+            payload['seller_id'] == null ? null : uuidBytes(payload['seller_id']! as String),
           ],
         );
         for (final item in itemRows) {

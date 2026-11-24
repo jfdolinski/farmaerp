@@ -83,6 +83,24 @@ export async function setOfflineMinutes(
   return post(`/admin/${scope}/${text(form, "id")}/offline-minutes`, { minutes });
 }
 
+export async function setTerminalProfile(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  return post(`/admin/terminals/${text(form, "id")}/profile`, { profile: text(form, "profile") });
+}
+
+export async function setSaleSettings(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const raw = text(form, "days");
+  return post(`/admin/branches/${text(form, "id")}/sale-settings`, {
+    quoteValidityDays: raw === "" ? null : Number(raw),
+    sellerPinRequired: text(form, "pin") === "1",
+  });
+}
+
 export async function changeTerminalStatus(
   _previous: ActionState,
   form: FormData,

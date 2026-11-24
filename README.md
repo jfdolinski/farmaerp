@@ -359,6 +359,24 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - Os convênios dele descem com o cadastro.
   - O pagamento em convênio aparece só com cliente que tenha convênio, com a matrícula. O saldo do convênio chega com o financeiro do cliente (Etapa 7).
 
+**Vendedor e orçamento**
+
+- **Vendedor:** cada venda no caixa e cada orçamento novo pedem o código de quem atende (para a comissão, na Etapa 7).
+  - Com o parâmetro da filial ligado, o vendedor digita também o PIN.
+  - Precisa poder orçar (`sales.quote`) ou vender (`sales.sell`); sem isso, FA880 no PDV e alerta na venda.
+  - No autoatendimento, o vendedor é fixo no terminal (`fixed_seller_id`).
+- **Perfil do terminal** (caixa, orçamento ou autoatendimento): escolhido na aprovação e trocado em Terminais, "Mudar o perfil" (`terminals.approve`). Desce nos dados fiscais e o PDV muda de modo na próxima sincronização, mesmo sem internet depois.
+- **Terminal de orçamento:** sem entrada de operador nem turno.
+  - O vendedor monta como no caixa: busca, cliente, desconto com liberação e estoque nas filiais.
+  - Controlado e falta de estoque só avisam: a receita e a venda são do caixa.
+  - Ao concluir, plaquinha (cartão numerado da loja, de 1 a 9999) e/ou cupom com o código `O<terminal>-<número>` em código de barras (Code 128). Sem plaquinha, o cupom sai sempre.
+- **Na central:** o orçamento sobe pela outbox (`quote`); fora do formato, FA883.
+  - A plaquinha segura um orçamento aberto por loja. Usada de novo, o anterior fica substituído (ou vencido, se já tinha passado da validade). Um orçamento que chega atrasado já chega substituído.
+  - **Validade:** parâmetro da filial em dias, em Terminais, "Orçamento e vendedor" (0: até o fim do dia; até 90).
+- **Retaguarda:** `/orcamentos` lista por período, filial e situação (aberto, virou venda, substituído, vencido), com a conversão; o detalhe mostra os itens e as liberações. Exige `sales.view`.
+- **Perfis:** Operador de caixa, Gerente e Farmacêutico orçam; o perfil novo Balconista só orça.
+- **No caixa** (próximo PR): lista dos orçamentos pendentes, busca pela plaquinha ou pelo cupom e recálculo do preço a cada mudança.
+
 **Sangria, suprimento e fechamento**
 
 - **Sangria em três níveis**, pelo limite de sangria (`cash_withdrawal`) dos perfis, que desce com o usuário:

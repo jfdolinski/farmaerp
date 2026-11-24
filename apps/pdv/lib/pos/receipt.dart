@@ -10,13 +10,16 @@ import 'money.dart';
 /// Colunas da bobina de 80 mm em fonte normal.
 const receiptWidth = 48;
 
-/// Linha do comprovante, com destaque opcional.
+/// Linha do comprovante, com destaque opcional. [barcode] imprime o texto como código de barras
+/// (Code 128), centralizado e com o texto embaixo.
 class ReceiptLine {
-  const ReceiptLine(this.text, {this.bold = false, this.center = false});
+  const ReceiptLine(this.text, {this.bold = false, this.center = false}) : barcode = false;
+  const ReceiptLine.barcode(this.text) : bold = false, center = true, barcode = true;
 
   final String text;
   final bool bold;
   final bool center;
+  final bool barcode;
 }
 
 String _cnpj(String? value) => value == null || value.length != 14
@@ -75,6 +78,7 @@ List<ReceiptLine> buildReceipt({
     const ReceiptLine(''),
     ReceiptLine(_twoColumns('Venda $saleCode', when)),
     ReceiptLine('Caixa $terminalNumber · Operador: $operatorName'),
+    if (cart.seller != null && cart.seller!.name != operatorName) ReceiptLine('Vendedor: ${cart.seller!.name}'),
     if (customer != null)
       for (final text in _wrap('Cliente: ${customer.name}${customer.documentMasked == null ? '' : ' · ${customer.documentMasked}'}'))
         ReceiptLine(text),
@@ -111,6 +115,51 @@ List<ReceiptLine> buildReceipt({
     const ReceiptLine(''),
     const ReceiptLine('Nota fiscal pendente de emissão.', center: true),
     const ReceiptLine('Obrigado pela preferência!', center: true),
+  ];
+}
+
+/// Cupom do orçamento: o caixa lê o código de barras. Os códigos dos produtos ficam à vista para
+/// passar um a um se o caixa estiver sem internet.
+List<ReceiptLine> buildQuoteReceipt({
+  required Map<String, dynamic>? fiscal,
+  required String quoteCode,
+  required DateTime quotedAt,
+  required DateTime validUntil,
+  required Cart cart,
+  int? cardNumber,
+}) {
+  final branch = (fiscal?['branch'] as Map?) ?? const {};
+  final company = (fiscal?['company'] as Map?) ?? const {};
+  String two(int value) => value.toString().padLeft(2, '0');
+  String day(DateTime value) => '${two(value.day)}/${two(value.month)}/${value.year}';
+  final local = quotedAt.toLocal();
+  return [
+    ReceiptLine((company['trade_name'] ?? company['legal_name'] ?? '') as String, bold: true, center: true),
+    ReceiptLine('${branch['name'] ?? ''}', center: true),
+    const ReceiptLine(''),
+    const ReceiptLine('ORÇAMENTO', bold: true, center: true),
+    const ReceiptLine('NÃO É DOCUMENTO FISCAL', center: true),
+    const ReceiptLine(''),
+    ReceiptLine(_twoColumns('Orçamento $quoteCode', '${day(local)} ${two(local.hour)}:${two(local.minute)}')),
+    if (cardNumber != null) ReceiptLine('Plaquinha $cardNumber', bold: true),
+    if (cart.seller != null) ReceiptLine('Vendedor: ${cart.seller!.name}'),
+    if (cart.customer != null) for (final text in _wrap('Cliente: ${cart.customer!.name}')) ReceiptLine(text),
+    ReceiptLine('-' * receiptWidth),
+    for (var index = 0; index < cart.lines.length; index += 1) ...[
+      for (final text in _wrap('${index + 1} ${cart.lines[index].product.code} ${cart.lines[index].product.name}')) ReceiptLine(text),
+      ReceiptLine(_twoColumns(
+        '  ${formatMilli(cart.lines[index].quantityMilli)} x ${formatCents(cart.lines[index].unitPriceCents)}',
+        formatCents(cart.lines[index].totalCents),
+      )),
+      if (cart.lines[index].discountCents > 0)
+        ReceiptLine(_twoColumns('  desconto', '-${formatCents(cart.lines[index].discountCents)}')),
+    ],
+    ReceiptLine('-' * receiptWidth),
+    ReceiptLine(_twoColumns('TOTAL', formatCents(cart.totalCents)), bold: true),
+    const ReceiptLine(''),
+    ReceiptLine('Válido até ${day(validUntil)}', center: true),
+    const ReceiptLine('O preço é conferido no caixa na hora da compra.', center: true),
+    ReceiptLine.barcode(quoteCode),
   ];
 }
 
@@ -209,6 +258,16 @@ Uint8List encodeEscPos(List<ReceiptLine> lines) {
   bytes.add([0x1B, 0x40]); // ESC @: reinicia
   bytes.add([0x1B, 0x74, 0x03]); // ESC t 3: página 860
   for (final line in lines) {
+    if (line.barcode) {
+      final data = line.text.codeUnits.where((code) => code < 0x80).toList();
+      bytes.add([0x1B, 0x61, 1]); // centraliza
+      bytes.add([0x1D, 0x68, 80]); // GS h: altura
+      bytes.add([0x1D, 0x77, 2]); // GS w: largura do módulo
+      bytes.add([0x1D, 0x48, 2]); // GS H: texto embaixo
+      bytes.add([0x1D, 0x6B, 73, data.length + 2, 0x7B, 0x42, ...data]); // GS k Code 128, conjunto B
+      bytes.addByte(0x0A);
+      continue;
+    }
     bytes.add([0x1B, 0x61, line.center ? 1 : 0]); // ESC a: alinhamento
     bytes.add([0x1B, 0x45, line.bold ? 1 : 0]); // ESC E: negrito
     for (final char in line.text.split('')) {
@@ -241,11 +300,26 @@ class PdfReceiptPrinter implements ReceiptPrinter {
     final bold = pw.Font.courierBold();
     document.addPage(pw.Page(
       // Bobina de 80 mm, altura conforme o conteúdo.
-      pageFormat: PdfPageFormat(80 * PdfPageFormat.mm, (lines.length * 4.2 + 20) * PdfPageFormat.mm, marginAll: 4 * PdfPageFormat.mm),
+      pageFormat: PdfPageFormat(
+        80 * PdfPageFormat.mm,
+        (lines.length * 4.2 + lines.where((line) => line.barcode).length * 14 + 20) * PdfPageFormat.mm,
+        marginAll: 4 * PdfPageFormat.mm,
+      ),
       build: (context) => pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.stretch,
         children: [
           for (final line in lines)
+            if (line.barcode)
+              pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(vertical: 2 * PdfPageFormat.mm, horizontal: 8 * PdfPageFormat.mm),
+                child: pw.BarcodeWidget(
+                  barcode: pw.Barcode.code128(),
+                  data: line.text,
+                  height: 12 * PdfPageFormat.mm,
+                  textStyle: pw.TextStyle(font: font, fontSize: 7.2),
+                ),
+              )
+            else
             pw.Text(
               line.text,
               textAlign: line.center ? pw.TextAlign.center : pw.TextAlign.left,
