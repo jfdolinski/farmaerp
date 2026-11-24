@@ -247,7 +247,9 @@
       "quote_item_id_uuid_v7_check",
       "sale_return_id_uuid_v7_check",
       "sale_return_item_id_uuid_v7_check",
-      "pdv_auth_event_id_uuid_v7_check"
+      "pdv_auth_event_id_uuid_v7_check",
+      "biometric_consent_id_uuid_v7_check",
+      "face_template_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -1956,7 +1958,12 @@
       "pdv_auth_event_alert_check",
       "pdv_auth_event_release_check",
       "pdv_auth_event_release_success_check",
-      "pdv_auth_event_self_check"
+      "pdv_auth_event_self_check",
+      "biometric_consent_kind_check",
+      "biometric_consent_term_check",
+      "biometric_consent_revoked_check",
+      "face_template_model_check",
+      "face_template_template_check"
     ]
   },
   "FA963": {
@@ -2529,6 +2536,38 @@
   "FA821": {
     "message": "Quem libera a entrada precisa da permissão e ser outra pessoa.",
     "action": "Chame o gerente da loja para liberar com o código e o PIN dele.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA822": {
+    "message": "Quem cadastra o rosto precisa da permissão.",
+    "action": "Peça a quem tem \"Cadastrar o rosto no PDV\" (o gerente) para autorizar o cadastro.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA823": {
+    "message": "Esta pessoa não tem rosto cadastrado.",
+    "action": "Atualize a tela: o rosto pode já ter sido apagado.",
+    "httpStatus": 404,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA824": {
+    "message": "Este usuário não entra pela câmera.",
+    "action": "Use o PIN, ou peça ao gerente para mudar a forma de entrar em Usuários, na retaguarda.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA825": {
+    "message": "Rosto não reconhecido.",
+    "action": "Olhe de frente para a câmera e tente de novo, ou entre de outra forma.",
     "httpStatus": 422,
     "severity": "warning",
     "retryable": false,

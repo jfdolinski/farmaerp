@@ -5,9 +5,9 @@ import { asOwner, closePools, connectionConfig, ownerPool } from './helpers.mjs'
 afterAll(closePools);
 
 const EXPECTED_TABLES = [
-  'agreement', 'auth_event', 'branch', 'branch_certificate', 'branch_company_event', 'branch_csc', 'branch_dfe_sync', 'branch_group', 'cash_alert', 'cash_movement', 'cash_session',
+  'agreement', 'auth_event', 'biometric_consent', 'branch', 'branch_certificate', 'branch_company_event', 'branch_csc', 'branch_dfe_sync', 'branch_group', 'cash_alert', 'cash_movement', 'cash_session',
   'cash_session_count', 'catalog_manufacturer', 'catalog_product', 'catalog_product_barcode', 'catalog_product_image', 'catalog_product_pmc', 'catalog_product_tax', 'code_counter', 'company',
-  'controlled_dispensing', 'customer', 'customer_agreement', 'customer_consent_event', 'customer_dependent', 'dfe_document', 'economic_group', 'limit_type', 'pdv_auth_event', 'pdv_customer_cache', 'permission',
+  'controlled_dispensing', 'customer', 'customer_agreement', 'customer_consent_event', 'customer_dependent', 'dfe_document', 'economic_group', 'face_template', 'limit_type', 'pdv_auth_event', 'pdv_customer_cache', 'permission',
   'product', 'product_barcode', 'product_barcode_channel', 'product_batch', 'product_batch_event', 'product_branch_status', 'product_category', 'product_cost', 'product_group', 'product_pmc',
   'product_price', 'product_rule', 'product_status_event', 'product_supplier', 'purchase_invoice', 'purchase_invoice_document', 'purchase_invoice_event', 'purchase_invoice_item',
   'purchase_invoice_item_batch', 'purchase_invoice_item_cost_release', 'purchase_invoice_summary', 'quote', 'quote_item', 'region', 'role', 'role_limit', 'role_permission', 'rule_type', 'sale',
@@ -76,7 +76,7 @@ describe('migrations', () => {
       '0037_quotes',
       '0038_quote_checkout',
       '0039_sale_returns',
-      '0040_return_credit', '0041_pdv_auth',
+      '0040_return_credit', '0041_pdv_auth', '0042_face',
     ]);
   });
 });

@@ -34,7 +34,7 @@ LocalDatabase seeded() {
       user(operatorId, 3, 'Operador Centro', const ['sales.sell']),
       user(faceId, 4, 'Operadora Câmera', const ['sales.sell'], mode: 'face'),
       user(anyId, 5, 'Operador Qualquer', const ['sales.sell'], mode: 'any'),
-      user(managerId, 2, 'Gerente Centro', const ['sales.sell', 'users.release_login']),
+      user(managerId, 2, 'Gerente Centro', const ['sales.sell', 'users.release_login', 'users.biometrics']),
       user(supervisorId, 6, 'Supervisor Sem Liberação', const ['sales.sell']),
     ]),
     now: DateTime(2026, 11, 24, 10),
@@ -106,12 +106,12 @@ void main() {
     expect(recorded.every((e) => !e.containsKey('pin')), isTrue);
   });
 
-  test('sem câmera nem leitor, quem só entra por eles precisa da liberação; com o aparelho, não', () {
+  test('na entrada por código, quem não usa PIN precisa da liberação (com ou sem câmera)', () {
     expect(auth.needsRelease(database.userByCode(4)!), isTrue);
     expect(auth.needsRelease(database.userByCode(5)!), isFalse);
     expect(auth.needsRelease(database.userByCode(3)!), isFalse);
     final withCamera = PosAuth(database: database, available: const {AuthMethod.pin, AuthMethod.face});
-    expect(withCamera.needsRelease(database.userByCode(4)!), isFalse);
+    expect(withCamera.needsRelease(database.userByCode(4)!), isTrue);
     expect(withCamera.usableBy(database.userByCode(5)!), {AuthMethod.pin, AuthMethod.face});
   });
 

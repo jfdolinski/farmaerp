@@ -57,15 +57,16 @@ class PosAuth {
   final LocalLogger? logger;
   final DateTime Function() _clock;
 
-  /// Formas que este terminal tem como usar agora (câmera e leitor ligados e funcionando).
-  final Set<AuthMethod> available;
+  /// Formas que este terminal tem como usar agora (câmera e leitor ligados e funcionando). Muda
+  /// quando a câmera abre ou falha.
+  Set<AuthMethod> available;
 
   /// Formas que a pessoa pode usar neste terminal agora.
   Set<AuthMethod> usableBy(LocalUser user) => allowedMethods(user.authMode).intersection(available);
 
-  /// A pessoa não tem como entrar sozinha aqui (só câmera ou só digital, sem o aparelho): o
-  /// gerente libera.
-  bool needsRelease(LocalUser user) => usableBy(user).isEmpty;
+  /// Na entrada por código, a pessoa não pode usar o PIN (só câmera ou só digital): o gerente
+  /// libera. Vale também quando a câmera ou o leitor falham.
+  bool needsRelease(LocalUser user) => !allowedMethods(user.authMode).contains(AuthMethod.pin);
 
   /// Pessoa pelo código digitado (sem conferir nada ainda).
   LocalUser? userByCodeText(String codeText) {
@@ -127,6 +128,15 @@ class PosAuth {
     if (manager.id == user.id || !manager.can('users.release_login')) throw const PosException('FA821');
     _record(user, 'success', purpose, 'manager_release', authorizedBy: manager.id, now: _clock());
     logger?.info('Entrada liberada pelo gerente', fields: {'user_code': user.code, 'manager_code': manager.code});
+    return user;
+  }
+
+  /// Pessoa reconhecida pela câmera (com prova de vida). Quem não entra pela câmera recebe FA824.
+  LocalUser acceptFace(LocalUser user, {String? permission, AuthPurpose purpose = AuthPurpose.login}) {
+    if (!allowedMethods(user.authMode).contains(AuthMethod.face)) throw const PosException('FA824');
+    if (permission != null && !user.can(permission)) throw const PosException('FA969');
+    _record(user, 'success', purpose, AuthMethod.face.code, now: _clock());
+    logger?.info('Entrada pela câmera', fields: {'user_code': user.code});
     return user;
   }
 

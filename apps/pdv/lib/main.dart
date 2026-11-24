@@ -11,6 +11,9 @@ import 'core/local_logger.dart';
 import 'core/secret_store.dart';
 import 'core/trace_id.dart';
 import 'customers/customer_service.dart';
+import 'face/face_camera.dart';
+import 'face/face_engine.dart';
+import 'face/face_service.dart';
 import 'local/local_database.dart';
 import 'pos/display_settings.dart';
 import 'pos/pdv_home.dart';
@@ -127,12 +130,15 @@ Future<void> main() async {
     findQuote: (key) async => api.quote(accessToken: await controller.accessToken(), key: key),
     logger: logger,
   );
+  // Rosto: por enquanto só no Windows (no Linux, PIN e liberação do gerente).
+  final face = Platform.isWindows ? FaceService(camera: LiteFaceCamera.new, engine: OnnxFaceEngine.open) : null;
   runApp(FarmaErpPdvApp(
     controller: controller,
     pos: pos,
     database: database,
     display: DisplaySettings(database),
     appVersion: _appVersion,
+    face: face,
   ));
   unawaited(controller.start());
 }
@@ -145,7 +151,7 @@ LocalLogger _createLogger(Directory dataDirectory) => LocalLogger(
 );
 
 class FarmaErpPdvApp extends StatelessWidget {
-  const FarmaErpPdvApp({super.key, required this.controller, this.pos, this.database, this.display, this.appVersion});
+  const FarmaErpPdvApp({super.key, required this.controller, this.pos, this.database, this.display, this.appVersion, this.face});
 
   final TerminalController controller;
 
@@ -156,6 +162,9 @@ class FarmaErpPdvApp extends StatelessWidget {
   /// Sem o caixa (testes da tela do terminal), fica só a tela do terminal.
   final PosController? pos;
   final LocalDatabase? database;
+
+  /// Rosto no PDV (câmera e modelos), quando o sistema tem.
+  final FaceService? face;
 
   @override
   Widget build(BuildContext context) {
@@ -170,7 +179,7 @@ class FarmaErpPdvApp extends StatelessWidget {
       },
       home: pos == null || database == null
           ? TerminalScreen(controller: controller)
-          : PdvHome(terminal: controller, pos: pos!, database: database!, display: settings, appVersion: appVersion),
+          : PdvHome(terminal: controller, pos: pos!, database: database!, display: settings, appVersion: appVersion, face: face),
     );
     return settings == null ? app(context) : ListenableBuilder(listenable: settings, builder: (context, _) => app(context));
   }

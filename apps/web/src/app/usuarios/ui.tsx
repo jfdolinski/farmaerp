@@ -7,6 +7,7 @@ import {
   createUser,
   issueTemporaryPassword,
   removeRole,
+  revokeFace,
   setPdvAuthMode,
   setPdvPin,
   setUserBranches,
@@ -24,6 +25,8 @@ export interface UserRow {
   is_active: boolean;
   has_access: boolean;
   pdv_auth_mode: string;
+  face_enrolled_at: string | null;
+  face_enrolled_by_name: string | null;
   branch_ids: string[];
   roles: { id: string; role_id: string; name: string; branch_id: string | null }[];
 }
@@ -314,6 +317,28 @@ export function PdvAuthMode({ user }: { user: UserRow }) {
         </button>
         <ErrorNotice error={state.error} />
         {state.done && <p role="status">Salvo. Chega aos PDVs da filial na próxima sincronização.</p>}
+      </form>
+    </details>
+  );
+}
+
+/** Apaga o rosto e revoga o consentimento: a própria pessoa ou quem pode definir o PIN dela. */
+export function RevokeFace({ user }: { user: UserRow }) {
+  const [state, action, pending] = useActionState<UserFormState, FormData>(revokeFace, {});
+  return (
+    <details className={styles.reason}>
+      <summary>Apagar rosto</summary>
+      <form action={action} className={styles.rowForm}>
+        <input type="hidden" name="id" value={user.id} />
+        <p className={styles.warning}>
+          O rosto sai de todos os PDVs na próxima sincronização e o consentimento fica revogado. Para usar o rosto de
+          novo, é preciso cadastrar outra vez no PDV.
+        </p>
+        <button type="submit" disabled={pending}>
+          Apagar o rosto
+        </button>
+        <ErrorNotice error={state.error} />
+        {state.done && <p role="status">Rosto apagado.</p>}
       </form>
     </details>
   );

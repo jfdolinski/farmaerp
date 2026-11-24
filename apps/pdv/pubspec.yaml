@@ -11,6 +11,8 @@ dependencies:
   ffi: 2.2.0
   flutter:
     sdk: flutter
+  flutter_lite_camera: 0.2.4
+  flutter_onnxruntime: 1.9.1
   flutter_secure_storage: ^11.2.0
   http: ^1.6.0
   path_provider: ^2.1.6
@@ -23,9 +25,15 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  integration_test:
+    sdk: flutter
 
 flutter:
   uses-material-design: true
+  # Modelos do rosto (Etapa 5): detecção YuNet (MIT), reconhecimento SFace int8 (Apache 2.0) e prova de
+  # vida MiniFASNet int8 (Apache 2.0). Rodam no próprio PDV; a imagem nunca sai da memória.
+  assets:
+    - assets/face/
 
 hooks:
   user_defines:

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -7,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../core/error_display.dart';
 import '../core/local_logger.dart';
 import '../customers/customer_service.dart';
+import '../face/face_math.dart' show templateBytes;
 import '../local/local_database.dart';
 import '../terminal/terminal_api.dart';
 import 'cart.dart';
@@ -211,6 +213,68 @@ class PosController extends ChangeNotifier {
   bool loginNeedsRelease(String code) {
     final user = auth.userByCodeText(code);
     return user != null && auth.needsRelease(user);
+  }
+
+  /// Entrada pelo rosto: a câmera reconheceu a pessoa (com prova de vida e o desafio).
+  void loginWithFace(LocalUser user) {
+    if (busy) return;
+    notice = null;
+    info = null;
+    try {
+      operator = auth.acceptFace(user, permission: 'sales.sell');
+      session = database.openCashSession;
+    } on PosException catch (error) {
+      notice = ErrorDisplay.fromCode(error.code);
+    }
+    notifyListeners();
+  }
+
+  /// Rosto não reconhecido entre os cadastrados deste terminal.
+  void faceNotRecognized() {
+    notice = ErrorDisplay.fromCode('FA825');
+    notifyListeners();
+  }
+
+  /// Quem autoriza o cadastro do rosto: código e PIN de quem tem "Cadastrar o rosto no PDV".
+  Future<LocalUser?> faceEnroller(String code, String pin) async {
+    try {
+      final enroller = await auth.verify(code, pin);
+      if (!enroller.can('users.biometrics')) throw const PosException('FA822');
+      notice = null;
+      return enroller;
+    } on PosException catch (error) {
+      notice = ErrorDisplay.fromCode(error.code);
+      return null;
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  /// Cadastra o rosto lido: vale neste terminal na hora e sobe para a central com o consentimento.
+  void enrollFace({
+    required LocalUser person,
+    required LocalUser enroller,
+    required List<double> template,
+    required String model,
+    required String termVersion,
+    required DateTime consentedAt,
+  }) {
+    const uuid = Uuid();
+    final now = _clock();
+    final bytes = templateBytes(template);
+    database.saveFaceEnrollment({
+      'id': uuid.v7(),
+      'user_id': person.id,
+      'enrolled_by': enroller.id,
+      'enrolled_at': now.toUtc().toIso8601String(),
+      'model': model,
+      'template': base64.encode(bytes),
+      'consent': {'id': uuid.v7(), 'term_version': termVersion, 'consented_at': consentedAt.toUtc().toIso8601String()},
+    }, template: bytes, now: now);
+    logger?.info('Rosto cadastrado', fields: {'user_code': person.code, 'enroller_code': enroller.code});
+    info = 'Rosto de ${person.name} cadastrado.';
+    notifyListeners();
+    onSaleSaved?.call();
   }
 
   /// Entrada liberada pelo gerente (código e PIN dele), com registro dos dois.

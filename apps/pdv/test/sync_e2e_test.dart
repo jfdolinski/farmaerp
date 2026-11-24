@@ -346,6 +346,25 @@ void main() {
         final authListed = (jsonDecode(entries.body) as List).cast<Map<String, dynamic>>();
         expect(authListed.where((row) => row['purpose'] == 'login' && row['user_name'] == 'Operador Centro'), isNotEmpty);
         expect(authListed.where((row) => row['purpose'] == 'approval' && row['user_name'] == 'Gerente Centro'), isNotEmpty);
+
+        // Rosto: o Gerente Centro autoriza o cadastro do Operador Centro (código de teste, não é rosto
+        // de ninguém); sobe, aparece em Usuários, é apagado na retaguarda e sai do PDV na descida.
+        final enroller = (await pos.faceEnroller('2', '1357'))!;
+        final operatorUser = database.userByCode(3)!;
+        pos.enrollFace(
+          person: operatorUser, enroller: enroller, template: [for (var i = 0; i < 128; i += 1) i.isEven ? 0.088 : -0.088],
+          model: 'sface-2021dec-int8', termVersion: 'biometria-v1', consentedAt: DateTime.now(),
+        );
+        expect(database.userByCode(3)!.hasFace, isTrue);
+        await sync.push(token.value);
+        expect(database.debugSelect("SELECT result FROM outbox WHERE kind = 'face_enrollment'").single['result'], 'applied');
+        final users = (jsonDecode((await http.get(Uri.parse('$base/admin/users'), headers: {'Authorization': 'Bearer $session'})).body) as List)
+            .cast<Map<String, dynamic>>();
+        final operatorRow = users.singleWhere((row) => '${row['code']}' == '3');
+        expect(operatorRow['face_enrolled_by_name'], 'Gerente Centro');
+        await admin('/admin/users/${operatorRow['id']}/revoke-face', {}, token: session);
+        await sync.pull(token.value);
+        expect(database.userByCode(3)!.hasFace, isFalse);
       } finally {
         await admin('/admin/products/$_dipirona/prices', {'branchId': _branch, 'price': null}, token: session);
         await admin('/admin/terminals/$terminalId/revoke', {'reason': 'Fim do teste E2E'}, token: session);

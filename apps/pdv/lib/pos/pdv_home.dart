@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../face/face_service.dart';
 import '../local/local_database.dart';
 import '../terminal/terminal_controller.dart';
 import '../terminal/terminal_screen.dart';
@@ -32,6 +33,7 @@ class PdvHome extends StatelessWidget {
     this.listPrinters = windowsPrinters,
     this.display,
     this.appVersion,
+    this.face,
   });
 
   final TerminalController terminal;
@@ -40,6 +42,9 @@ class PdvHome extends StatelessWidget {
   final DisplaySettings? display;
   final String? appVersion;
   final List<String> Function() listPrinters;
+
+  /// Rosto (só no Windows por enquanto).
+  final FaceService? face;
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +58,7 @@ class PdvHome extends StatelessWidget {
           controller: pos,
           online: terminal.online,
           appVersion: appVersion,
+          face: face,
           onDisplaySettings: display == null ? null : () => showDisplaySettings(context, display!),
           onPrinterSettings: () async {
             final choice = await choosePrinter(context, printers: listPrinters(), current: database.setting(printerSetting));

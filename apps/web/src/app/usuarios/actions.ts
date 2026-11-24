@@ -132,6 +132,16 @@ export async function setPdvAuthMode(
   return { done: true };
 }
 
+export async function revokeFace(
+  _previous: UserFormState,
+  form: FormData,
+): Promise<UserFormState> {
+  const result = await apiFetch(`/admin/users/${text(form, "id")}/revoke-face`, { method: "POST", body: {} });
+  if (!result.ok) return handleFailure(result.error);
+  refresh();
+  return { done: true };
+}
+
 export async function issueTemporaryPassword(
   _previous: UserFormState,
   form: FormData,

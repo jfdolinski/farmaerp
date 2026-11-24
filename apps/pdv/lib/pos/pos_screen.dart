@@ -4,6 +4,8 @@ import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 import 'package:flutter/services.dart';
 
 import '../core/error_display.dart';
+import '../face/face_service.dart';
+import '../face/face_widgets.dart';
 import '../ui/caps.dart';
 import 'cart.dart';
 import 'cash_dialogs.dart';
@@ -27,6 +29,7 @@ class PosScreen extends StatelessWidget {
     this.onDisplaySettings,
     this.online = true,
     this.appVersion,
+    this.face,
   });
 
   final PosController controller;
@@ -34,6 +37,9 @@ class PosScreen extends StatelessWidget {
   final VoidCallback? onDisplaySettings;
   final bool online;
   final String? appVersion;
+
+  /// Rosto: câmera na entrada e cadastro do rosto. Sem ele (outro sistema ou sem modelos), só PIN.
+  final FaceService? face;
 
   @override
   Widget build(BuildContext context) {
@@ -82,6 +88,13 @@ class PosScreen extends StatelessWidget {
               ),
             ),
             actions: [
+              if (face != null)
+                IconButton(
+                  key: const Key('face-enroll-open'),
+                  tooltip: 'CADASTRAR ROSTO',
+                  icon: const Icon(Icons.face_retouching_natural),
+                  onPressed: () => showFaceEnrollment(context, controller, face!),
+                ),
               if (onDisplaySettings != null)
                 IconButton(
                   key: const Key('display-settings-open'),
@@ -129,7 +142,7 @@ class PosScreen extends StatelessWidget {
           body: controller.quoteMode
               ? _SaleView(controller: controller)
               : switch ((operator, controller.session)) {
-            (null, _) => _LoginView(controller: controller),
+            (null, _) => _LoginView(controller: controller, face: face),
             (_, null) => _OpenShiftView(controller: controller),
             _ => _SaleView(controller: controller),
           },
@@ -177,9 +190,10 @@ class _Notice extends StatelessWidget {
 }
 
 class _LoginView extends StatefulWidget {
-  const _LoginView({required this.controller});
+  const _LoginView({required this.controller, this.face});
 
   final PosController controller;
+  final FaceService? face;
 
   @override
   State<_LoginView> createState() => _LoginViewState();
@@ -195,9 +209,12 @@ class _LoginViewState extends State<_LoginView> {
   final _managerCodeFocus = FocusNode();
   final _managerPinFocus = FocusNode();
 
-  /// O código digitado é de quem só entra pela câmera ou pela digital, e este terminal não tem o
-  /// aparelho: em vez do PIN, o gerente libera.
+  /// O código digitado é de quem só entra pela câmera ou pela digital: em vez do PIN, o gerente
+  /// libera (câmera com falha, sem cadastro ou no terminal sem câmera).
   bool _release = false;
+
+  /// A pessoa escolheu "Entrar de outra forma" (ou a câmera não está disponível).
+  bool _otherWay = false;
 
   @override
   void initState() {
@@ -241,9 +258,11 @@ class _LoginViewState extends State<_LoginView> {
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
+    final face = widget.face;
+    final useCamera = face != null && !_otherWay;
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 380),
+        constraints: BoxConstraints(maxWidth: useCamera ? 520 : 380),
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -263,6 +282,13 @@ class _LoginViewState extends State<_LoginView> {
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Text(controller.info!, key: const Key('login-info'), textAlign: TextAlign.center),
                 ),
+              if (useCamera)
+                FaceLoginPanel(
+                  controller: controller,
+                  face: face,
+                  onOtherWay: () => setState(() => _otherWay = true),
+                )
+              else ...[
               TextField(
                 key: const Key('login-code'),
                 controller: _code,
@@ -276,8 +302,8 @@ class _LoginViewState extends State<_LoginView> {
               const SizedBox(height: 12),
               if (_release) ...[
                 const Text(
-                  'Este usuário entra pela câmera ou pela digital, que não estão disponíveis neste terminal. '
-                  'O gerente libera a entrada com o código e o PIN dele, e fica registrado.',
+                  'Este usuário entra pela câmera ou pela digital. Sem elas (com defeito ou sem cadastro), '
+                  'o gerente libera a entrada com o código e o PIN dele, e fica registrado.',
                   key: Key('login-release-hint'),
                   textAlign: TextAlign.center,
                 ),
@@ -336,6 +362,15 @@ class _LoginViewState extends State<_LoginView> {
                 'O PIN é definido pelo gerente na retaguarda, em Usuários.',
                 textAlign: TextAlign.center,
               ),
+              ],
+              if (face != null) ...[
+                const SizedBox(height: 12),
+                TextButton(
+                  key: const Key('face-back'),
+                  onPressed: () => setState(() => _otherWay = false),
+                  child: const Text('Entrar pela câmera'),
+                ),
+              ],
               ],
             ],
           ),

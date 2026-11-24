@@ -9,6 +9,7 @@ import {
   EditUser,
   RoleOption,
   PdvAuthMode,
+  RevokeFace,
   PdvPin,
   TemporaryPassword,
   UserBranches,
@@ -16,6 +17,7 @@ import {
   UserRow,
 } from "./ui";
 import { AUTH_MODE_LABELS } from "../entradas-pdv/labels";
+import { dateTimeText } from "../vendas/labels";
 import styles from "../terminais/page.module.css";
 
 export const metadata: Metadata = { title: "Usuários · FarmaERP" };
@@ -88,6 +90,11 @@ async function UsersContent() {
                       <strong>{row.name}</strong>
                       <small>{row.email ?? "Sem e-mail"}</small>
                       <small>PDV: {AUTH_MODE_LABELS[row.pdv_auth_mode] ?? row.pdv_auth_mode}</small>
+                      <small>
+                        {row.face_enrolled_at
+                          ? `Rosto cadastrado em ${dateTimeText(row.face_enrolled_at)}${row.face_enrolled_by_name ? ` por ${row.face_enrolled_by_name}` : ""}`
+                          : "Sem rosto cadastrado"}
+                      </small>
                     </td>
                     <td>
                       {row.roles.length === 0 && "Nenhum"}
@@ -128,6 +135,7 @@ async function UsersContent() {
                       {canReset && row.is_active && <TemporaryPassword user={row} />}
                       {canReset && row.is_active && <PdvPin user={row} />}
                       {canReset && row.is_active && <PdvAuthMode user={row} />}
+                      {row.face_enrolled_at && (canReset || row.id === user.userId) && <RevokeFace user={row} />}
                     </td>
                   </tr>
                 ))}

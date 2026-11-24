@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../core/local_logger.dart';
 import '../core/secret_store.dart';
 import '../core/text_fold.dart';
+import '../face/face_math.dart' show templateFromBytes;
 
 const _keyName = 'local_database_key';
 
@@ -440,6 +441,11 @@ const _migrations = <String>[
   '''
   ALTER TABLE app_user ADD COLUMN auth_mode TEXT NOT NULL DEFAULT 'pin';
   ''',
+  // Código do rosto (128 números; nunca a imagem), para a comparação sem internet.
+  '''
+  ALTER TABLE app_user ADD COLUMN face_model TEXT;
+  ALTER TABLE app_user ADD COLUMN face_template BLOB;
+  ''',
 ];
 
 /// Pessoa que pode entrar no PDV, com o que veio da central.
@@ -453,6 +459,7 @@ class LocalUser {
     required this.limits,
     this.pinHash,
     this.authMode = 'pin',
+    this.hasFace = false,
   });
 
   final String id;
@@ -467,6 +474,9 @@ class LocalUser {
 
   /// Forma de entrar no PDV: any, pin, face ou fingerprint.
   final String authMode;
+
+  /// Tem rosto cadastrado neste terminal.
+  final bool hasFace;
 
   bool can(String permission) => isAdmin || permissions.contains(permission);
 }
@@ -832,10 +842,11 @@ class LocalDatabase {
           _db.execute('DELETE FROM app_user WHERE id = ?', [id]);
         } else {
           _db.execute(
-            'INSERT INTO app_user (id, code, name, is_admin, roles, permissions, limits, pin_hash, auth_mode, seen_generation) '
-            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET code = excluded.code, '
+            'INSERT INTO app_user (id, code, name, is_admin, roles, permissions, limits, pin_hash, auth_mode, face_model, face_template, seen_generation) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET code = excluded.code, '
             'name = excluded.name, is_admin = excluded.is_admin, roles = excluded.roles, '
             'permissions = excluded.permissions, limits = excluded.limits, pin_hash = excluded.pin_hash, auth_mode = excluded.auth_mode, '
+            'face_model = excluded.face_model, face_template = excluded.face_template, '
             'seen_generation = excluded.seen_generation',
             [
               id,
@@ -847,6 +858,7 @@ class LocalDatabase {
               jsonEncode(data['limits'] ?? const {}),
               data['pin_hash'],
               const {'any', 'pin', 'face', 'fingerprint'}.contains(data['auth_mode']) ? data['auth_mode'] : 'pin',
+              ..._faceColumns(data['face']),
               generation,
             ],
           );
@@ -1162,6 +1174,36 @@ class LocalDatabase {
     return _user(rows.first);
   }
 
+  /// Modelo e código do rosto que vieram da central; fora do formato, sem rosto.
+  static List<Object?> _faceColumns(Object? face) {
+    if (face is! Map) return const [null, null];
+    final model = face['model'];
+    final template = face['template'];
+    if (model is! String || template is! String) return const [null, null];
+    try {
+      final bytes = base64.decode(template);
+      return bytes.length == 512 ? [model, bytes] : const [null, null];
+    } on FormatException {
+      return const [null, null];
+    }
+  }
+
+  /// Pessoas com rosto cadastrado neste modelo, com o código, para comparar sem internet.
+  List<({LocalUser candidate, List<double> template})> faceCandidates(String model) => [
+    for (final row in _db.select('SELECT * FROM app_user WHERE face_model = ? AND face_template IS NOT NULL', [model]))
+      (candidate: _user(row), template: templateFromBytes(Uint8List.fromList(row['face_template'] as List<int>))),
+  ];
+
+  /// Rosto cadastrado neste terminal: vale aqui na hora e sobe para a central (outbox), na mesma
+  /// transação.
+  void saveFaceEnrollment(Map<String, Object?> payload, {required Uint8List template, required DateTime now}) => _transaction(() {
+    _db.execute(
+      'UPDATE app_user SET face_model = ?, face_template = ? WHERE id = ?',
+      [payload['model'], template, uuidBytes(payload['user_id']! as String)],
+    );
+    enqueue('face_enrollment', payload, now: now);
+  });
+
   LocalUser? userById(String id) {
     final rows = _db.select('SELECT * FROM app_user WHERE id = ?', [uuidBytes(id)]);
     return rows.isEmpty ? null : _user(rows.first);
@@ -1176,6 +1218,7 @@ class LocalDatabase {
     limits: (jsonDecode(row['limits'] as String) as Map).map((key, value) => MapEntry(key as String, value as num?)),
     pinHash: row['pin_hash'] as String?,
     authMode: row['auth_mode'] as String? ?? 'pin',
+    hasFace: row['face_template'] != null,
   );
 
   /// Tentativas erradas e bloqueio do PIN desta pessoa neste terminal.
