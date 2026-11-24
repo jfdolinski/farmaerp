@@ -48,6 +48,15 @@ function alertText(alert: SessionDetail["alerts"][number]): string {
     });
     return `Diferença no fechamento (${parts.join("; ")})`;
   }
+  if (alert.kind === "return_payout") {
+    const problems: Record<string, string> = {
+      already_paid: "o documento já tinha sido pago",
+      not_cash: "o documento não é de devolução em dinheiro",
+      amount: "o valor é diferente do documento",
+      other_branch: "o documento é de outra loja",
+    };
+    return `Sangria de devolução ${alert.detail.return_code}: ${problems[alert.detail.problem as string] ?? alert.detail.problem}`;
+  }
   if (alert.kind === "withdrawal_above_limit") {
     const limit = alert.detail.operator_limit as number;
     return alert.detail.released_by

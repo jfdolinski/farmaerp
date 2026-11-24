@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 
 import '../core/error_display.dart';
 import '../core/local_logger.dart';
@@ -57,6 +58,8 @@ class PosController extends ChangeNotifier {
     this.networkStock,
     this.openQuotes,
     this.findQuote,
+    this.saleForReturn,
+    this.returnDocument,
     this.logger,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now;
@@ -73,6 +76,10 @@ class PosController extends ChangeNotifier {
   /// Orçamentos da loja (com internet): a lista dos pendentes e a busca pela plaquinha ou pelo cupom.
   final Future<List<Map<String, dynamic>>> Function()? openQuotes;
   final Future<Map<String, dynamic>> Function(String key)? findQuote;
+
+  /// Devolução (com internet): a venda pelo código do comprovante e o documento para a sangria.
+  final Future<Map<String, dynamic>> Function(String code)? saleForReturn;
+  final Future<Map<String, dynamic>> Function(String code)? returnDocument;
 
   /// Controlados do orçamento esperando a receita, um por vez.
   final controlledQueue = <PendingControlled>[];
@@ -609,7 +616,7 @@ class PosController extends ChangeNotifier {
 
   /// Sangria: até o limite do operador, vale na hora (devolve true); acima, devolve false e a tela
   /// pede quem libere. Nunca retira mais do que o dinheiro que deve estar na gaveta (FA993).
-  Future<bool?> withdraw(int amountCents, String reason) async {
+  Future<bool?> withdraw(int amountCents, String reason, {String? returnId}) async {
     final current = operator;
     final open = session;
     if (current == null || open == null || busy) return null;
@@ -621,7 +628,7 @@ class PosController extends ChangeNotifier {
         notifyListeners();
         return false;
       }
-      await _recordMovement('withdrawal', amountCents, reason, current, null);
+      await _recordMovement('withdrawal', amountCents, reason, current, null, returnId: returnId);
       return true;
     } on PosException catch (error) {
       _fail(error.code);
@@ -630,7 +637,7 @@ class PosController extends ChangeNotifier {
   }
 
   /// Quem libera a sangria acima do limite: outra pessoa, com limite que cubra o valor.
-  Future<bool> releaseWithdrawal(int amountCents, String reason, String code, String pin) async {
+  Future<bool> releaseWithdrawal(int amountCents, String reason, String code, String pin, {String? returnId}) async {
     final current = operator;
     final open = session;
     if (current == null || open == null || busy) return false;
@@ -642,11 +649,152 @@ class PosController extends ChangeNotifier {
       if (amountCents > database.cashInDrawerCents(open.id)) throw const PosException('FA993');
       final releaser = await auth.verify(code, pin);
       checkWithdrawalReleaser(operator: current, releaser: releaser, amountCents: amountCents);
-      await _recordMovement('withdrawal', amountCents, reason, current, releaser);
+      await _recordMovement('withdrawal', amountCents, reason, current, releaser, returnId: returnId);
       return true;
     } on PosException catch (error) {
       notice = ErrorDisplay.fromCode(error.code);
       return false;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  /// Documento de devolução em dinheiro ainda não pago: deste terminal (sem internet) ou da loja.
+  Future<Map<String, dynamic>?> findReturnDocument(String code) async {
+    final value = code.trim().toUpperCase();
+    final local = database.localCashReturn(value);
+    if (local != null) return local;
+    final lookup = returnDocument;
+    if (lookup == null) {
+      _fail('FA896');
+      return null;
+    }
+    try {
+      return await lookup(value);
+    } on ApiException catch (error) {
+      notice = ErrorDisplay.fromCode(error.code, traceId: error.traceId);
+      notifyListeners();
+      return null;
+    }
+  }
+
+  /// Venda para devolver: da central (com internet; qualquer caixa da loja) ou, sem internet, deste terminal.
+  Future<Map<String, dynamic>?> findSaleForReturn(String code) async {
+    final value = code.trim();
+    if (value.isEmpty) return null;
+    final lookup = saleForReturn;
+    if (lookup != null) {
+      try {
+        return await lookup(value);
+      } on ApiException catch (error) {
+        if (!const {'FA001', 'FA008', 'FA009'}.contains(error.code)) {
+          notice = ErrorDisplay.fromCode(error.code, traceId: error.traceId);
+          notifyListeners();
+          return null;
+        }
+      }
+    }
+    final local = database.localSaleForReturn(value, now: _clock());
+    if (local == null) _fail('FA891');
+    return local;
+  }
+
+  /// A devolução desta venda precisa da liberação de outra pessoa? Fora do prazo, sempre; no
+  /// prazo, quando o operador não tem a permissão "Fazer devolução".
+  bool returnNeedsAuthorization(Map<String, dynamic> sale) =>
+      sale['late'] == true || !(operator?.can('sales.return') ?? false);
+
+  /// Grava a devolução (documento, itens e destino), põe na outbox e imprime o comprovante.
+  /// [quantities] em milésimos por item da venda. Devolve o documento, ou null com o aviso na tela.
+  Future<({String id, String code, int totalCents, String destination})?> makeReturn({
+    required Map<String, dynamic> sale,
+    required Map<String, int> quantities,
+    required String reason,
+    required String destination,
+    String code = '',
+    String pin = '',
+  }) async {
+    final current = operator;
+    final open = session;
+    if (current == null || open == null || busy || quoteMode) return null;
+    busy = true;
+    notice = null;
+    notifyListeners();
+    try {
+      if (!cart.isEmpty || paying) throw const PosException('FA998');
+      if (reason.trim().isEmpty || reason.trim().length > 500) throw const PosException('FA870');
+      if (destination == 'agreement' && sale['has_agreement'] != true) throw const PosException('FA897');
+      if (!returnDestinationLabels.containsKey(destination)) throw const PosException('FA894');
+      const uuid = Uuid();
+      final items = <Map<String, Object?>>[];
+      final printed = <({String name, int quantityMilli, int amountCents})>[];
+      var totalCents = 0;
+      for (final item in ((sale['items'] as List?) ?? const []).cast<Map<String, dynamic>>()) {
+        final quantity = quantities[item['id']] ?? 0;
+        if (quantity <= 0) continue;
+        if (item['controlled'] == true) throw const PosException('FA893');
+        final sold = ((item['quantity'] as num) * 1000).round();
+        final returned = ((item['returned_quantity'] as num) * 1000).round();
+        final lineTotal = ((item['total'] as num) * 100).round();
+        final returnedCents = ((item['returned_amount'] as num) * 100).round();
+        if (quantity > sold - returned) throw const PosException('FA892');
+        final amount = quantity == sold - returned ? lineTotal - returnedCents : (lineTotal * quantity / sold).round();
+        totalCents += amount;
+        items.add({'id': uuid.v7(), 'sale_item_id': item['id'], 'quantity': quantity / 1000, 'amount': amount / 100});
+        printed.add((name: '${item['product_code']} ${item['product_name']}', quantityMilli: quantity, amountCents: amount));
+      }
+      if (items.isEmpty || totalCents <= 0) throw const PosException('FA871');
+      LocalUser? authorizer;
+      if (returnNeedsAuthorization(sale)) {
+        if (sale['late'] == true && code.trim().isEmpty) throw const PosException('FA898');
+        authorizer = await auth.verify(code, pin);
+        if (authorizer.id == current.id || !authorizer.can('sales.return')) throw const PosException('FA895');
+      }
+      final now = _clock();
+      final number = database.nextReturnNumber;
+      final documentCode = 'D${terminalNumber() ?? 0}-${number.toString().padLeft(6, '0')}';
+      final id = uuid.v7();
+      database.saveReturn({
+        'id': id,
+        'number': number,
+        'cash_session_id': open.id,
+        'sale_id': sale['id'],
+        'operator_id': current.id,
+        'authorized_by': authorizer?.id,
+        'reason': reason.trim(),
+        'destination': destination,
+        'returned_at': now.toUtc().toIso8601String(),
+        'items': items,
+        'total': totalCents / 100,
+      }, code: documentCode, saleCode: sale['code'] as String, now: now);
+      logger?.info('Devolução registrada', fields: {
+        'return_code': documentCode,
+        'destination': destination,
+        'items': items.length,
+        if (authorizer != null) 'authorizer_code': authorizer.code,
+      });
+      info = 'Devolução $documentCode registrada: ${formatCents(totalCents)}, ${returnDestinationLabels[destination]!.toLowerCase()}.';
+      onSaleSaved?.call();
+      final lines = buildReturnReceipt(
+        fiscal: database.fiscal,
+        code: documentCode,
+        saleCode: sale['code'] as String,
+        items: printed,
+        totalCents: totalCents,
+        destination: destination,
+        reason: reason.trim(),
+        operatorName: current.name,
+        authorizerName: authorizer?.name,
+        at: now,
+        terminalNumber: terminalNumber() ?? 0,
+      );
+      busy = false;
+      await _printLines(documentCode, lines);
+      return (id: id, code: documentCode, totalCents: totalCents, destination: destination);
+    } on PosException catch (error) {
+      notice = ErrorDisplay.fromCode(error.code);
+      return null;
     } finally {
       busy = false;
       notifyListeners();
@@ -672,7 +820,7 @@ class PosController extends ChangeNotifier {
     if (amountCents <= 0 || reason.trim().isEmpty || reason.trim().length > 500) throw const PosException('FA994');
   }
 
-  Future<void> _recordMovement(String kind, int amountCents, String reason, LocalUser current, LocalUser? releaser) async {
+  Future<void> _recordMovement(String kind, int amountCents, String reason, LocalUser current, LocalUser? releaser, {String? returnId}) async {
     final now = _clock();
     database.recordCashMovement(
       sessionId: session!.id,
@@ -681,6 +829,7 @@ class PosController extends ChangeNotifier {
       reason: reason.trim(),
       operatorId: current.id,
       releasedBy: releaser?.id,
+      returnId: returnId,
       now: now,
     );
     final withdrawal = kind == 'withdrawal';

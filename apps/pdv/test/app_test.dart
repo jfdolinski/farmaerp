@@ -155,6 +155,26 @@ class FakeApi implements TerminalApi {
     throw response;
   }
 
+  /// Devolução: venda por código e documento para a sangria; resposta por código, ou exceção.
+  final saleForReturnResponse = <String, Object>{};
+  final returnDocumentResponse = <String, Object>{};
+
+  @override
+  Future<Map<String, dynamic>> saleForReturn({required String accessToken, required String code}) async {
+    _maybeFail();
+    final response = saleForReturnResponse[code] ?? const ApiException('FA891');
+    if (response is Map<String, dynamic>) return response;
+    throw response;
+  }
+
+  @override
+  Future<Map<String, dynamic>> returnDocument({required String accessToken, required String code}) async {
+    _maybeFail();
+    final response = returnDocumentResponse[code] ?? const ApiException('FA896');
+    if (response is Map<String, dynamic>) return response;
+    throw response;
+  }
+
   /// Orçamentos da loja: lista e busca; [quoteResponse] por chave, ou exceção.
   List<Map<String, dynamic>> openQuoteList = const [];
   final quoteResponse = <String, Object>{};

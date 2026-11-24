@@ -244,7 +244,9 @@
       "cash_session_count_id_uuid_v7_check",
       "cash_alert_id_uuid_v7_check",
       "quote_id_uuid_v7_check",
-      "quote_item_id_uuid_v7_check"
+      "quote_item_id_uuid_v7_check",
+      "sale_return_id_uuid_v7_check",
+      "sale_return_item_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -2372,6 +2374,110 @@
   "FA890": {
     "message": "Sem internet, o orçamento não pode ser buscado.",
     "action": "Passe os produtos do cupom um a um. A plaquinha depende da internet.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA891": {
+    "message": "Venda não encontrada nesta loja.",
+    "action": "Confira o código do comprovante. A devolução é feita só na loja da compra.",
+    "httpStatus": 404,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA892": {
+    "message": "A quantidade passa do que ainda pode ser devolvido.",
+    "action": "Confira o que já foi devolvido desta venda.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA893": {
+    "message": "Controlado não é devolvido no caixa.",
+    "action": "A devolução de controlado é feita pelo farmacêutico, na manutenção do SNGPC.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA894": {
+    "message": "A devolução enviada pelo terminal está inconsistente.",
+    "action": "Fica nos conflitos de sincronização, na retaguarda. Atualize o PDV e confira com o operador.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": [
+      "sale_return_number_check",
+      "sale_return_code_check",
+      "sale_return_reason_check",
+      "sale_return_destination_check",
+      "sale_return_total_check",
+      "sale_return_paid_check",
+      "sale_return_authorized_check",
+      "sale_return_terminal_number_key",
+      "sale_return_paid_movement_key",
+      "sale_return_item_quantity_check",
+      "sale_return_item_amount_check",
+      "sale_return_item_key",
+      "stock_movement_sale_return_item_check"
+    ]
+  },
+  "FA895": {
+    "message": "Esta pessoa não pode fazer ou liberar devolução.",
+    "action": "Chame quem tem a permissão \"Fazer devolução\" para liberar com o código e o PIN.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA896": {
+    "message": "O documento de devolução não está disponível para pagar em dinheiro.",
+    "action": "Confira o código: ele precisa ser de devolução em dinheiro desta loja e ainda não pago.",
+    "httpStatus": 404,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA897": {
+    "message": "Só a venda feita no convênio pode ter o valor abatido na fatura.",
+    "action": "Escolha crédito para nova compra ou dinheiro.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA898": {
+    "message": "A venda passou do prazo de devolução da loja.",
+    "action": "Fora do prazo, a devolução precisa da liberação de outra pessoa com a permissão \"Fazer devolução\".",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA899": {
+    "message": "O prazo de devolução precisa ficar entre 0 e 365 dias.",
+    "action": "Use 0 para aceitar devolução só no dia da venda.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "branch_return_days_check"
+    ]
+  },
+  "FA870": {
+    "message": "Informe o motivo da devolução.",
+    "action": "O motivo fica no documento e ajuda a conferência.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA871": {
+    "message": "Escolha a quantidade de pelo menos um item.",
+    "action": "Digite quanto volta de cada item; o que não volta fica com 0.",
     "httpStatus": 422,
     "severity": "warning",
     "retryable": false,

@@ -396,6 +396,41 @@ const _migrations = <String>[
   ) STRICT;
   ALTER TABLE sale ADD COLUMN seller_id BLOB;
   ''',
+  // Devolução: documento, itens e a sangria que paga a devolução em dinheiro.
+  '''
+  CREATE TABLE sale_return (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    number INTEGER NOT NULL UNIQUE CHECK (number > 0),
+    code TEXT NOT NULL,
+    sale_id BLOB NOT NULL,
+    sale_code TEXT NOT NULL,
+    destination TEXT NOT NULL CHECK (destination IN ('credit', 'agreement', 'cash')),
+    total_cents INTEGER NOT NULL CHECK (total_cents > 0),
+    paid INTEGER NOT NULL DEFAULT 0,
+    returned_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT,
+    version INTEGER NOT NULL DEFAULT 1,
+    updated_by BLOB,
+    trace_id BLOB
+  ) STRICT;
+  CREATE TABLE sale_return_item (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    sale_return_id BLOB NOT NULL REFERENCES sale_return (id),
+    sale_item_id BLOB NOT NULL,
+    quantity_milli INTEGER NOT NULL,
+    amount_cents INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT,
+    version INTEGER NOT NULL DEFAULT 1,
+    updated_by BLOB,
+    trace_id BLOB
+  ) STRICT;
+  CREATE INDEX sale_return_item_sale_item_idx ON sale_return_item (sale_item_id);
+  ALTER TABLE cash_movement ADD COLUMN return_id BLOB;
+  ''',
 ];
 
 /// Pessoa que pode entrar no PDV, com o que veio da central.
@@ -1336,6 +1371,105 @@ class LocalDatabase {
   /// Vendedor fixo do terminal (autoatendimento).
   String? get fixedSellerId => fiscal?['fixed_seller_id'] as String?;
 
+  /// Prazo de devolução da filial, em dias.
+  int get returnDays => (fiscal?['return_days'] as num?)?.toInt() ?? 7;
+
+  /// Próximo número de devolução deste terminal (continua do que a central conhece).
+  int get nextReturnNumber {
+    final local = _db.select('SELECT COALESCE(max(number), 0) AS n FROM sale_return').first['n'] as int;
+    final central = (fiscal?['last_return_number'] as num?)?.toInt() ?? 0;
+    return (local > central ? local : central) + 1;
+  }
+
+  /// Venda deste terminal para devolver (sem internet), no mesmo formato que a central manda.
+  Map<String, dynamic>? localSaleForReturn(String code, {required DateTime now}) {
+    final sales = _db.select('SELECT * FROM sale WHERE code = ? LIMIT 1', [code.trim()]);
+    if (sales.isEmpty) return null;
+    final sale = sales.first;
+    final saleId = sale['id'] as List<int>;
+    final soldAt = DateTime.parse(sale['sold_at'] as String).toLocal();
+    final today = DateTime(now.year, now.month, now.day);
+    final saleDay = DateTime(soldAt.year, soldAt.month, soldAt.day);
+    final items = _db.select(
+      'SELECT i.*, p.controlled_class, '
+      'COALESCE((SELECT SUM(r.quantity_milli) FROM sale_return_item r WHERE r.sale_item_id = i.id), 0) AS returned_milli, '
+      'COALESCE((SELECT SUM(r.amount_cents) FROM sale_return_item r WHERE r.sale_item_id = i.id), 0) AS returned_cents '
+      'FROM sale_item i LEFT JOIN product p ON p.id = i.product_id WHERE i.sale_id = ? ORDER BY i.line',
+      [saleId],
+    );
+    return {
+      'id': uuidText(saleId),
+      'code': sale['code'],
+      'sold_at': sale['sold_at'],
+      'total': (sale['total_cents'] as int) / 100,
+      'customer_id': sale['customer_id'] == null ? null : uuidText(sale['customer_id'] as List<int>),
+      'customer_name': null,
+      'late': today.difference(saleDay).inDays > returnDays,
+      'return_days': returnDays,
+      'has_agreement': _db.select("SELECT 1 FROM sale_payment WHERE sale_id = ? AND method = 'agreement' LIMIT 1", [saleId]).isNotEmpty,
+      'items': [
+        for (final item in items)
+          {
+            'id': uuidText(item['id'] as List<int>),
+            'line': item['line'],
+            'product_id': uuidText(item['product_id'] as List<int>),
+            'product_code': item['product_code'],
+            'product_name': item['product_name'],
+            'quantity': (item['quantity_milli'] as int) / 1000,
+            'total': (item['total_cents'] as int) / 100,
+            'returned_quantity': (item['returned_milli'] as int) / 1000,
+            'returned_amount': (item['returned_cents'] as int) / 100,
+            'controlled': item['controlled_class'] != null,
+          },
+      ],
+    };
+  }
+
+  /// Grava a devolução e põe na outbox, na mesma transação.
+  void saveReturn(
+    Map<String, Object?> payload, {
+    required String code,
+    required String saleCode,
+    required DateTime now,
+  }) => _transaction(() {
+    final at = now.toUtc().toIso8601String();
+    _db.execute(
+      'INSERT INTO sale_return (id, number, code, sale_id, sale_code, destination, total_cents, returned_at, created_at, updated_at) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        uuidBytes(payload['id']! as String), payload['number'], code, uuidBytes(payload['sale_id']! as String), saleCode,
+        payload['destination'], toCents(payload['total'])!, payload['returned_at'], at, at,
+      ],
+    );
+    for (final item in (payload['items']! as List).cast<Map<String, Object?>>()) {
+      _db.execute(
+        'INSERT INTO sale_return_item (id, sale_return_id, sale_item_id, quantity_milli, amount_cents, created_at, updated_at) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [
+          uuidBytes(item['id']! as String), uuidBytes(payload['id']! as String), uuidBytes(item['sale_item_id']! as String),
+          ((item['quantity']! as num) * 1000).round(), toCents(item['amount'])!, at, at,
+        ],
+      );
+    }
+    enqueue('sale_return', payload, now: now);
+  });
+
+  /// Devolução deste terminal em dinheiro ainda não paga (para a sangria, sem internet).
+  Map<String, dynamic>? localCashReturn(String code) {
+    final rows = _db.select(
+      "SELECT * FROM sale_return WHERE code = ? AND destination = 'cash' AND paid = 0 LIMIT 1",
+      [code.trim().toUpperCase()],
+    );
+    if (rows.isEmpty) return null;
+    final row = rows.first;
+    return {
+      'id': uuidText(row['id'] as List<int>),
+      'code': row['code'],
+      'total': (row['total_cents'] as int) / 100,
+      'sale_code': row['sale_code'],
+    };
+  }
+
   /// Próximo número de orçamento deste terminal (continua do que a central conhece).
   int get nextQuoteNumber {
     final local = _db.select('SELECT COALESCE(max(number), 0) AS n FROM quote').first['n'] as int;
@@ -1460,16 +1594,20 @@ class LocalDatabase {
     required String reason,
     required String operatorId,
     String? releasedBy,
+    String? returnId,
     required DateTime now,
   }) => _transaction(() {
     final id = const Uuid().v7();
+    if (returnId != null) {
+      _db.execute('UPDATE sale_return SET paid = 1, updated_at = ? WHERE id = ?', [now.toUtc().toIso8601String(), uuidBytes(returnId)]);
+    }
     final at = now.toUtc().toIso8601String();
     _db.execute(
       'INSERT INTO cash_movement (id, cash_session_id, kind, amount_cents, reason, operator_id, released_by, moved_at, '
-      'created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'created_at, updated_at, return_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         uuidBytes(id), uuidBytes(sessionId), kind, amountCents, reason, uuidBytes(operatorId),
-        releasedBy == null ? null : uuidBytes(releasedBy), at, at, at,
+        releasedBy == null ? null : uuidBytes(releasedBy), at, at, at, returnId == null ? null : uuidBytes(returnId),
       ],
     );
     enqueue('cash_movement', {
@@ -1481,6 +1619,7 @@ class LocalDatabase {
       'operator_id': operatorId,
       'released_by': releasedBy,
       'moved_at': at,
+      'return_id': ?returnId,
     }, now: now);
     return id;
   });

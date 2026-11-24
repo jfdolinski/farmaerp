@@ -13,6 +13,7 @@ import 'controlled_dialog.dart';
 import 'pos_dialogs.dart';
 import 'product_info.dart';
 import 'quote_panels.dart';
+import 'return_dialog.dart';
 import 'status_bar.dart';
 
 /// Caixa: entrada, abertura do turno e venda. Tudo funciona sem internet.
@@ -72,6 +73,11 @@ class PosScreen extends StatelessWidget {
                   key: const Key('cash-supply'),
                   onPressed: () => showCashMovementDialog(context, controller, withdrawal: false),
                   child: const Text('Suprimento (F7)'),
+                ),
+                TextButton(
+                  key: const Key('return-open'),
+                  onPressed: () => showReturnDialog(context, controller),
+                  child: const Text('Devolução (F9)'),
                 ),
                 TextButton(
                   key: const Key('close-shift'),
@@ -471,6 +477,9 @@ class _SaleViewState extends State<_SaleView> {
             _dialog(() => showCashMovementDialog(context, controller, withdrawal: false)),
         const SingleActivator(LogicalKeyboardKey.f8): () =>
             _dialog(() => showCloseShiftDialog(context, controller)),
+        const SingleActivator(LogicalKeyboardKey.f9): () {
+          if (!controller.quoteMode) _dialog(() => showReturnDialog(context, controller));
+        },
       },
       child: Focus(
         focusNode: _shell,

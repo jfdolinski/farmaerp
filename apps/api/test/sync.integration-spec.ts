@@ -420,6 +420,65 @@ describe('descida para o PDV contra o banco real', () => {
     await profile({ profile: 'cashier' }).expect(200);
   });
 
+  it('devolução: venda pelo código, documento em dinheiro pago pela sangria e retaguarda', async () => {
+    const push = (items: Json[]) =>
+      request(server()).post('/terminals/sync/push').set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`)
+        .send({ items: items.map((item) => { sequence += 1; return { id: uuidV7(), sequence, ...item }; }) });
+    const asTerminal = (path: string) => request(server()).get(`/terminals${path}`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`);
+    const operatorId = '019a0000-0000-7000-8000-000000000009';
+    const managerId = '019a0000-0000-7000-8000-00000000000d';
+    const shift = uuidV7();
+    await push([{ kind: 'cash_session_open', payload: { id: shift, operator_id: operatorId, opened_at: new Date().toISOString(), opening_float: 100 } }]).expect(200);
+    const saleNumber = Math.floor(Date.now() / 1000) % 900000 + 500001;
+    const sold = {
+      id: uuidV7(), number: saleNumber, cash_session_id: shift, operator_id: operatorId, customer_id: null, seller_id: operatorId,
+      sold_at: new Date().toISOString(), fiscal_model: '65',
+      items: [{ id: uuidV7(), line: 1, product_id: DIPIRONA, quantity: 2, unit_price: 12.9, discount: 0, total: 25.8 }],
+      payments: [{ id: uuidV7(), method: 'cash', amount: 25.8 }], subtotal: 25.8, discount_total: 0, total: 25.8,
+    };
+    await push([{ kind: 'sale', payload: sold }]).expect(200);
+    const saleCode = ((await asManagerGet(`/sales/${sold.id}`)).body as Json).code as string;
+    const found = (await asTerminal(`/sales/${saleCode}`).expect(200)).body as Json;
+    expect(found).toMatchObject({ id: sold.id, late: false, items: [{ quantity: 2, returned_quantity: 0, controlled: false }] });
+    expect((await asTerminal('/sales/9-999999').expect(404)).body).toMatchObject({ code: 'FA891' });
+
+    const refund = {
+      id: uuidV7(), number: saleNumber, cash_session_id: shift, sale_id: sold.id, operator_id: operatorId, authorized_by: managerId,
+      reason: 'Produto com defeito', destination: 'cash', returned_at: new Date().toISOString(),
+      items: [{ id: uuidV7(), sale_item_id: sold.items[0].id, quantity: 1, amount: 12.9 }], total: 12.9,
+    };
+    expect((await push([{ kind: 'sale_return', payload: refund }]).expect(200)).body.results[0]).toMatchObject({ status: 'applied', code: null });
+    const listed = ((await asManagerGet('/returns')).body as Json[]).find((row) => row.id === refund.id)!;
+    expect(listed).toMatchObject({ destination: 'cash', paid: false, alert: false, sale_code: saleCode });
+    const document = (await asTerminal(`/returns/${listed.code}`).expect(200)).body as Json;
+    expect(document).toMatchObject({ id: refund.id, total: 12.9, sale_code: saleCode });
+    const payout = {
+      id: uuidV7(), cash_session_id: shift, kind: 'withdrawal', amount: 12.9, reason: `Devolução ${listed.code}`, operator_id: operatorId,
+      released_by: managerId, moved_at: new Date().toISOString(), return_id: refund.id,
+    };
+    expect((await push([{ kind: 'cash_movement', payload: payout }]).expect(200)).body.results[0]).toMatchObject({ status: 'applied' });
+    expect((await asTerminal(`/returns/${listed.code}`).expect(404)).body).toMatchObject({ code: 'FA896' });
+    const detail = (await asManagerGet(`/returns/${refund.id}`)).body as Json;
+    expect(detail).toMatchObject({ code: listed.code, paid_by_name: 'Operador Centro', items: [{ quantity: 1, amount: 12.9 }] });
+    expect(((await asManagerGet(`/sales/${sold.id}`)).body as Json).returns).toEqual([expect.objectContaining({ code: listed.code, paid: true })]);
+    expect((await request(server()).get('/admin/returns?from=ontem').set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(MANAGER_EMAIL)}`).expect(422)).body)
+      .toMatchObject({ code: 'FA005' });
+
+    // Prazo da filial.
+    const post = (body: Json, email = ADMIN_EMAIL) =>
+      request(server()).post(`/admin/branches/${BRANCH_CENTRO}/return-days`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(email)}`).send(body);
+    await post({ days: 10 }).expect(200);
+    expect((await pullAll(null)).find('fiscal', BRANCH_CENTRO)?.data).toMatchObject({ return_days: 10 });
+    for (const body of [{ days: 400 }, { days: '10' }, {}]) {
+      expect((await post(body).expect(422)).body).toMatchObject({ code: 'FA899' });
+    }
+    expect((await post({ days: 5 }, OPERATOR_EMAIL).expect(403)).body).toMatchObject({ code: 'FA002' });
+    await post({ days: 7 }).expect(200);
+  });
+
+  const asManagerGet = (path: string) =>
+    request(server()).get(`/admin${path}`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(MANAGER_EMAIL)}`).expect(200);
+
   it('estoque das outras filiais e tempo sem internet para a venda sem estoque', async () => {
     const auth = (call: request.Test) => call.set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`);
     const network = (await auth(request(server()).get(`/terminals/stock/${DIPIRONA}`)).expect(200)).body as Json[];

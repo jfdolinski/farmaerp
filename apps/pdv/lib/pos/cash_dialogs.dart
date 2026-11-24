@@ -22,16 +22,22 @@ Widget _dialogNotice(BuildContext context, PosController controller) {
 }
 
 /// Sangria (withdrawal) ou suprimento. Na sangria acima do limite, pede quem libere na mesma janela.
-Future<void> showCashMovementDialog(BuildContext context, PosController controller, {required bool withdrawal}) {
+/// A sangria de devolução pede o documento da devolução: o valor vem dele e a devolução fica paga.
+/// [returnCode] já abre a sangria de devolução com o documento (logo depois da devolução em dinheiro).
+Future<void> showCashMovementDialog(BuildContext context, PosController controller, {required bool withdrawal, String? returnCode}) {
   controller.clearNotice();
-  return showDialog<void>(context: context, builder: (_) => _CashMovementDialog(controller: controller, withdrawal: withdrawal));
+  return showDialog<void>(
+    context: context,
+    builder: (_) => _CashMovementDialog(controller: controller, withdrawal: withdrawal, returnCode: returnCode),
+  );
 }
 
 class _CashMovementDialog extends StatefulWidget {
-  const _CashMovementDialog({required this.controller, required this.withdrawal});
+  const _CashMovementDialog({required this.controller, required this.withdrawal, this.returnCode});
 
   final PosController controller;
   final bool withdrawal;
+  final String? returnCode;
 
   @override
   State<_CashMovementDialog> createState() => _CashMovementDialogState();
@@ -46,17 +52,55 @@ class _CashMovementDialogState extends State<_CashMovementDialog> {
   final _reasonFocus = FocusNode();
   final _codeFocus = FocusNode();
   final _pinFocus = FocusNode();
+  final _document = TextEditingController();
+  final _documentFocus = FocusNode();
   bool _needsRelease = false;
+
+  /// Sangria de devolução: o documento achado (id, código, total).
+  bool _forReturn = false;
+  Map<String, dynamic>? _refund;
+
+  @override
+  void initState() {
+    super.initState();
+    final code = widget.returnCode;
+    if (code != null) {
+      _forReturn = true;
+      _document.text = code;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _findDocument());
+    }
+  }
 
   @override
   void dispose() {
-    for (final field in [_amount, _reason, _code, _pin]) {
+    for (final field in [_amount, _reason, _code, _pin, _document]) {
       field.dispose();
     }
-    for (final node in [_amountFocus, _reasonFocus, _codeFocus, _pinFocus]) {
+    for (final node in [_amountFocus, _reasonFocus, _codeFocus, _pinFocus, _documentFocus]) {
       node.dispose();
     }
     super.dispose();
+  }
+
+  /// Acha o documento da devolução e preenche o valor e o motivo.
+  Future<void> _findDocument() async {
+    final found = await widget.controller.findReturnDocument(_document.text);
+    if (!mounted) return;
+    setState(() {
+      _refund = found;
+      if (found != null) {
+        final cents = ((found['total'] as num) * 100).round();
+        _amount.text = formatCents(cents).replaceFirst('R\$ ', '');
+        _reason.text = 'Devolução ${found['code']} (venda ${found['sale_code']})';
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (found == null) {
+        _documentFocus.requestFocus();
+        selectAllText(_document);
+      }
+    });
   }
 
   /// Depois de um erro: o valor, o motivo, o código ou o PIN, o que estiver faltando.
@@ -77,15 +121,17 @@ class _CashMovementDialogState extends State<_CashMovementDialog> {
 
   Future<void> _confirm() async {
     final controller = widget.controller;
+    if (_forReturn && _refund == null) return _findDocument();
     final cents = parseCents(_amount.text) ?? 0;
+    final returnId = _forReturn ? _refund!['id'] as String : null;
     bool? done;
     if (!widget.withdrawal) {
       done = await controller.supply(cents, _reason.text);
     } else if (_needsRelease) {
-      done = await controller.releaseWithdrawal(cents, _reason.text, _code.text, _pin.text);
+      done = await controller.releaseWithdrawal(cents, _reason.text, _code.text, _pin.text, returnId: returnId);
       _pin.clear();
     } else {
-      done = await controller.withdraw(cents, _reason.text);
+      done = await controller.withdraw(cents, _reason.text, returnId: returnId);
       if (done == false) setState(() => _needsRelease = true);
     }
     if (done == true && mounted) {
@@ -112,15 +158,51 @@ class _CashMovementDialogState extends State<_CashMovementDialog> {
             children: [
               _dialogNotice(context, controller),
               Text(widget.withdrawal
-                  ? 'Dinheiro que sai da gaveta (para o cofre ou o banco). Sai um comprovante para assinar.'
+                  ? 'Dinheiro que sai da gaveta (para o cofre ou o banco, ou para pagar uma devolução). Sai um comprovante para assinar.'
                   : 'Troco que entra na gaveta. Sai um comprovante para assinar.'),
+              if (widget.withdrawal)
+                SegmentedButton<bool>(
+                  key: const Key('cash-kind'),
+                  segments: const [
+                    ButtonSegment(value: false, label: Text('Sangria comum')),
+                    ButtonSegment(value: true, label: Text('Devolução')),
+                  ],
+                  selected: {_forReturn},
+                  onSelectionChanged: _needsRelease
+                      ? null
+                      : (value) {
+                          setState(() {
+                            _forReturn = value.first;
+                            _refund = null;
+                            _amount.clear();
+                            _reason.clear();
+                          });
+                          WidgetsBinding.instance.addPostFrameCallback(
+                            (_) => (_forReturn ? _documentFocus : _amountFocus).requestFocus(),
+                          );
+                        },
+                ),
+              if (_forReturn)
+                TextField(
+                  key: const Key('cash-return-document'),
+                  controller: _document,
+                  focusNode: _documentFocus,
+                  autofocus: true,
+                  enabled: !_needsRelease,
+                  decoration: InputDecoration(
+                    labelText: 'Documento da devolução (por exemplo D3-000012)',
+                    helperText: _refund == null ? 'Leia ou digite o código do comprovante da devolução.' : null,
+                  ),
+                  onChanged: (_) => setState(() => _refund = null),
+                  onSubmitted: (_) => _findDocument(),
+                ),
               NumberField(
                 key: const Key('cash-amount'),
                 controller: _amount,
                 focusNode: _amountFocus,
-                autofocus: true,
+                autofocus: !_forReturn,
                 decimal: true,
-                enabled: !_needsRelease,
+                enabled: !_needsRelease && !_forReturn,
                 onSubmitted: (_) => _reasonFocus.requestFocus(),
                 inputFormatters: _moneyInput,
                 decoration: const InputDecoration(labelText: 'Valor (R\$)'),
@@ -130,7 +212,7 @@ class _CashMovementDialogState extends State<_CashMovementDialog> {
                 controller: _reason,
                 focusNode: _reasonFocus,
                 onSubmitted: (_) => _confirm(),
-                enabled: !_needsRelease,
+                enabled: !_needsRelease && !_forReturn,
                 maxLength: 500,
                 decoration: InputDecoration(labelText: widget.withdrawal ? 'Motivo (por exemplo, envelope do cofre)' : 'Motivo'),
               ),

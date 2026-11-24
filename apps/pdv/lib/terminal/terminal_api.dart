@@ -98,6 +98,12 @@ abstract class TerminalApi {
     required String productId,
   });
 
+  /// Venda da loja para devolver, pelo código do comprovante (com internet).
+  Future<Map<String, dynamic>> saleForReturn({required String accessToken, required String code});
+
+  /// Documento de devolução em dinheiro, para a sangria (com internet).
+  Future<Map<String, dynamic>> returnDocument({required String accessToken, required String code});
+
   /// Orçamentos abertos e válidos da loja (com internet).
   Future<List<Map<String, dynamic>>> openQuotes({required String accessToken});
 
@@ -328,6 +334,20 @@ class HttpTerminalApi implements TerminalApi {
     final json = await _request('/terminals/stock/${Uri.encodeComponent(productId)}', accessToken: accessToken);
     if (json is! List) throw const ApiException('FA000');
     return json.cast<Map<String, dynamic>>();
+  }
+
+  @override
+  Future<Map<String, dynamic>> saleForReturn({required String accessToken, required String code}) async {
+    final json = await _request('/terminals/sales/${Uri.encodeComponent(code)}', accessToken: accessToken);
+    if (json is! Map<String, dynamic>) throw const ApiException('FA000');
+    return json;
+  }
+
+  @override
+  Future<Map<String, dynamic>> returnDocument({required String accessToken, required String code}) async {
+    final json = await _request('/terminals/returns/${Uri.encodeComponent(code)}', accessToken: accessToken);
+    if (json is! Map<String, dynamic>) throw const ApiException('FA000');
+    return json;
   }
 
   @override
