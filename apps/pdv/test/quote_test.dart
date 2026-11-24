@@ -6,8 +6,11 @@ import 'package:farmaerp_pdv/pos/pos_auth.dart';
 import 'package:farmaerp_pdv/pos/pos_controller.dart';
 import 'package:farmaerp_pdv/pos/pos_screen.dart';
 import 'package:farmaerp_pdv/pos/receipt.dart';
+import 'package:farmaerp_pdv/ui/caps.dart' show caps;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'caps_finders.dart';
 
 import 'pos_test.dart' show FakePrinter, hashFor;
 
@@ -253,7 +256,7 @@ void main() {
     testWidgets('tela: pede o vendedor, monta e conclui com a plaquinha', (tester) async {
       await tester.binding.setSurfaceSize(const Size(1400, 900));
       await tester.pumpWidget(MaterialApp(home: PosScreen(controller: controller)));
-      expect(find.text('Orçamento'), findsOneWidget);
+      expect(findText('Orçamento'), findsOneWidget);
       expect(find.byKey(const Key('login-code')), findsNothing);
       expect(find.byKey(const Key('seller-panel')), findsOneWidget);
       expect(tester.widget<TextField>(find.byKey(const Key('scan-field'))).enabled, isFalse);
@@ -262,7 +265,7 @@ void main() {
       await tester.tap(find.byKey(const Key('seller-confirm')));
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       await tester.pumpAndSettle();
-      expect(tester.widget<Text>(find.byKey(const Key('seller-name'))).data, 'Vendedor: Balconista Ana');
+      expect(tester.widget<Text>(find.byKey(const Key('seller-name'))).data, caps('Vendedor: Balconista Ana'));
       await tester.enterText(find.byKey(const Key('scan-field')), '7890000000017');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
@@ -272,9 +275,9 @@ void main() {
       await tester.tap(find.byKey(const Key('quote-finish')));
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
       await tester.pumpAndSettle();
-      expect(find.text('Orçamento O1-000004 concluído na plaquinha 15.'), findsOneWidget);
+      expect(findText('Orçamento O1-000004 concluído na plaquinha 15.'), findsOneWidget);
       expect(find.byKey(const Key('seller-panel')), findsOneWidget);
-      expect(find.textContaining('Último orçamento: O1-000004'), findsOneWidget);
+      expect(findTextContaining('Último orçamento: O1-000004'), findsOneWidget);
     });
   });
 }

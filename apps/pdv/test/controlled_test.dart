@@ -11,6 +11,8 @@ import 'package:farmaerp_pdv/pos/pos_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'caps_finders.dart';
+
 import 'pos_test.dart' show FakePrinter, hashFor;
 
 const branchId = '019a0000-0000-7000-8000-000000000005';
@@ -338,13 +340,13 @@ void main() {
       await tester.tap(find.byKey(const Key('controlled-open')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('controlled-dialog')), findsOneWidget);
-      expect(find.textContaining('CLZ01 · vence 31/03/2030 · saldo 2'), findsOneWidget);
+      expect(findTextContaining('CLZ01 · vence 31/03/2030 · saldo 2'), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('rx-release')));
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       await tester.pumpAndSettle();
-      expect(find.text('Informe o número da notificação'), findsOneWidget);
-      expect(find.text('Informe o nome do comprador'), findsOneWidget);
+      expect(findText('Informe o número da notificação'), findsOneWidget);
+      expect(findText('Informe o nome do comprador'), findsOneWidget);
       expect(find.byKey(const Key('controlled-notice')), findsOneWidget);
 
       final fields = {
@@ -358,14 +360,14 @@ void main() {
       await tester.enterText(find.byKey(const Key('rx-code')), '7');
       await tester.enterText(find.byKey(const Key('rx-pin')), '2468');
       await tester.pump();
-      expect(find.text('Informe o número da notificação'), findsNothing);
+      expect(findText('Informe o número da notificação'), findsNothing);
       await tester.tap(find.byKey(const Key('rx-release')));
       await tester.runAsync(() => Future<void>.delayed(const Duration(seconds: 2)));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('controlled-dialog')), findsNothing);
       expect(find.byKey(const Key('controlled-panel')), findsNothing);
       expect(controller.cart.lines.single.controlled!.form!.prescriberState, 'SP');
-      expect(find.textContaining('lote CLZ01'), findsOneWidget);
+      expect(findTextContaining('lote CLZ01'), findsOneWidget);
     });
 
     testWidgets('sem saldo em lote, a janela pede só o motivo', (tester) async {
@@ -374,11 +376,11 @@ void main() {
       await pump(tester);
       await tester.tap(find.byKey(const Key('controlled-open')));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Não há saldo em lote'), findsOneWidget);
+      expect(findTextContaining('Não há saldo em lote'), findsOneWidget);
       expect(find.byKey(const Key('rx-number')), findsNothing);
-      expect(find.text('Liberar pendente'), findsOneWidget);
+      expect(findText('Liberar pendente'), findsOneWidget);
       await tester.tap(find.byKey(const Key('controlled-cancel')).hitTestable().evaluate().isEmpty
-          ? find.text('Voltar')
+          ? findText('Voltar')
           : find.byKey(const Key('controlled-cancel')));
       await tester.pumpAndSettle();
     });

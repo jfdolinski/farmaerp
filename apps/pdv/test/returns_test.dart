@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'caps_finders.dart';
+
 import 'app_test.dart' show FakeApi;
 import 'pos_test.dart' show FakePrinter, hashFor;
 
@@ -210,7 +212,7 @@ void main() {
     expect(find.byKey(const Key('return-authorization')), findsNothing);
     await tester.enterText(find.byKey(const Key('return-qty-1')), '2');
     await tester.pump();
-    expect(find.text('Total da devolução: R\$ 20,00'), findsOneWidget);
+    expect(findText('Total da devolução: R\$ 20,00'), findsOneWidget);
     await tester.enterText(find.byKey(const Key('return-reason')), 'Produto com defeito');
     await tester.tap(find.byKey(const Key('return-destination-cash')));
     await tester.pump();
@@ -340,19 +342,19 @@ void main() {
     // Sem a busca, avisa e não lança.
     await tester.tap(find.byKey(const Key('add-payment')));
     await tester.pump();
-    expect(find.textContaining('busque o crédito'), findsOneWidget);
+    expect(findTextContaining('busque o crédito'), findsOneWidget);
     expect(controller.cart.payments, isEmpty);
     await tester.enterText(find.byKey(const Key('credit-code')), 'd1-000001');
     await tester.tap(find.byKey(const Key('find-credit')));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     await tester.pump();
-    expect(find.text('Crédito D1-000001: saldo de R\$ 10,00'), findsOneWidget);
+    expect(findText('Crédito D1-000001: saldo de R\$ 10,00'), findsOneWidget);
     expect(tester.widget<EditableText>(find.descendant(of: find.byKey(const Key('payment-amount')), matching: find.byType(EditableText))).controller.text, '10,00');
     await tester.tap(find.byKey(const Key('add-payment')));
     await tester.pump();
     expect(controller.cart.payments.single.returnCode, 'D1-000001');
-    expect(find.text('Crédito de devolução D1-000001'), findsOneWidget);
-    expect(find.text('Falta: R\$ 10,00'), findsOneWidget);
+    expect(findText('Crédito de devolução D1-000001'), findsOneWidget);
+    expect(findText('Falta: R\$ 10,00'), findsOneWidget);
     expect(find.byKey(const Key('credit-balance')), findsNothing);
     await tester.binding.setSurfaceSize(null);
   });

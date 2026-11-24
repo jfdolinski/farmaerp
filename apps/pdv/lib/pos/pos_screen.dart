@@ -1,15 +1,17 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 import 'package:flutter/services.dart';
 
 import '../core/error_display.dart';
+import '../ui/caps.dart';
 import 'cart.dart';
 import 'cash_dialogs.dart';
 import 'focus_kit.dart';
 import 'money.dart';
 import 'pos_controller.dart';
 import 'controlled_dialog.dart';
+import 'display_settings.dart';
 import 'pos_dialogs.dart';
 import 'product_info.dart';
 import 'quote_panels.dart';
@@ -39,27 +41,58 @@ class PosScreen extends StatelessWidget {
       listenable: controller,
       builder: (context, _) {
         final operator = controller.operator;
-        return Scaffold(
+        final kind = TerminalKind.of(controller.database.terminalProfile);
+        final number = controller.terminalNumber();
+        final name = '${kind.label}${number == null ? '' : ' $number'}';
+        final tinted = DisplaySettings.tinted(Theme.of(context), DisplaySettings.colorOf(controller.database), kind);
+        final tone = tinted.appBarTheme.backgroundColor!;
+        final onTone = tinted.appBarTheme.foregroundColor!;
+        return Theme(
+          data: tinted,
+          child: Scaffold(
           appBar: AppBar(
-            title: Text(
-              controller.quoteMode
-                  ? 'Orçamento'
-                  : operator == null
-                  ? 'FarmaERP PDV'
-                  : 'Caixa · ${operator.name}',
+            title: Row(
+              key: const Key('terminal-kind'),
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(kind.icon),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    controller.quoteMode || operator == null ? name : '$name · ${operator.name}',
+                    key: const Key('terminal-title'),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            // Faixa com o tipo do terminal em letras grandes: dá para reconhecer de longe no balcão.
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(36),
+              child: Container(
+                key: Key('terminal-band-${kind.code}'),
+                width: double.infinity,
+                height: 36,
+                alignment: Alignment.center,
+                color: Color.alphaBlend(onTone.withValues(alpha: 0.12), tone),
+                child: Text(
+                  kind.label,
+                  style: TextStyle(color: onTone, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 4),
+                ),
+              ),
             ),
             actions: [
               if (onDisplaySettings != null)
                 IconButton(
                   key: const Key('display-settings-open'),
-                  tooltip: 'Fonte do PDV',
-                  icon: const Icon(Icons.text_fields),
+                  tooltip: 'APARÊNCIA DO PDV',
+                  icon: const Icon(Icons.palette_outlined),
                   onPressed: onDisplaySettings,
                 ),
               if (onPrinterSettings != null)
                 IconButton(
                   key: const Key('printer-settings'),
-                  tooltip: 'Impressora',
+                  tooltip: 'IMPRESSORA',
                   icon: const Icon(Icons.print),
                   onPressed: onPrinterSettings,
                 ),
@@ -101,6 +134,7 @@ class PosScreen extends StatelessWidget {
             _ => _SaleView(controller: controller),
           },
           bottomNavigationBar: PosStatusBar(controller: controller, online: online, appVersion: appVersion),
+          ),
         );
       },
     );
@@ -636,13 +670,13 @@ class _ItemsPanel extends StatelessWidget {
                           ),
                           IconButton(
                             key: Key('info-result-${product.code}'),
-                            tooltip: 'Dados do produto',
+                            tooltip: 'DADOS DO PRODUTO',
                             icon: const Icon(Icons.info_outline),
                             onPressed: () => dialog(() => showProductInfo(context, controller, product)),
                           ),
                           IconButton(
                             key: Key('network-result-${product.code}'),
-                            tooltip: 'Estoque nas filiais',
+                            tooltip: 'ESTOQUE NAS FILIAIS',
                             icon: const Icon(Icons.store),
                             onPressed: () =>
                                 dialog(() => showNetworkStock(context, controller, product)),
@@ -691,7 +725,7 @@ class _ItemsPanel extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(
-                            tooltip: 'Menos um',
+                            tooltip: 'MENOS UM',
                             icon: const Icon(Icons.remove),
                             onPressed:
                                 controller.paying || line.quantityMilli <= 1000
@@ -703,7 +737,7 @@ class _ItemsPanel extends StatelessWidget {
                           ),
                           IconButton(
                             key: Key('more-$index'),
-                            tooltip: 'Mais um',
+                            tooltip: 'MAIS UM',
                             icon: const Icon(Icons.add),
                             onPressed: controller.paying
                                 ? null
@@ -714,7 +748,7 @@ class _ItemsPanel extends StatelessWidget {
                           ),
                           IconButton(
                             key: Key('discount-$index'),
-                            tooltip: 'Desconto',
+                            tooltip: 'DESCONTO',
                             icon: const Icon(Icons.percent),
                             onPressed: controller.paying
                                 ? null
@@ -726,13 +760,13 @@ class _ItemsPanel extends StatelessWidget {
                           ),
                           IconButton(
                             key: Key('info-$index'),
-                            tooltip: 'Dados do produto',
+                            tooltip: 'DADOS DO PRODUTO',
                             icon: const Icon(Icons.info_outline),
                             onPressed: () => dialog(() => showProductInfo(context, controller, line.product)),
                           ),
                           IconButton(
                             key: Key('stock-$index'),
-                            tooltip: 'Estoque nas filiais',
+                            tooltip: 'ESTOQUE NAS FILIAIS',
                             icon: const Icon(Icons.store),
                             onPressed: () => dialog(() => showNetworkStock(
                               context,
@@ -749,7 +783,7 @@ class _ItemsPanel extends StatelessWidget {
                           ),
                           IconButton(
                             key: Key('remove-$index'),
-                            tooltip: 'Tirar da venda',
+                            tooltip: 'TIRAR DA VENDA',
                             icon: const Icon(Icons.delete_outline),
                             onPressed: controller.paying
                                 ? null
@@ -807,7 +841,7 @@ class _TotalsPanel extends StatelessWidget {
                   ].join(' · '),
                 ),
                 trailing: IconButton(
-                  tooltip: 'Tirar o cliente',
+                  tooltip: 'TIRAR O CLIENTE',
                   icon: const Icon(Icons.close),
                   onPressed: controller.clearCustomer,
                 ),
@@ -1128,7 +1162,7 @@ class _PaymentPanelState extends State<_PaymentPanel> {
                   children: [
                     Text(formatCents(payment.amountCents)),
                     IconButton(
-                      tooltip: 'Tirar',
+                      tooltip: 'TIRAR',
                       icon: const Icon(Icons.close),
                       onPressed: () {
                         controller.removePayment(payment);

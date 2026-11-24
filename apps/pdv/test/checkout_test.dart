@@ -5,9 +5,12 @@ import 'package:farmaerp_pdv/pos/pos_auth.dart';
 import 'package:farmaerp_pdv/pos/pos_controller.dart';
 import 'package:farmaerp_pdv/pos/pos_screen.dart';
 import 'package:farmaerp_pdv/terminal/terminal_api.dart';
+import 'package:farmaerp_pdv/ui/caps.dart' show caps;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'caps_finders.dart';
 
 import 'app_test.dart' show FakeApi;
 import 'pos_test.dart' show FakePrinter, hashFor;
@@ -236,7 +239,7 @@ void main() {
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('quote-lookup')), findsOneWidget);
-    expect(find.textContaining('Vendedor: Balconista Ana'), findsOneWidget);
+    expect(findTextContaining('Vendedor: Balconista Ana'), findsOneWidget);
     expect(find.byKey(const Key('quote-O1-000005')), findsOneWidget);
     // Filtra enquanto digita (vendedor, cliente, plaquinha ou código).
     await tester.enterText(find.byKey(const Key('quote-key')), 'ana');
@@ -253,6 +256,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('quote-lookup')), findsNothing);
     expect(find.byKey(const Key('cart-quote')), findsOneWidget);
-    expect(tester.widget<Text>(find.byKey(const Key('seller-name'))).data, 'Vendedor: Balconista Ana');
+    expect(tester.widget<Text>(find.byKey(const Key('seller-name'))).data, caps('Vendedor: Balconista Ana'));
   });
 }

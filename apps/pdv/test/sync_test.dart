@@ -8,6 +8,8 @@ import 'package:farmaerp_pdv/terminal/terminal_controller.dart';
 import 'package:farmaerp_pdv/terminal/terminal_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'caps_finders.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
@@ -359,7 +361,7 @@ void main() {
       });
       await tester.pumpWidget(MaterialApp(home: TerminalScreen(controller: terminal)));
       expect(find.byKey(const Key('preparing-store')), findsOneWidget);
-      expect(find.text('Recebendo os dados da filial: 1 de 4.'), findsOneWidget);
+      expect(findText('Recebendo os dados da filial: 1 de 4.'), findsOneWidget);
       final bar = tester.widget<LinearProgressIndicator>(find.byKey(const Key('load-progress')));
       expect(bar.value, 0.25);
 

@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 
 import '../local/local_database.dart';
+import '../ui/caps.dart';
 import 'money.dart';
 import 'pos_controller.dart';
 

@@ -13,6 +13,8 @@ import 'package:farmaerp_pdv/pos/receipt.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'caps_finders.dart';
+
 // Hash gerado pela API (Node) para o PIN 2468 do seed: o PDV precisa conferir o mesmo formato.
 const nodeHash2468 = r'pbkdf2-sha256$210000$DAwMDAwMDAwMDAwMDAwMDA==$0Y+4ZaPrEpWxpjCyiyQsgVU97GA29jxTLVuoyG8WNgc=';
 
@@ -334,7 +336,7 @@ void main() {
       await tester.enterText(find.byKey(const Key('login-pin')), '2468');
       await tester.runAsync(() => controller.login('3', '2468'));
       await tester.pump();
-      expect(find.text('Abrir o caixa'), findsWidgets);
+      expect(findText('Abrir o caixa'), findsWidgets);
 
       await tester.enterText(find.byKey(const Key('opening-float')), '150,00');
       await tester.tap(find.byKey(const Key('open-shift')));
@@ -346,7 +348,7 @@ void main() {
       await tester.pump();
       await tester.tap(find.byKey(const Key('more-0')));
       await tester.pump();
-      expect(find.text('R\$ 25,80'), findsWidgets);
+      expect(findText('R\$ 25,80'), findsWidgets);
 
       // Busca por nome e escolha na lista.
       await tester.enterText(find.byKey(const Key('scan-field')), 'soro');
@@ -362,12 +364,12 @@ void main() {
       await tester.enterText(find.byKey(const Key('payment-amount')), '60,00');
       await tester.tap(find.byKey(const Key('add-payment')));
       await tester.pump();
-      expect(find.text('Troco: R\$ 31,70'), findsOneWidget);
+      expect(findText('Troco: R\$ 31,70'), findsOneWidget);
       await tester.runAsync(() => controller.finish());
       await tester.pump();
 
       expect(find.byKey(const Key('pos-info')), findsOneWidget);
-      expect(find.text('Venda 1-000008 concluída.'), findsOneWidget);
+      expect(findText('Venda 1-000008 concluída.'), findsOneWidget);
       expect(find.byKey(const Key('last-change')), findsOneWidget);
       expect(printer.printed.keys, ['1-000008']);
       expect(saved, 2);
@@ -381,11 +383,11 @@ void main() {
       await pump(tester);
       controller.scan('123456789');
       await tester.pump();
-      expect(find.text('Produto não encontrado.'), findsOneWidget);
+      expect(findText('Produto não encontrado.'), findsOneWidget);
       controller.scan('7890000000031');
       await tester.pump();
       expect(find.byKey(const Key('controlled-panel')), findsOneWidget);
-      expect(find.textContaining('é controlado (lista B1)'), findsOneWidget);
+      expect(findTextContaining('é controlado (lista B1)'), findsOneWidget);
       expect(controller.cart.isEmpty, isTrue);
     });
 
@@ -399,7 +401,7 @@ void main() {
       printer.failure = StateError('sem papel');
       await tester.runAsync(() => controller.finish());
       await tester.pump();
-      expect(find.text('Não foi possível imprimir o comprovante.'), findsOneWidget);
+      expect(findText('Não foi possível imprimir o comprovante.'), findsOneWidget);
       expect(database.debugSelect('SELECT count(*) AS n FROM sale').first['n'], 1);
       printer.failure = null;
       await tester.tap(find.byKey(const Key('reprint')));
@@ -412,7 +414,7 @@ void main() {
       await pump(tester);
       await tester.runAsync(() => controller.login('3', '1111'));
       await tester.pump();
-      expect(find.text('Código ou PIN incorreto.'), findsOneWidget);
+      expect(findText('Código ou PIN incorreto.'), findsOneWidget);
       expect(controller.operator, isNull);
     });
   });

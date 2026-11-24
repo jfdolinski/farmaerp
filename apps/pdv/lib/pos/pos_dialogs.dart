@@ -1,11 +1,12 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 import 'package:flutter/services.dart';
 
 import '../core/error_display.dart';
 import '../local/local_database.dart';
 import '../terminal/terminal_api.dart';
+import '../ui/caps.dart';
 import 'cart.dart';
 import 'discount.dart';
 import 'focus_kit.dart';

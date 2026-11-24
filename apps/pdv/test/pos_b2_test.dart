@@ -9,6 +9,8 @@ import 'package:farmaerp_pdv/terminal/terminal_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'caps_finders.dart';
+
 import 'app_test.dart' show FakeApi;
 import 'pos_test.dart' show FakePrinter, hashFor;
 
@@ -259,7 +261,7 @@ void main() {
       await tester.enterText(find.byKey(const Key('discount-value')), '7');
       await tester.tap(find.byKey(const Key('discount-apply')));
       await tester.pumpAndSettle();
-      expect(find.text('Este desconto passa do seu limite.'), findsOneWidget);
+      expect(findText('Este desconto passa do seu limite.'), findsOneWidget);
       await tester.enterText(find.byKey(const Key('supervisor-code')), '5');
       await tester.enterText(find.byKey(const Key('supervisor-pin')), '2468');
       await tester.enterText(find.byKey(const Key('release-reason')), 'Cliente fiel');
@@ -275,11 +277,11 @@ void main() {
       controller.scan('7890000000024');
       await pump(tester);
       expect(find.byKey(const Key('zero-stock-panel')), findsOneWidget);
-      expect(find.textContaining('sem sincronizar há 2 h 0 min'), findsOneWidget);
+      expect(findTextContaining('sem sincronizar há 2 h 0 min'), findsOneWidget);
       await tester.runAsync(() => controller.approveZeroStock('5', '2468'));
       await tester.pump();
       expect(find.byKey(const Key('zero-stock-panel')), findsNothing);
-      expect(find.textContaining('autorizado por Gerente Centro'), findsOneWidget);
+      expect(findTextContaining('autorizado por Gerente Centro'), findsOneWidget);
     });
 
     testWidgets('cliente aparece no painel e o convênio vira forma de pagamento', (tester) async {
@@ -295,7 +297,7 @@ void main() {
       expect(find.byKey(const Key('identify-customer')), findsOneWidget);
       await tester.runAsync(() => controller.selectCustomer(customerId));
       await tester.pump();
-      expect(find.text('Cliente Demonstração'), findsOneWidget);
+      expect(findText('Cliente Demonstração'), findsOneWidget);
       await tester.tap(find.byKey(const Key('pay')));
       await tester.pump();
       expect(find.byKey(const Key('method-agreement')), findsOneWidget);

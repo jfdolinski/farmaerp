@@ -7,6 +7,8 @@ import 'package:farmaerp_pdv/pos/pos_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'caps_finders.dart';
+
 import 'pos_test.dart' show FakePrinter, hashFor;
 
 const branchId = '019a0000-0000-7000-8000-000000000005';
@@ -240,7 +242,7 @@ void main() {
       await tester.runAsync(() => Future<void>.delayed(const Duration(seconds: 2)));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('cash-movement-dialog')), findsNothing);
-      expect(find.text('Sangria de R\$ 300,00 registrada.'), findsOneWidget);
+      expect(findText('Sangria de R\$ 300,00 registrada.'), findsOneWidget);
     });
 
     testWidgets('fechamento pede confirmação e não mostra o esperado', (tester) async {
@@ -254,11 +256,11 @@ void main() {
         await tester.enterText(find.byKey(Key('count-$method')), value);
       }
       await tester.pump();
-      expect(find.textContaining('1.100'), findsNothing);
+      expect(findTextContaining('1.100'), findsNothing);
       await tester.tap(submit);
       await tester.pump();
       expect(find.byKey(const Key('close-shift-confirm-text')), findsOneWidget);
-      expect(find.textContaining('Dinheiro R\$ 1.100,00'), findsOneWidget);
+      expect(findTextContaining('Dinheiro R\$ 1.100,00'), findsOneWidget);
       await tester.tap(submit);
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
       await tester.pumpAndSettle();
