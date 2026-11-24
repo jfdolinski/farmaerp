@@ -312,3 +312,108 @@ describe('vendedor na venda', () => {
     await expect(ownerPool.query('UPDATE sale SET seller_id = $2 WHERE id = $1', [byClerk.id, operator.id])).rejects.toSatisfy(hasCode('FA104'));
   });
 });
+
+describe('orçamento no caixa', () => {
+  const asTerminal = async (sql, params = [], terminal = a.terminal1) => {
+    const client = await appPool.connect();
+    try {
+      await client.query('BEGIN');
+      await setTerminal(client, terminal.id);
+      return (await client.query(sql, params)).rows[0];
+    } finally {
+      await client.query('ROLLBACK');
+      client.release();
+    }
+  };
+  const lookup = (key, terminal) => asTerminal('SELECT app.pdv_quote($1) AS q', [key], terminal).then((r) => r.q);
+  let session;
+  let saleNumber = 800000 + randomInt(9000);
+  const sale = (quoteId, overrides = {}) => {
+    saleNumber += 1;
+    return {
+      id: uuidV7(), number: saleNumber, cash_session_id: session, operator_id: operator.id, customer_id: null, seller_id: clerk.id,
+      quote_id: quoteId, sold_at: iso(), fiscal_model: '65',
+      items: [{ id: uuidV7(), line: 1, product_id: product.id, quantity: 1, unit_price: 10, discount: 0, total: 10 }],
+      payments: [{ id: uuidV7(), method: 'cash', amount: 10 }], subtotal: 10, discount_total: 0, total: 10, ...overrides,
+    };
+  };
+  const alertsOf = async (saleId) => (await ownerPool.query(
+    "SELECT detail FROM sale_alert WHERE sale_id = $1 AND kind = 'quote_status'", [saleId],
+  )).rows.map((r) => r.detail);
+
+  beforeAll(async () => {
+    session = uuidV7();
+    await push([['cash_session_open', { id: session, operator_id: operator.id, opened_at: iso(), opening_float: 0 }]]);
+  });
+
+  it('busca pela plaquinha ou pelo código; só da loja, aberto e válido', async () => {
+    const open = quote({ card_number: 300 }, [
+      { id: uuidV7(), line: 1, product_id: product.id, quantity: 2, unit_price: 10, discount: 2, total: 18, release: { supervisor_id: operator.id, reason: 'Fiel' } },
+    ]);
+    const expired = quote({ card_number: 301, quoted_at: iso(-3 * DAY) });
+    const replacedFirst = quote({ card_number: 302, quoted_at: iso(-60000) });
+    const replacedSecond = quote({ card_number: 302 });
+    await push([['quote', open], ['quote', expired], ['quote', replacedFirst], ['quote', replacedSecond]]);
+    const other = { ...quote({ card_number: 303 }), seller_id: clerk.id };
+    await push([['quote', other]], a.terminal2);
+    const codeOf = async (id) => (await row(id)).code;
+
+    const byCard = await lookup('300');
+    expect(byCard).toMatchObject({ id: open.id, card_number: 300, seller_id: clerk.id, customer_id: null });
+    expect(byCard.items).toEqual([{ line: 1, product_id: product.id, quantity: 2, unit_price: 10, discount: 2, total: 18, release: { supervisor_id: operator.id, reason: 'Fiel' } }]);
+    expect((await lookup(` ${(await codeOf(open.id)).toLowerCase()} `)).id).toBe(open.id);
+    // A plaquinha 302 aponta para o orçamento novo; o código do antigo diz que foi substituído.
+    expect((await lookup('302')).id).toBe(replacedSecond.id);
+    await expect(lookup(await codeOf(replacedFirst.id))).rejects.toSatisfy(hasCode('FA888'));
+    await expect(lookup('301')).rejects.toSatisfy(hasCode('FA887'));
+    await expect(lookup(await codeOf(expired.id))).rejects.toSatisfy(hasCode('FA887'));
+    // Outra loja: não acha, nem pelo código.
+    await expect(lookup('303')).rejects.toSatisfy(hasCode('FA885'));
+    await expect(lookup(await codeOf(other.id))).rejects.toSatisfy(hasCode('FA885'));
+    expect((await lookup('303', a.terminal2)).id).toBe(other.id);
+    for (const key of ['', 'abc', '99999', 'O1-12', null]) await expect(lookup(key)).rejects.toSatisfy(hasCode('FA885'));
+
+    const list = (await asTerminal('SELECT app.pdv_open_quotes() AS l')).l;
+    const ids = list.map((q) => q.id);
+    expect(ids).toContain(open.id);
+    expect(ids).toContain(replacedSecond.id);
+    for (const id of [expired.id, replacedFirst.id, other.id]) expect(ids).not.toContain(id);
+    expect(list.find((q) => q.id === open.id)).toMatchObject({ card_number: 300, seller_name: clerk.name, item_count: 1 });
+  });
+
+  it('a venda fecha o orçamento; o que não está aberto vira alerta, e a venda vale', async () => {
+    const q1 = quote({ card_number: 310 });
+    const late = quote({ quoted_at: iso(-3 * DAY) });
+    const other = { ...quote(), seller_id: clerk.id };
+    await push([['quote', q1], ['quote', late]]);
+    await push([['quote', other]], a.terminal2);
+
+    const first = sale(q1.id);
+    const second = sale(q1.id);
+    const fromExpired = sale(late.id);
+    const fromOther = sale(other.id);
+    expect(codes(await push([['sale', first], ['sale', second], ['sale', fromExpired], ['sale', fromOther]])).map(([s]) => s))
+      .toEqual(['applied', 'applied', 'applied', 'applied']);
+    expect(await row(q1.id)).toMatchObject({ status: 'converted', converted_sale_id: first.id });
+    await expect(lookup((await row(q1.id)).code)).rejects.toSatisfy(hasCode('FA886'));
+    await expect(lookup('310')).rejects.toSatisfy(hasCode('FA885'));
+    expect((await ownerPool.query('SELECT quote_id FROM sale WHERE id = $1', [first.id])).rows[0].quote_id).toBe(q1.id);
+    expect(await alertsOf(first.id)).toEqual([]);
+    expect(await alertsOf(second.id)).toEqual([{ quote_code: (await row(q1.id)).code, status: 'converted' }]);
+    expect(await alertsOf(fromExpired.id)).toEqual([{ quote_code: (await row(late.id)).code, status: 'expired' }]);
+    expect((await row(late.id)).status).toBe('open');
+    expect(await alertsOf(fromOther.id)).toEqual([{ quote_code: (await row(other.id)).code, status: 'other_branch' }]);
+    expect((await row(other.id)).status).toBe('open');
+    // A plaquinha volta a ficar livre: novo orçamento nela não substitui o convertido.
+    const reuse = quote({ card_number: 310 });
+    await push([['quote', reuse]]);
+    expect((await row(q1.id)).status).toBe('converted');
+    expect((await row(reuse.id)).status).toBe('open');
+
+    expect(codes(await push([['sale', sale(uuidV7())]]))).toEqual([['conflict', 'FA004']]);
+    expect(codes(await push([['sale', sale('nada')]]))).toEqual([['conflict', 'FA962']]);
+    await expect(ownerPool.query('UPDATE sale SET quote_id = NULL WHERE id = $1', [first.id])).rejects.toSatisfy(hasCode('FA104'));
+    const detail = (await readAs(a.admin, 'SELECT app.sale_detail($1) AS d', [first.id]))[0].d;
+    expect(detail).toMatchObject({ quote_id: q1.id, quote_code: (await row(q1.id)).code });
+  });
+});

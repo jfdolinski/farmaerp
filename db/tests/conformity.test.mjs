@@ -74,6 +74,7 @@ describe('migrations', () => {
       '0035_controlled',
       '0036_cash_close',
       '0037_quotes',
+      '0038_quote_checkout',
     ]);
   });
 });

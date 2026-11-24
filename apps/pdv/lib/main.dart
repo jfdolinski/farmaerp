@@ -118,6 +118,8 @@ Future<void> main() async {
     onSaleSaved: () => unawaited(controller.tick()),
     customers: CustomerService(api: api, database: database, accessToken: controller.accessToken, logger: logger),
     networkStock: (productId) async => api.networkStock(accessToken: await controller.accessToken(), productId: productId),
+    openQuotes: () async => api.openQuotes(accessToken: await controller.accessToken()),
+    findQuote: (key) async => api.quote(accessToken: await controller.accessToken(), key: key),
     logger: logger,
   );
   runApp(FarmaErpPdvApp(controller: controller, pos: pos, database: database));

@@ -220,3 +220,141 @@ class _QuotePanelState extends State<QuotePanel> {
     );
   }
 }
+
+/// Caixa: puxa o orçamento pela plaquinha ou pelo código do cupom, ou escolhe na lista dos pendentes
+/// da loja (com internet). Mostra os itens de cada um antes de puxar.
+Future<void> showQuoteLookup(BuildContext context, PosController controller) {
+  controller.clearNotice();
+  return showDialog<void>(context: context, builder: (_) => _QuoteLookupDialog(controller: controller));
+}
+
+class _QuoteLookupDialog extends StatefulWidget {
+  const _QuoteLookupDialog({required this.controller});
+
+  final PosController controller;
+
+  @override
+  State<_QuoteLookupDialog> createState() => _QuoteLookupDialogState();
+}
+
+class _QuoteLookupDialogState extends State<_QuoteLookupDialog> {
+  final _key = TextEditingController();
+  List<Map<String, dynamic>>? _pending;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.pendingQuotes().then((list) {
+      if (mounted) {
+        setState(() {
+          _pending = list;
+          _loading = false;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _key.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load(String key) async {
+    if (key.trim().isEmpty) return;
+    final navigator = Navigator.of(context);
+    final ok = await widget.controller.loadQuote(key);
+    if (ok) navigator.pop();
+  }
+
+  String _time(String? value) {
+    final date = DateTime.tryParse(value ?? '')?.toLocal();
+    if (date == null) return '';
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${two(date.day)}/${two(date.month)} ${two(date.hour)}:${two(date.minute)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = widget.controller;
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final notice = controller.notice;
+        final pending = _pending ?? const [];
+        return AlertDialog(
+          key: const Key('quote-lookup'),
+          title: const Text('Puxar orçamento'),
+          content: SizedBox(
+            width: 620,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (notice != null)
+                  Container(
+                    key: const Key('quote-lookup-notice'),
+                    padding: const EdgeInsets.all(8),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    color: Theme.of(context).colorScheme.errorContainer,
+                    child: Text('${notice.message} ${notice.action}'),
+                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        key: const Key('quote-key'),
+                        controller: _key,
+                        autofocus: true,
+                        decoration: const InputDecoration(labelText: 'Número da plaquinha ou código do cupom'),
+                        onSubmitted: _load,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      key: const Key('quote-load'),
+                      onPressed: controller.busy ? null : () => _load(_key.text),
+                      child: const Text('Puxar'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text('Pendentes da loja', style: Theme.of(context).textTheme.titleSmall),
+                if (_loading) const Padding(padding: EdgeInsets.all(8), child: LinearProgressIndicator()),
+                if (!_loading && _pending != null && pending.isEmpty)
+                  const Padding(padding: EdgeInsets.all(8), child: Text('Nenhum orçamento aberto.')),
+                if (!_loading && _pending == null)
+                  const Padding(padding: EdgeInsets.all(8), child: Text('Sem a lista agora: busque pela plaquinha ou pelo cupom.')),
+                if (pending.isNotEmpty)
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 320),
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: [
+                        for (final quote in pending)
+                          ListTile(
+                            key: Key('quote-${quote['code']}'),
+                            leading: Text(quote['card_number'] == null ? '—' : '${quote['card_number']}',
+                                style: Theme.of(context).textTheme.titleLarge),
+                            title: Text('${quote['code']} · ${formatCents(((quote['total'] as num) * 100).round())}'),
+                            subtitle: Text([
+                              'Vendedor: ${quote['seller_name']}',
+                              if (quote['customer_name'] != null) 'Cliente: ${quote['customer_name']}',
+                              '${quote['item_count']} ${quote['item_count'] == 1 ? 'item' : 'itens'}',
+                              _time(quote['quoted_at'] as String?),
+                            ].join(' · ')),
+                            onTap: controller.busy ? null : () => _load(quote['code'] as String),
+                          ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Fechar'))],
+        );
+      },
+    );
+  }
+}

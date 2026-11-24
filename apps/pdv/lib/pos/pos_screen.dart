@@ -341,6 +341,9 @@ class _SaleViewState extends State<_SaleView> {
         const SingleActivator(LogicalKeyboardKey.f2): _scanFocus.requestFocus,
         const SingleActivator(LogicalKeyboardKey.f4): () =>
             showCustomerDialog(context, controller),
+        const SingleActivator(LogicalKeyboardKey.f3): () {
+          if (!controller.quoteMode) showQuoteLookup(context, controller);
+        },
         const SingleActivator(LogicalKeyboardKey.f6): () =>
             showCashMovementDialog(context, controller, withdrawal: true),
         const SingleActivator(LogicalKeyboardKey.f7): () =>
@@ -433,7 +436,7 @@ class _ItemsPanel extends StatelessWidget {
           controller: scan,
           focusNode: scanFocus,
           autofocus: true,
-          enabled: !controller.paying && controller.seller != null,
+          enabled: !controller.paying && (!controller.quoteMode || controller.seller != null),
           decoration: const InputDecoration(
             labelText: 'Código de barras, código do produto ou nome (F2)',
             prefixIcon: Icon(Icons.qr_code_scanner),
@@ -648,6 +651,15 @@ class _TotalsPanel extends StatelessWidget {
                   ?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
+            if (cart.isEmpty && controller.findQuote != null)
+              OutlinedButton.icon(
+                key: const Key('quote-lookup-open'),
+                onPressed: () => showQuoteLookup(context, controller),
+                icon: const Icon(Icons.assignment),
+                label: const Text('Puxar orçamento (F3)'),
+              ),
+            if (cart.quoteCode != null) Text('Orçamento ${cart.quoteCode}', key: const Key('cart-quote')),
+            const SizedBox(height: 8),
             FilledButton.icon(
               key: const Key('pay'),
               onPressed: cart.isEmpty ? null : controller.startPayment,

@@ -1155,6 +1155,16 @@ class LocalDatabase {
     return byCode.isEmpty ? null : _saleProduct(byCode.first);
   }
 
+  /// Produto pelo identificador (para o orçamento e o recálculo do preço).
+  SaleProduct? saleProductById(String id) {
+    final rows = _db.select(
+      'SELECT p.*, COALESCE(s.quantity_milli, 0) AS stock_milli, NULL AS barcode_id, NULL AS barcode_fraction '
+      'FROM product p LEFT JOIN stock s ON s.product_id = p.id WHERE p.id = ? LIMIT 1',
+      [uuidBytes(id)],
+    );
+    return rows.isEmpty ? null : _saleProduct(rows.first);
+  }
+
   /// Busca por nome, princípio ativo ou fabricante; cada palavra pode ser o começo de uma palavra.
   List<SaleProduct> searchSaleProducts(String query, {int limit = 30}) {
     final words = query
