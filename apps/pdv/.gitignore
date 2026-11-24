@@ -46,3 +46,6 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# ONNX Runtime baixado por tool/fetch_onnxruntime.ps1 (não versionado)
+/third_party/

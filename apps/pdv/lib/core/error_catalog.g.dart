@@ -688,6 +688,30 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Chame o gerente da loja para liberar com o código e o PIN dele.',
     retryable: false,
   ),
+  'FA822': ErrorCatalogEntry(
+    code: 'FA822',
+    message: 'Quem cadastra o rosto precisa da permissão.',
+    action: 'Peça a quem tem "Cadastrar o rosto no PDV" (o gerente) para autorizar o cadastro.',
+    retryable: false,
+  ),
+  'FA823': ErrorCatalogEntry(
+    code: 'FA823',
+    message: 'Esta pessoa não tem rosto cadastrado.',
+    action: 'Atualize a tela: o rosto pode já ter sido apagado.',
+    retryable: false,
+  ),
+  'FA824': ErrorCatalogEntry(
+    code: 'FA824',
+    message: 'Este usuário não entra pela câmera.',
+    action: 'Use o PIN, ou peça ao gerente para mudar a forma de entrar em Usuários, na retaguarda.',
+    retryable: false,
+  ),
+  'FA825': ErrorCatalogEntry(
+    code: 'FA825',
+    message: 'Rosto não reconhecido.',
+    action: 'Olhe de frente para a câmera e tente de novo, ou entre de outra forma.',
+    retryable: false,
+  ),
   'FA870': ErrorCatalogEntry(
     code: 'FA870',
     message: 'Informe o motivo da devolução.',

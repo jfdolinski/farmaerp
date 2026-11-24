@@ -55,6 +55,15 @@ add_subdirectory("runner")
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
+# ONNX Runtime (modelos do rosto): cópia oficial do NuGet, baixada por tool/fetch_onnxruntime.ps1.
+# O plugin flutter_onnxruntime tentaria baixar do GitHub, que não está disponível.
+set(FARMAERP_ONNXRUNTIME_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/onnxruntime")
+if(NOT EXISTS "${FARMAERP_ONNXRUNTIME_DIR}/lib/onnxruntime.dll")
+  message(FATAL_ERROR "Falta o ONNX Runtime. Rode: powershell -ExecutionPolicy Bypass -File tool/fetch_onnxruntime.ps1")
+endif()
+set(USE_SYSTEM_ONNXRUNTIME ON CACHE BOOL "" FORCE)
+set(ONNXRUNTIME_ROOT_DIR "${FARMAERP_ONNXRUNTIME_DIR}" CACHE PATH "" FORCE)
+
 include(flutter/generated_plugins.cmake)
 
 
@@ -76,6 +85,9 @@ install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
 
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
+  COMPONENT Runtime)
+
+install(FILES "${FARMAERP_ONNXRUNTIME_DIR}/lib/onnxruntime.dll" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
 
 install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"

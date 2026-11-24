@@ -33,6 +33,7 @@ export class UsersController {
     return this.database.withContext(async (client) => {
       const { rows } = await client.query(
         `SELECT u.id, u.code, u.name, u.email, u.is_active, u.pdv_auth_mode,
+                fe.enrolled_at AS face_enrolled_at, fe.enrolled_by_name AS face_enrolled_by_name,
                 u.id = ANY (app.user_ids_with_access()) AS has_access,
                 COALESCE(
                   (SELECT array_agg(ub.branch_id)
@@ -49,6 +50,7 @@ export class UsersController {
                   '[]'
                 ) AS roles
            FROM v_user_account u
+           LEFT JOIN app.face_enrollments() fe ON fe.user_id = u.id
           ORDER BY u.is_active DESC, u.name`,
       );
       return rows;
@@ -169,6 +171,17 @@ export class UsersController {
     const hash = await hashPin(pin);
     await this.database.withContext((client) =>
       client.query('SELECT app.set_user_pin($1, $2, $3)', [userId, hash, request.ip ?? '']),
+    );
+    return { status: 'ok' };
+  }
+
+  /** Apaga o rosto e revoga o consentimento (a própria pessoa ou quem pode definir o PIN dela). */
+  @Post(':id/revoke-face')
+  @HttpCode(200)
+  async revokeFace(@Param('id') id: string, @Req() request: AuthenticatedRequest) {
+    const userId = requireUuid(id);
+    await this.database.withContext((client) =>
+      client.query('SELECT app.revoke_face($1, $2)', [userId, request.ip ?? '']),
     );
     return { status: 'ok' };
   }

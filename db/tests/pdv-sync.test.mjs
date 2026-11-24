@@ -128,7 +128,7 @@ describe('carga inicial', () => {
     expect(load.has('user', a.noBranchUser.id)).toBe(false);
     expect(load.has('user', b.admin.id)).toBe(false);
     for (const item of load.items.filter((entry) => entry.type === 'user')) {
-      expect(Object.keys(item.data).sort()).toEqual(['auth_mode', 'code', 'is_admin', 'limits', 'name', 'permissions', 'pin_hash', 'roles']);
+      expect(Object.keys(item.data).sort()).toEqual(['auth_mode', 'code', 'face', 'is_admin', 'limits', 'name', 'permissions', 'pin_hash', 'roles']);
     }
     // Nenhum segredo desce: só a lista de permissões cita "certificate", como nome de permissão.
     const withoutPermissions = load.items.map((item) => (item.type === 'user' ? { ...item.data, permissions: [] } : item));

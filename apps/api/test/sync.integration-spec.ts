@@ -375,6 +375,35 @@ describe('descida para o PDV contra o banco real', () => {
     }
   });
 
+  it('rosto: cadastro vindo do PDV, situação em Usuários e apagar', async () => {
+    const push = (items: Json[]) =>
+      request(server()).post('/terminals/sync/push').set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`)
+        .send({ items: items.map((item) => { sequence += 1; return { id: uuidV7(), sequence, ...item }; }) });
+    const operatorId = '019a0000-0000-7000-8000-000000000009';
+    const managerId = '019a0000-0000-7000-8000-00000000000d';
+    // Código de rosto de teste (512 bytes), não é rosto de ninguém.
+    const template = Buffer.alloc(512, 7).toString('base64');
+    const at = new Date().toISOString();
+    const enrollment = {
+      id: uuidV7(), user_id: operatorId, enrolled_by: managerId, enrolled_at: at, model: 'sface-2021dec-int8', template,
+      consent: { id: uuidV7(), term_version: 'biometria-v1', consented_at: at },
+    };
+    const results = (await push([{ kind: 'face_enrollment', payload: enrollment }]).expect(200)).body.results as Json[];
+    expect(results.map((r) => [r.status, r.code])).toEqual([['applied', null]]);
+    const users = (await admin('get', '/users').expect(200)).body as Json[];
+    const row = users.find((u) => u.id === operatorId)!;
+    expect(row).toMatchObject({ face_enrolled_by_name: 'Gerente Centro' });
+    expect(row.face_enrolled_at).toBeTruthy();
+    expect(JSON.stringify(users)).not.toContain(template.slice(0, 40));
+    const asOperator = request(server()).post(`/admin/users/${managerId}/revoke-face`).set('X-Forwarded-For', ip)
+      .set('Authorization', `Bearer ${sessions.get(OPERATOR_EMAIL)}`).send({});
+    expect((await asOperator).body).toMatchObject({ code: 'FA002' });
+    await admin('post', `/users/${operatorId}/revoke-face`).send({}).expect(200);
+    expect((await admin('post', `/users/${operatorId}/revoke-face`).send({}).expect(404)).body).toMatchObject({ code: 'FA823' });
+    const after = ((await admin('get', '/users').expect(200)).body as Json[]).find((u) => u.id === operatorId)!;
+    expect(after.face_enrolled_at).toBeNull();
+  });
+
   it('orçamento: sobe pela outbox, plaquinha, parâmetros da filial e vendedor na venda', async () => {
     const push = (items: Json[]) =>
       request(server()).post('/terminals/sync/push').set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`)
