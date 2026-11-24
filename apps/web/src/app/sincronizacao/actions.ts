@@ -24,3 +24,24 @@ export async function resolveConflict(_previous: ResolveState, form: FormData): 
   refresh();
   return { done: true };
 }
+
+export interface RetryState {
+  error?: ApiError;
+  outcome?: { status: "applied" | "conflict"; code?: string };
+}
+
+/** Aplica de novo o item do conflito; o banco decide se agora passa. */
+export async function retryConflict(_previous: RetryState, form: FormData): Promise<RetryState> {
+  const id = String(form.get("id") ?? "");
+  const result = await apiFetch<{ status: "applied" | "conflict"; code?: string }>(
+    `/admin/sync/conflicts/${encodeURIComponent(id)}/retry`,
+    { method: "POST" },
+  );
+  if (!result.ok) {
+    if (result.error.code === "FA402") redirect("/login?next=/sincronizacao&expired=1");
+    if (result.error.code === "FA403") redirect("/trocar-senha");
+    return { error: result.error };
+  }
+  refresh();
+  return { outcome: result.data };
+}

@@ -46,4 +46,18 @@ export class SyncConflictsController {
     );
     return { status: 'resolved' };
   }
+
+  /** Aplica de novo o item do conflito. Devolve "applied" ou "conflict" com o código da nova recusa. */
+  @Post(':id/retry')
+  @HttpCode(200)
+  async retry(@Param('id') id: string) {
+    const conflictId = requireUuid(id);
+    return this.database.withContext(async (client) => {
+      const { rows } = await client.query<{ result: { status: 'applied' | 'conflict'; code?: string } }>(
+        'SELECT app.retry_sync_conflict($1) AS result',
+        [conflictId],
+      );
+      return rows[0].result;
+    });
+  }
 }
