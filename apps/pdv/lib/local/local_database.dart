@@ -436,6 +436,10 @@ const _migrations = <String>[
   ALTER TABLE sale_payment ADD COLUMN return_id BLOB;
   CREATE INDEX sale_payment_return_idx ON sale_payment (return_id) WHERE return_id IS NOT NULL;
   ''',
+  // Forma de entrar no PDV de cada pessoa (qualquer uma, só PIN, só câmera ou só digital).
+  '''
+  ALTER TABLE app_user ADD COLUMN auth_mode TEXT NOT NULL DEFAULT 'pin';
+  ''',
 ];
 
 /// Pessoa que pode entrar no PDV, com o que veio da central.
@@ -448,6 +452,7 @@ class LocalUser {
     required this.permissions,
     required this.limits,
     this.pinHash,
+    this.authMode = 'pin',
   });
 
   final String id;
@@ -459,6 +464,9 @@ class LocalUser {
   /// Limites por tipo; vazio (null) é sem teto.
   final Map<String, num?> limits;
   final String? pinHash;
+
+  /// Forma de entrar no PDV: any, pin, face ou fingerprint.
+  final String authMode;
 
   bool can(String permission) => isAdmin || permissions.contains(permission);
 }
@@ -824,10 +832,10 @@ class LocalDatabase {
           _db.execute('DELETE FROM app_user WHERE id = ?', [id]);
         } else {
           _db.execute(
-            'INSERT INTO app_user (id, code, name, is_admin, roles, permissions, limits, pin_hash, seen_generation) '
-            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET code = excluded.code, '
+            'INSERT INTO app_user (id, code, name, is_admin, roles, permissions, limits, pin_hash, auth_mode, seen_generation) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET code = excluded.code, '
             'name = excluded.name, is_admin = excluded.is_admin, roles = excluded.roles, '
-            'permissions = excluded.permissions, limits = excluded.limits, pin_hash = excluded.pin_hash, '
+            'permissions = excluded.permissions, limits = excluded.limits, pin_hash = excluded.pin_hash, auth_mode = excluded.auth_mode, '
             'seen_generation = excluded.seen_generation',
             [
               id,
@@ -838,6 +846,7 @@ class LocalDatabase {
               jsonEncode(data['permissions'] ?? const []),
               jsonEncode(data['limits'] ?? const {}),
               data['pin_hash'],
+              const {'any', 'pin', 'face', 'fingerprint'}.contains(data['auth_mode']) ? data['auth_mode'] : 'pin',
               generation,
             ],
           );
@@ -1166,6 +1175,7 @@ class LocalDatabase {
     permissions: (jsonDecode(row['permissions'] as String) as List).cast<String>(),
     limits: (jsonDecode(row['limits'] as String) as Map).map((key, value) => MapEntry(key as String, value as num?)),
     pinHash: row['pin_hash'] as String?,
+    authMode: row['auth_mode'] as String? ?? 'pin',
   );
 
   /// Tentativas erradas e bloqueio do PIN desta pessoa neste terminal.

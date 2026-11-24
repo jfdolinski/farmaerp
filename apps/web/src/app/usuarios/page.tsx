@@ -8,12 +8,14 @@ import {
   CreateUserForm,
   EditUser,
   RoleOption,
+  PdvAuthMode,
   PdvPin,
   TemporaryPassword,
   UserBranches,
   UserRoles,
   UserRow,
 } from "./ui";
+import { AUTH_MODE_LABELS } from "../entradas-pdv/labels";
 import styles from "../terminais/page.module.css";
 
 export const metadata: Metadata = { title: "Usuários · FarmaERP" };
@@ -85,6 +87,7 @@ async function UsersContent() {
                     <td>
                       <strong>{row.name}</strong>
                       <small>{row.email ?? "Sem e-mail"}</small>
+                      <small>PDV: {AUTH_MODE_LABELS[row.pdv_auth_mode] ?? row.pdv_auth_mode}</small>
                     </td>
                     <td>
                       {row.roles.length === 0 && "Nenhum"}
@@ -124,6 +127,7 @@ async function UsersContent() {
                       )}
                       {canReset && row.is_active && <TemporaryPassword user={row} />}
                       {canReset && row.is_active && <PdvPin user={row} />}
+                      {canReset && row.is_active && <PdvAuthMode user={row} />}
                     </td>
                   </tr>
                 ))}

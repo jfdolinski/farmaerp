@@ -332,6 +332,12 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - Cinco PINs errados seguidos bloqueiam a pessoa neste terminal por 5 minutos (FA967). Código desconhecido e PIN errado dão a mesma mensagem.
   - A regra é a mesma da senha temporária: só age sobre quem tem perfis que a pessoa cobre. Um Gerente de loja não define o PIN de quem tem perfil na rede inteira.
 - **PINs de desenvolvimento (seed):** Administrador 2580, Operador Centro 2468, Gerente Centro 1357.
+- **Autenticação (Etapa 5):** toda entrada e toda liberação no PDV passam por um serviço único (`PosAuth`).
+  - **Forma de entrar por pessoa:** qualquer uma, só PIN, só câmera ou só digital (`user_account.pdv_auth_mode`). Quem pode definir o PIN define a forma em `/usuarios`, em "Entrada no PDV" (`POST /admin/users/:id/auth-mode`, FA819). Ela desce para as filiais da pessoa. Só muda por `app.set_user_auth_mode`, que registra em `auth_event`.
+  - Quem não entra com PIN recebe FA820 ao digitar o PIN.
+  - **Liberação do gerente:** quem é só câmera ou só digital e não tem o aparelho no terminal (ou ele falhou) entra com a liberação de quem tem "Liberar a entrada no PDV" (`users.release_login`, perfil Gerente). O gerente digita o código e o PIN dele. Precisa ser outra pessoa (FA821). A câmera chega no PR 5B; a digital, depois da escolha do leitor.
+  - **Registro:** cada entrada, falha, bloqueio por tentativas, liberação e identificação de vendedor sobe pela outbox (`auth_event`) para `pdv_auth_event`, sem PIN e sem dados pessoais. Entrada por uma forma que não é a da pessoa, ou liberada por quem não tinha a permissão, vale (já aconteceu, talvez sem internet) e fica marcada.
+  - **Retaguarda:** `/entradas-pdv` lista por período e filial, com filtro "só as marcadas". Quem vê precisa de "Ver usuários".
 - **Turno:** abertura com o fundo de troco, gravada no banco local e na outbox na mesma transação (`cash_session_open`).
 - **Venda:**
   - leitura do código de barras (com o fracionamento do código), do código do produto ou busca por nome, princípio ativo e fabricante, sem acento (FTS5 do SQLite);

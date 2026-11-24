@@ -49,6 +49,7 @@ export function AppHeader({ user }: { user: CurrentUser }) {
         {can(user, "sales.view") && <Link href="/devolucoes">Devoluções</Link>}
         {can(user, "controlled.view") && <Link href="/controlados">Controlados</Link>}
         {can(user, "sync.view") && <Link href="/sincronizacao">Sincronização</Link>}
+        {can(user, "users.view") && <Link href="/entradas-pdv">Entradas no PDV</Link>}
       </nav>
       <div className={styles.nav}>
         <span>{user.name}</span>

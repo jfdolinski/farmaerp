@@ -130,7 +130,7 @@ class PosController extends ChangeNotifier {
     try {
       final LocalUser user;
       if (database.sellerPinRequired) {
-        user = await auth.verify(code, pin);
+        user = await auth.verify(code, pin, purpose: AuthPurpose.seller);
       } else {
         final number = int.tryParse(code.trim());
         final found = number == null ? null : database.userByCode(number);
@@ -195,9 +195,35 @@ class PosController extends ChangeNotifier {
     info = null;
     notifyListeners();
     try {
-      operator = await auth.verify(code, pin, permission: 'sales.sell');
+      operator = await auth.verify(code, pin, permission: 'sales.sell', purpose: AuthPurpose.login);
       session = database.openCashSession;
       logger?.info('Operador entrou no PDV', fields: {'user_code': operator!.code});
+    } on PosException catch (error) {
+      notice = ErrorDisplay.fromCode(error.code);
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  /// Quem digitou este código não tem como entrar sozinho aqui (só câmera ou só digital, sem o
+  /// aparelho): a tela pede a liberação do gerente.
+  bool loginNeedsRelease(String code) {
+    final user = auth.userByCodeText(code);
+    return user != null && auth.needsRelease(user);
+  }
+
+  /// Entrada liberada pelo gerente (código e PIN dele), com registro dos dois.
+  Future<void> releaseLogin(String code, String managerCode, String managerPin) async {
+    if (busy) return;
+    busy = true;
+    notice = null;
+    info = null;
+    notifyListeners();
+    try {
+      operator = await auth.release(code, managerCode, managerPin, permission: 'sales.sell');
+      session = database.openCashSession;
+      logger?.info('Operador entrou no PDV com a liberação do gerente', fields: {'user_code': operator!.code});
     } on PosException catch (error) {
       notice = ErrorDisplay.fromCode(error.code);
     } finally {

@@ -7,11 +7,13 @@ import {
   createUser,
   issueTemporaryPassword,
   removeRole,
+  setPdvAuthMode,
   setPdvPin,
   setUserBranches,
   updateUser,
   UserFormState,
 } from "./actions";
+import { AUTH_MODE_LABELS } from "../entradas-pdv/labels";
 import styles from "../terminais/page.module.css";
 
 export interface UserRow {
@@ -21,6 +23,7 @@ export interface UserRow {
   email: string | null;
   is_active: boolean;
   has_access: boolean;
+  pdv_auth_mode: string;
   branch_ids: string[];
   roles: { id: string; role_id: string; name: string; branch_id: string | null }[];
 }
@@ -279,6 +282,38 @@ export function PdvPin({ user }: { user: UserRow }) {
         </button>
         <ErrorNotice error={state.error} />
         {state.done && <p role="status">PIN salvo. Ele chega aos PDVs da filial na próxima sincronização.</p>}
+      </form>
+    </details>
+  );
+}
+
+/** Forma de entrar no PDV: qualquer uma, só PIN, só câmera ou só digital. Mesma regra do PIN. */
+export function PdvAuthMode({ user }: { user: UserRow }) {
+  const [state, action, pending] = useActionState<UserFormState, FormData>(setPdvAuthMode, {});
+  return (
+    <details className={styles.reason}>
+      <summary>Entrada no PDV</summary>
+      <form action={action} className={styles.rowForm}>
+        <input type="hidden" name="id" value={user.id} />
+        <label>
+          Forma de entrar
+          <select name="mode" defaultValue={user.pdv_auth_mode}>
+            {Object.entries(AUTH_MODE_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className={styles.hint}>
+          A câmera chega na próxima entrega e a digital depois da escolha do leitor. Até lá, quem é só câmera ou só digital
+          entra com a liberação do gerente, que fica registrada em Entradas no PDV.
+        </p>
+        <button type="submit" disabled={pending}>
+          Salvar
+        </button>
+        <ErrorNotice error={state.error} />
+        {state.done && <p role="status">Salvo. Chega aos PDVs da filial na próxima sincronização.</p>}
       </form>
     </details>
   );
