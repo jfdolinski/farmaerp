@@ -262,7 +262,7 @@ void main() {
       await tester.tap(find.byKey(const Key('seller-confirm')));
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       await tester.pumpAndSettle();
-      expect(find.text('Vendedor: Balconista Ana'), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(const Key('seller-name'))).data, 'Vendedor: Balconista Ana');
       await tester.enterText(find.byKey(const Key('scan-field')), '7890000000017');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();

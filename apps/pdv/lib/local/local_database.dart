@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import '../core/local_logger.dart';
 import '../core/secret_store.dart';
+import '../core/text_fold.dart';
 
 const _keyName = 'local_database_key';
 
@@ -592,6 +593,13 @@ class PushResult {
 class LocalDatabase {
   LocalDatabase._(this._db) {
     _db.execute('PRAGMA foreign_keys = ON');
+    // Texto sem acento e em minúsculas, para a busca com "%" entre as palavras.
+    _db.createFunction(
+      functionName: 'pdv_fold',
+      function: (args) => foldText(args[0] as String?),
+      argumentCount: const AllowedArgumentCount(1),
+      deterministic: true,
+    );
     _migrate();
   }
 
@@ -1165,23 +1173,72 @@ class LocalDatabase {
     return rows.isEmpty ? null : _saleProduct(rows.first);
   }
 
-  /// Busca por nome, princípio ativo ou fabricante; cada palavra pode ser o começo de uma palavra.
+  /// Busca por nome, princípio ativo ou fabricante, sem acento e sem diferença de maiúsculas.
+  /// O espaço vale como "%": "dip 500" acha "Dipirona Sódica 500 mg", e pedaço do meio da palavra
+  /// também vale ("pirona"). Primeiro vêm os que começam as palavras (índice de texto, pelo nome),
+  /// depois os que só contêm os pedaços, na ordem digitada.
   List<SaleProduct> searchSaleProducts(String query, {int limit = 30}) {
-    final words = query
-        .split(RegExp(r'\s+'))
-        .map((word) => word.replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), ''))
-        .where((word) => word.isNotEmpty)
-        .take(6)
-        .toList();
+    final words = foldText(query).split(' ').where((word) => word.isNotEmpty).take(6).toList();
     if (words.isEmpty) return const [];
-    final match = words.map((word) => '"$word"*').join(' ');
-    final rows = _db.select(
-      'SELECT p.*, COALESCE(s.quantity_milli, 0) AS stock_milli, NULL AS barcode_id, NULL AS barcode_fraction '
-      'FROM product_search f JOIN product p ON p.id = f.product_id LEFT JOIN stock s ON s.product_id = p.id '
+    const columns = 'p.*, COALESCE(s.quantity_milli, 0) AS stock_milli, NULL AS barcode_id, NULL AS barcode_fraction';
+    final byWords = _db.select(
+      'SELECT $columns FROM product_search f JOIN product p ON p.id = f.product_id LEFT JOIN stock s ON s.product_id = p.id '
       'WHERE product_search MATCH ? ORDER BY bm25(product_search, 0, 10, 4, 2), p.name LIMIT ?',
-      [match, limit],
+      [words.map((word) => '"$word"*').join(' '), limit],
     );
-    return rows.map(_saleProduct).toList();
+    final found = byWords.map(_saleProduct).toList();
+    if (found.length >= limit) return found;
+    final seen = {for (final product in found) product.id};
+    final pattern = '%${words.join('%')}%';
+    final byPieces = _db.select(
+      'SELECT $columns FROM product p LEFT JOIN stock s ON s.product_id = p.id '
+      "WHERE pdv_fold(p.name || ' ' || COALESCE(p.active_ingredient, '') || ' ' || COALESCE(p.manufacturer, '')) LIKE ? "
+      'ORDER BY pdv_fold(p.name) LIKE ? DESC, p.name LIMIT ?',
+      [pattern, pattern, limit * 2],
+    );
+    for (final row in byPieces) {
+      final product = _saleProduct(row);
+      if (seen.add(product.id)) found.add(product);
+      if (found.length >= limit) break;
+    }
+    return found;
+  }
+
+  /// Dados de cadastro do produto que o terminal tem, para a consulta no caixa.
+  Map<String, Object?>? productDetails(String id) {
+    final rows = _db.select(
+      'SELECT p.*, s.quantity_milli AS stock_milli FROM product p LEFT JOIN stock s ON s.product_id = p.id WHERE p.id = ?',
+      [uuidBytes(id)],
+    );
+    if (rows.isEmpty) return null;
+    final row = rows.first;
+    return {
+      'code': row['code'],
+      'name': row['name'],
+      'active_ingredient': row['active_ingredient'],
+      'manufacturer': row['manufacturer'],
+      'controlled_class': row['controlled_class'],
+      'ms_registration': row['ms_registration'],
+      'ncm': row['ncm'],
+      'cest': row['cest'],
+      'status': row['status'],
+      'price_cents': row['price_cents'],
+      'fraction_milli': row['fraction_milli'],
+      'batch_required': row['batch_required'] == 1,
+      'max_discount_bp': row['max_discount_bp'],
+      'max_discount_until': row['max_discount_until'],
+      'stock_milli': row['stock_milli'],
+      'barcodes': [
+        for (final barcode in _db.select(
+          'SELECT code, is_primary, fraction_milli FROM product_barcode WHERE product_id = ? ORDER BY is_primary DESC, code',
+          [uuidBytes(id)],
+        ))
+          {'code': barcode['code'], 'primary': barcode['is_primary'] == 1, 'fraction_milli': barcode['fraction_milli']},
+      ],
+      'batches': [
+        for (final batch in batchesOf(id)) {'number': batch.number, 'expires_on': batch.expiresOn, 'quantity_milli': batch.quantityMilli},
+      ],
+    };
   }
 
   /// Lotes do produto na cópia local, o que vence primeiro antes (FEFO).

@@ -1,14 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/error_display.dart';
 import 'cart.dart';
 import 'cash_dialogs.dart';
+import 'focus_kit.dart';
 import 'money.dart';
 import 'pos_controller.dart';
 import 'controlled_dialog.dart';
 import 'pos_dialogs.dart';
+import 'product_info.dart';
 import 'quote_panels.dart';
+import 'status_bar.dart';
 
 /// Caixa: entrada, abertura do turno e venda. Tudo funciona sem internet.
 class PosScreen extends StatelessWidget {
@@ -16,12 +21,16 @@ class PosScreen extends StatelessWidget {
     super.key,
     required this.controller,
     this.onPrinterSettings,
+    this.onDisplaySettings,
     this.online = true,
+    this.appVersion,
   });
 
   final PosController controller;
   final VoidCallback? onPrinterSettings;
+  final VoidCallback? onDisplaySettings;
   final bool online;
+  final String? appVersion;
 
   @override
   Widget build(BuildContext context) {
@@ -39,15 +48,12 @@ class PosScreen extends StatelessWidget {
                   : 'Caixa · ${operator.name}',
             ),
             actions: [
-              if (!online)
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: Center(
-                    child: Text(
-                      'Sem internet: as vendas sobem quando voltar',
-                      key: Key('pos-offline'),
-                    ),
-                  ),
+              if (onDisplaySettings != null)
+                IconButton(
+                  key: const Key('display-settings-open'),
+                  tooltip: 'Fonte do PDV',
+                  icon: const Icon(Icons.text_fields),
+                  onPressed: onDisplaySettings,
                 ),
               if (onPrinterSettings != null)
                 IconButton(
@@ -88,6 +94,7 @@ class PosScreen extends StatelessWidget {
             (_, null) => _OpenShiftView(controller: controller),
             _ => _SaleView(controller: controller),
           },
+          bottomNavigationBar: PosStatusBar(controller: controller, online: online, appVersion: appVersion),
         );
       },
     );
@@ -141,12 +148,14 @@ class _LoginView extends StatefulWidget {
 class _LoginViewState extends State<_LoginView> {
   final _code = TextEditingController();
   final _pin = TextEditingController();
+  final _codeFocus = FocusNode();
   final _pinFocus = FocusNode();
 
   @override
   void dispose() {
     _code.dispose();
     _pin.dispose();
+    _codeFocus.dispose();
     _pinFocus.dispose();
     super.dispose();
   }
@@ -154,6 +163,10 @@ class _LoginViewState extends State<_LoginView> {
   Future<void> _submit() async {
     await widget.controller.login(_code.text, _pin.text);
     _pin.clear();
+    // Não entrou: volta para o PIN (ou para o código, se ele estiver vazio).
+    if (mounted && widget.controller.operator == null) {
+      (_code.text.trim().isEmpty ? _codeFocus : _pinFocus).requestFocus();
+    }
   }
 
   @override
@@ -184,6 +197,7 @@ class _LoginViewState extends State<_LoginView> {
               TextField(
                 key: const Key('login-code'),
                 controller: _code,
+                focusNode: _codeFocus,
                 autofocus: true,
                 decoration: const InputDecoration(labelText: 'Seu código'),
                 keyboardType: TextInputType.number,
@@ -275,16 +289,14 @@ class _OpenShiftViewState extends State<_OpenShiftView> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
-              TextField(
+              NumberField(
                 key: const Key('opening-float'),
                 controller: _amount,
                 autofocus: true,
+                decimal: true,
                 decoration: InputDecoration(
                   labelText: 'Fundo de troco (R\$)',
                   errorText: _error,
-                ),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
                 ),
                 onSubmitted: (_) => _open(),
               ),
@@ -314,18 +326,127 @@ class _SaleView extends StatefulWidget {
 class _SaleViewState extends State<_SaleView> {
   final _scan = TextEditingController();
   final _scanFocus = FocusNode();
+  final _sellerFocus = FocusNode();
+  final _paymentFocus = FocusNode();
+  final _zeroStockFocus = FocusNode();
+  final _controlledFocus = FocusNode();
+  final _shell = FocusNode(skipTraversal: true);
+  Timer? _typing;
+  int _highlight = -1;
+  String? _target;
+
+  PosController get controller => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    controller.addListener(_onControllerChange);
+    FocusManager.instance.addListener(_onFocusChange);
+    _target = _currentTarget();
+    _focusTarget();
+  }
 
   @override
   void dispose() {
+    controller.removeListener(_onControllerChange);
+    FocusManager.instance.removeListener(_onFocusChange);
+    _typing?.cancel();
+    for (final node in [_scanFocus, _sellerFocus, _paymentFocus, _zeroStockFocus, _controlledFocus, _shell]) {
+      node.dispose();
+    }
     _scan.dispose();
-    _scanFocus.dispose();
     super.dispose();
   }
 
+  /// Campo obrigatório do momento: painel aberto, pagamento, vendedor ou a leitura.
+  String _currentTarget() {
+    if (controller.paying) return 'payment';
+    if (controller.pendingZeroStock != null) return 'zero-stock';
+    if (controller.pendingControlled != null) return 'controlled';
+    if (controller.seller == null) return 'seller';
+    return 'scan';
+  }
+
+  FocusNode _nodeFor(String target) => switch (target) {
+    'payment' => _paymentFocus,
+    'zero-stock' => _zeroStockFocus,
+    'controlled' => _controlledFocus,
+    'seller' => _sellerFocus,
+    _ => _scanFocus,
+  };
+
+  /// Põe o cursor no campo da vez (depois do quadro, quando ele já existe na tela).
+  void _focusTarget() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final route = ModalRoute.of(context);
+      if (route != null && !route.isCurrent) return;
+      final node = _nodeFor(_currentTarget());
+      if (node.context != null && node.canRequestFocus) node.requestFocus();
+    });
+  }
+
+  void _onControllerChange() {
+    final target = _currentTarget();
+    if (target != _target) {
+      _target = target;
+      _focusTarget();
+    }
+  }
+
+  /// Ninguém com o cursor (janela fechou, campo sumiu da tela): volta para o campo da vez.
+  void _onFocusChange() {
+    if (!mounted) return;
+    final focus = FocusManager.instance.primaryFocus;
+    if (focus == null || focus == _shell || focus is FocusScopeNode || focus.context == null) _focusTarget();
+  }
+
+  /// Abre a janela e, ao fechar, volta para o campo da vez.
+  void _dialog(Future<void> Function() open) {
+    open().whenComplete(_focusTarget);
+  }
+
+  void _onTyping(String text) {
+    _typing?.cancel();
+    final value = text.trim();
+    // Código de barras, código do produto ou cupom do orçamento: sem sugestões.
+    if (value.isEmpty || RegExp(r'^\d+$').hasMatch(value) || RegExp(r'^[Oo]\d+-').hasMatch(value)) {
+      controller.clearResults();
+      return;
+    }
+    if (value.replaceAll(RegExp(r'\s'), '').length < 3) return;
+    _typing = Timer(const Duration(milliseconds: 200), () {
+      if (!mounted || _scan.text.trim() != value) return;
+      controller.suggest(value);
+      setState(() => _highlight = controller.results.isEmpty ? -1 : 0);
+    });
+  }
+
+  void _moveHighlight(int step) {
+    final count = controller.results.length;
+    if (count == 0) return;
+    setState(() => _highlight = (_highlight + step).clamp(0, count - 1));
+  }
+
+  void _closeSuggestions() {
+    setState(() => _highlight = -1);
+    controller.clearResults();
+    controller.clearNotice();
+  }
+
   void _submitScan() {
-    widget.controller.scan(_scan.text);
+    _typing?.cancel();
+    final results = controller.results;
+    final value = _scan.text.trim();
+    final typedName = value.isNotEmpty && !RegExp(r'^\d+$').hasMatch(value) && !RegExp(r'^[Oo]\d+-').hasMatch(value);
+    if (typedName && _highlight >= 0 && _highlight < results.length) {
+      controller.add(results[_highlight]);
+    } else {
+      controller.scan(_scan.text);
+    }
     _scan.clear();
-    _scanFocus.requestFocus();
+    setState(() => _highlight = controller.results.isEmpty ? -1 : 0);
+    _focusTarget();
   }
 
   @override
@@ -340,19 +461,19 @@ class _SaleViewState extends State<_SaleView> {
             : controller.clearNotice,
         const SingleActivator(LogicalKeyboardKey.f2): _scanFocus.requestFocus,
         const SingleActivator(LogicalKeyboardKey.f4): () =>
-            showCustomerDialog(context, controller),
+            _dialog(() => showCustomerDialog(context, controller)),
         const SingleActivator(LogicalKeyboardKey.f3): () {
-          if (!controller.quoteMode) showQuoteLookup(context, controller);
+          if (!controller.quoteMode) _dialog(() => showQuoteLookup(context, controller));
         },
         const SingleActivator(LogicalKeyboardKey.f6): () =>
-            showCashMovementDialog(context, controller, withdrawal: true),
+            _dialog(() => showCashMovementDialog(context, controller, withdrawal: true)),
         const SingleActivator(LogicalKeyboardKey.f7): () =>
-            showCashMovementDialog(context, controller, withdrawal: false),
+            _dialog(() => showCashMovementDialog(context, controller, withdrawal: false)),
         const SingleActivator(LogicalKeyboardKey.f8): () =>
-            showCloseShiftDialog(context, controller),
+            _dialog(() => showCloseShiftDialog(context, controller)),
       },
       child: Focus(
-        autofocus: true,
+        focusNode: _shell,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: LayoutBuilder(
@@ -362,13 +483,21 @@ class _SaleViewState extends State<_SaleView> {
                 controller: controller,
                 scan: _scan,
                 scanFocus: _scanFocus,
+                sellerFocus: _sellerFocus,
+                zeroStockFocus: _zeroStockFocus,
+                controlledFocus: _controlledFocus,
+                highlight: _highlight,
                 onScan: _submitScan,
+                onTyping: _onTyping,
+                onMove: _moveHighlight,
+                onClose: _closeSuggestions,
+                dialog: _dialog,
               );
               final side = controller.quoteMode
-                  ? QuotePanel(controller: controller)
+                  ? QuotePanel(controller: controller, dialog: _dialog)
                   : controller.paying
-                  ? _PaymentPanel(controller: controller)
-                  : _TotalsPanel(controller: controller, cart: cart);
+                  ? _PaymentPanel(controller: controller, amountFocus: _paymentFocus)
+                  : _TotalsPanel(controller: controller, cart: cart, dialog: _dialog);
               if (wide) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -399,13 +528,29 @@ class _ItemsPanel extends StatelessWidget {
     required this.controller,
     required this.scan,
     required this.scanFocus,
+    required this.sellerFocus,
+    required this.zeroStockFocus,
+    required this.controlledFocus,
+    required this.highlight,
     required this.onScan,
+    required this.onTyping,
+    required this.onMove,
+    required this.onClose,
+    required this.dialog,
   });
 
   final PosController controller;
   final TextEditingController scan;
   final FocusNode scanFocus;
+  final FocusNode sellerFocus;
+  final FocusNode zeroStockFocus;
+  final FocusNode controlledFocus;
+  final int highlight;
   final VoidCallback onScan;
+  final ValueChanged<String> onTyping;
+  final ValueChanged<int> onMove;
+  final VoidCallback onClose;
+  final void Function(Future<void> Function() open) dialog;
 
   @override
   Widget build(BuildContext context) {
@@ -423,25 +568,31 @@ class _ItemsPanel extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
-        SellerPanel(controller: controller, onIdentified: scanFocus.requestFocus),
+        SellerPanel(controller: controller, focusNode: sellerFocus, onIdentified: scanFocus.requestFocus),
         if (controller.pendingControlled != null)
-          ControlledPanel(controller: controller, pending: controller.pendingControlled!),
+          ControlledPanel(controller: controller, pending: controller.pendingControlled!, focusNode: controlledFocus),
         if (controller.pendingZeroStock != null)
           ZeroStockPanel(
             controller: controller,
             pending: controller.pendingZeroStock!,
+            focusNode: zeroStockFocus,
           ),
-        TextField(
-          key: const Key('scan-field'),
-          controller: scan,
-          focusNode: scanFocus,
-          autofocus: true,
-          enabled: !controller.paying && (!controller.quoteMode || controller.seller != null),
-          decoration: const InputDecoration(
-            labelText: 'Código de barras, código do produto ou nome (F2)',
-            prefixIcon: Icon(Icons.qr_code_scanner),
+        SuggestionKeys(
+          onMove: onMove,
+          onClose: onClose,
+          child: TextField(
+            key: const Key('scan-field'),
+            controller: scan,
+            focusNode: scanFocus,
+            enabled: !controller.paying && (!controller.quoteMode || controller.seller != null),
+            decoration: const InputDecoration(
+              labelText: 'Código de barras, código do produto ou nome (F2)',
+              helperText: 'Digite partes do nome separadas por espaço: "dip 500" acha Dipirona Sódica 500 mg.',
+              prefixIcon: Icon(Icons.qr_code_scanner),
+            ),
+            onChanged: onTyping,
+            onSubmitted: (_) => onScan(),
           ),
-          onSubmitted: (_) => onScan(),
         ),
         if (controller.results.isNotEmpty)
           ConstrainedBox(
@@ -450,9 +601,11 @@ class _ItemsPanel extends StatelessWidget {
               child: ListView(
                 shrinkWrap: true,
                 children: [
-                  for (final product in controller.results)
+                  for (final (index, product) in controller.results.indexed)
                     ListTile(
                       key: Key('result-${product.code}'),
+                      selected: index == highlight,
+                      selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
                       title: Text(product.name),
                       subtitle: Text(
                         [
@@ -473,16 +626,23 @@ class _ItemsPanel extends StatelessWidget {
                                 : formatCents(product.priceCents!),
                           ),
                           IconButton(
+                            key: Key('info-result-${product.code}'),
+                            tooltip: 'Dados do produto',
+                            icon: const Icon(Icons.info_outline),
+                            onPressed: () => dialog(() => showProductInfo(context, controller, product)),
+                          ),
+                          IconButton(
                             key: Key('network-result-${product.code}'),
                             tooltip: 'Estoque nas filiais',
                             icon: const Icon(Icons.store),
                             onPressed: () =>
-                                showNetworkStock(context, controller, product),
+                                dialog(() => showNetworkStock(context, controller, product)),
                           ),
                         ],
                       ),
                       onTap: () {
                         controller.add(product);
+                        scan.clear();
                         scanFocus.requestFocus();
                       },
                     ),
@@ -549,21 +709,27 @@ class _ItemsPanel extends StatelessWidget {
                             icon: const Icon(Icons.percent),
                             onPressed: controller.paying
                                 ? null
-                                : () => showDiscountDialog(
+                                : () => dialog(() => showDiscountDialog(
                                     context,
                                     controller,
                                     line,
-                                  ),
+                                  )),
+                          ),
+                          IconButton(
+                            key: Key('info-$index'),
+                            tooltip: 'Dados do produto',
+                            icon: const Icon(Icons.info_outline),
+                            onPressed: () => dialog(() => showProductInfo(context, controller, line.product)),
                           ),
                           IconButton(
                             key: Key('stock-$index'),
                             tooltip: 'Estoque nas filiais',
                             icon: const Icon(Icons.store),
-                            onPressed: () => showNetworkStock(
+                            onPressed: () => dialog(() => showNetworkStock(
                               context,
                               controller,
                               line.product,
-                            ),
+                            )),
                           ),
                           SizedBox(
                             width: 96,
@@ -592,10 +758,11 @@ class _ItemsPanel extends StatelessWidget {
 }
 
 class _TotalsPanel extends StatelessWidget {
-  const _TotalsPanel({required this.controller, required this.cart});
+  const _TotalsPanel({required this.controller, required this.cart, required this.dialog});
 
   final PosController controller;
   final Cart cart;
+  final void Function(Future<void> Function() open) dialog;
 
   @override
   Widget build(BuildContext context) {
@@ -612,7 +779,7 @@ class _TotalsPanel extends StatelessWidget {
                 key: const Key('identify-customer'),
                 onPressed: controller.customers == null
                     ? null
-                    : () => showCustomerDialog(context, controller),
+                    : () => dialog(() => showCustomerDialog(context, controller)),
                 icon: const Icon(Icons.person_search),
                 label: const Text('Identificar cliente (F4)'),
               )
@@ -654,7 +821,7 @@ class _TotalsPanel extends StatelessWidget {
             if (cart.isEmpty && controller.findQuote != null)
               OutlinedButton.icon(
                 key: const Key('quote-lookup-open'),
-                onPressed: () => showQuoteLookup(context, controller),
+                onPressed: () => dialog(() => showQuoteLookup(context, controller)),
                 icon: const Icon(Icons.assignment),
                 label: const Text('Puxar orçamento (F3)'),
               ),
@@ -692,9 +859,10 @@ class _TotalsPanel extends StatelessWidget {
 }
 
 class _PaymentPanel extends StatefulWidget {
-  const _PaymentPanel({required this.controller});
+  const _PaymentPanel({required this.controller, required this.amountFocus});
 
   final PosController controller;
+  final FocusNode amountFocus;
 
   @override
   State<_PaymentPanel> createState() => _PaymentPanelState();
@@ -762,6 +930,16 @@ class _PaymentPanelState extends State<_PaymentPanel> {
       _authorization.clear();
       _fillRemaining();
     });
+    _refocusAmount();
+  }
+
+  /// Volta para o valor, com o que falta selecionado.
+  void _refocusAmount() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.amountFocus.requestFocus();
+      selectAllText(_amount);
+    });
   }
 
   @override
@@ -802,17 +980,16 @@ class _PaymentPanelState extends State<_PaymentPanel> {
               ],
             ),
             const SizedBox(height: 12),
-            TextField(
+            NumberField(
               key: const Key('payment-amount'),
               controller: _amount,
+              focusNode: widget.amountFocus,
+              decimal: true,
               decoration: InputDecoration(
                 labelText: _method == PaymentMethod.cash
                     ? 'Valor recebido (R\$)'
                     : 'Valor (R\$)',
                 errorText: _error,
-              ),
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
               ),
               onSubmitted: (_) => _add(),
             ),

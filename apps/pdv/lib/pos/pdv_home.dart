@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../local/local_database.dart';
 import '../terminal/terminal_controller.dart';
 import '../terminal/terminal_screen.dart';
+import 'display_settings.dart';
 import 'pos_controller.dart';
 import 'pos_screen.dart';
 import 'receipt.dart';
@@ -29,11 +30,15 @@ class PdvHome extends StatelessWidget {
     required this.pos,
     required this.database,
     this.listPrinters = windowsPrinters,
+    this.display,
+    this.appVersion,
   });
 
   final TerminalController terminal;
   final PosController pos;
   final LocalDatabase database;
+  final DisplaySettings? display;
+  final String? appVersion;
   final List<String> Function() listPrinters;
 
   @override
@@ -47,6 +52,8 @@ class PdvHome extends StatelessWidget {
         return PosScreen(
           controller: pos,
           online: terminal.online,
+          appVersion: appVersion,
+          onDisplaySettings: display == null ? null : () => showDisplaySettings(context, display!),
           onPrinterSettings: () async {
             final choice = await choosePrinter(context, printers: listPrinters(), current: database.setting(printerSetting));
             if (choice != null) database.setSetting(printerSetting, choice);

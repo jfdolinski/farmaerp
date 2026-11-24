@@ -241,6 +241,19 @@ class PosController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Sugestões enquanto o operador digita o nome (autocompletar). Sem achar nada, só limpa a lista.
+  void suggest(String text) {
+    final next = database.searchSaleProducts(text);
+    results = next;
+    notifyListeners();
+  }
+
+  void clearResults() {
+    if (results.isEmpty) return;
+    results = const [];
+    notifyListeners();
+  }
+
   void add(SaleProduct product, {int quantityMilli = 1000}) {
     _applyFixedSeller();
     if (cart.seller == null) return _fail('FA881');

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -6,6 +8,7 @@ import '../local/local_database.dart';
 import '../terminal/terminal_api.dart';
 import 'cart.dart';
 import 'discount.dart';
+import 'focus_kit.dart';
 import 'money.dart';
 import 'pos_controller.dart';
 
@@ -29,7 +32,14 @@ class _DiscountDialogState extends State<_DiscountDialog> {
   final _code = TextEditingController();
   final _pin = TextEditingController();
   final _reason = TextEditingController();
+  final _valueFocus = FocusNode();
+  final _codeFocus = FocusNode();
+  final _pinFocus = FocusNode();
   bool _percent = true;
+
+  void _focus(FocusNode node) => WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (mounted) node.requestFocus();
+  });
   bool _needsRelease = false;
   String? _error;
 
@@ -39,6 +49,9 @@ class _DiscountDialogState extends State<_DiscountDialog> {
     _code.dispose();
     _pin.dispose();
     _reason.dispose();
+    _valueFocus.dispose();
+    _codeFocus.dispose();
+    _pinFocus.dispose();
     super.dispose();
   }
 
@@ -55,12 +68,14 @@ class _DiscountDialogState extends State<_DiscountDialog> {
     final cents = _cents;
     if (cents == null) {
       setState(() => _error = _percent ? 'Digite o percentual, por exemplo 5 ou 7,5.' : 'Digite o valor, por exemplo 1,50.');
+      _focus(_valueFocus);
       return;
     }
     if (!_needsRelease) {
       final need = widget.controller.applyDiscount(widget.line, cents);
       if (widget.controller.notice != null) {
         setState(() => _error = widget.controller.notice!.message);
+        _focus(_valueFocus);
         return;
       }
       if (need == DiscountNeed.release) {
@@ -68,6 +83,7 @@ class _DiscountDialogState extends State<_DiscountDialog> {
           _needsRelease = true;
           _error = null;
         });
+        _focus(_codeFocus);
         return;
       }
       if (mounted) Navigator.pop(context);
@@ -82,6 +98,7 @@ class _DiscountDialogState extends State<_DiscountDialog> {
         _error = widget.controller.notice?.message;
         _pin.clear();
       });
+      _focus(_code.text.trim().isEmpty ? _codeFocus : _pinFocus);
     }
   }
 
@@ -106,13 +123,14 @@ class _DiscountDialogState extends State<_DiscountDialog> {
               selected: {_percent},
               onSelectionChanged: _needsRelease ? null : (value) => setState(() => _percent = value.first),
             ),
-            TextField(
+            NumberField(
               key: const Key('discount-value'),
               controller: _value,
+              focusNode: _valueFocus,
               autofocus: true,
+              decimal: true,
               enabled: !_needsRelease,
               decoration: InputDecoration(labelText: _percent ? 'Desconto (%)' : 'Desconto (R\$)'),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
               onSubmitted: (_) => _apply(),
             ),
             if (notice != null) ...[
@@ -122,6 +140,8 @@ class _DiscountDialogState extends State<_DiscountDialog> {
               TextField(
                 key: const Key('supervisor-code'),
                 controller: _code,
+                focusNode: _codeFocus,
+                onSubmitted: (_) => _pinFocus.requestFocus(),
                 decoration: const InputDecoration(labelText: 'Código do supervisor'),
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -129,6 +149,7 @@ class _DiscountDialogState extends State<_DiscountDialog> {
               TextField(
                 key: const Key('supervisor-pin'),
                 controller: _pin,
+                focusNode: _pinFocus,
                 obscureText: true,
                 decoration: const InputDecoration(labelText: 'PIN do supervisor'),
                 keyboardType: TextInputType.number,
@@ -162,10 +183,11 @@ class _DiscountDialogState extends State<_DiscountDialog> {
 
 /// Venda sem estoque com o PDV sem internet há bastante tempo: o gerente autoriza aqui.
 class ZeroStockPanel extends StatefulWidget {
-  const ZeroStockPanel({super.key, required this.controller, required this.pending});
+  const ZeroStockPanel({super.key, required this.controller, required this.pending, this.focusNode});
 
   final PosController controller;
   final PendingZeroStock pending;
+  final FocusNode? focusNode;
 
   @override
   State<ZeroStockPanel> createState() => _ZeroStockPanelState();
@@ -174,12 +196,22 @@ class ZeroStockPanel extends StatefulWidget {
 class _ZeroStockPanelState extends State<ZeroStockPanel> {
   final _code = TextEditingController();
   final _pin = TextEditingController();
+  final _pinFocus = FocusNode();
 
   @override
   void dispose() {
     _code.dispose();
     _pin.dispose();
+    _pinFocus.dispose();
     super.dispose();
+  }
+
+  Future<void> _approve() async {
+    await widget.controller.approveZeroStock(_code.text, _pin.text);
+    _pin.clear();
+    if (mounted && widget.controller.pendingZeroStock != null) {
+      (_code.text.trim().isEmpty ? widget.focusNode : _pinFocus)?.requestFocus();
+    }
   }
 
   @override
@@ -207,6 +239,8 @@ class _ZeroStockPanelState extends State<ZeroStockPanel> {
                   child: TextField(
                     key: const Key('zero-stock-code'),
                     controller: _code,
+                    focusNode: widget.focusNode,
+                    onSubmitted: (_) => _pinFocus.requestFocus(),
                     decoration: const InputDecoration(labelText: 'Código do gerente'),
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -217,6 +251,8 @@ class _ZeroStockPanelState extends State<ZeroStockPanel> {
                   child: TextField(
                     key: const Key('zero-stock-pin'),
                     controller: _pin,
+                    focusNode: _pinFocus,
+                    onSubmitted: (_) => _approve(),
                     obscureText: true,
                     decoration: const InputDecoration(labelText: 'PIN'),
                     keyboardType: TextInputType.number,
@@ -232,12 +268,7 @@ class _ZeroStockPanelState extends State<ZeroStockPanel> {
                 TextButton(onPressed: widget.controller.cancelZeroStock, child: const Text('Não vender')),
                 FilledButton(
                   key: const Key('zero-stock-approve'),
-                  onPressed: widget.controller.busy
-                      ? null
-                      : () async {
-                          await widget.controller.approveZeroStock(_code.text, _pin.text);
-                          _pin.clear();
-                        },
+                  onPressed: widget.controller.busy ? null : _approve,
                   child: const Text('Autorizar'),
                 ),
               ],
@@ -297,31 +328,64 @@ class _CustomerDialogState extends State<_CustomerDialog> {
   bool? _online;
   String? _error;
   bool _searching = false;
+  int _highlight = -1;
+  int _sequence = 0;
+  Timer? _typing;
 
   @override
   void dispose() {
+    _typing?.cancel();
     _query.dispose();
     super.dispose();
+  }
+
+  /// Sugestões enquanto digita: a partir de 3 letras, com uma pausa curta entre as teclas.
+  void _onTyping(String text) {
+    _typing?.cancel();
+    if (text.trim().length < 3) return;
+    _typing = Timer(const Duration(milliseconds: 350), () {
+      if (mounted && _query.text == text) _search();
+    });
   }
 
   Future<void> _search() async {
     final service = widget.controller.customers;
     if (service == null) return;
+    final sequence = ++_sequence;
+    final text = _query.text;
     setState(() {
       _searching = true;
       _error = null;
     });
     try {
-      final result = await service.search(_query.text);
+      final result = await service.search(text);
+      // Resposta velha (o operador continuou digitando): ignora.
+      if (!mounted || sequence != _sequence) return;
       setState(() {
         _results = result.customers;
         _online = result.online;
+        _highlight = result.customers.isEmpty ? -1 : 0;
         if (result.customers.isEmpty) _error = 'Nenhum cliente encontrado.';
       });
     } on ApiException catch (error) {
-      setState(() => _error = ErrorDisplay.fromCode(error.code).message);
+      if (mounted && sequence == _sequence) setState(() => _error = ErrorDisplay.fromCode(error.code).message);
     } finally {
-      if (mounted) setState(() => _searching = false);
+      if (mounted && sequence == _sequence) setState(() => _searching = false);
+    }
+  }
+
+  Future<void> _choose(CustomerSummary customer) async {
+    await widget.controller.selectCustomer(customer.id);
+    if (mounted) Navigator.pop(context);
+  }
+
+  /// Enter: escolhe a sugestão marcada; sem sugestão, busca.
+  void _submit() {
+    _typing?.cancel();
+    if (_highlight >= 0 && _highlight < _results.length) {
+      _choose(_results[_highlight]);
+    } else {
+      _search();
     }
   }
 
@@ -335,12 +399,23 @@ class _CustomerDialogState extends State<_CustomerDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            TextField(
-              key: const Key('customer-query'),
-              controller: _query,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'Nome, código ou CPF/CNPJ'),
-              onSubmitted: (_) => _search(),
+            SuggestionKeys(
+              onMove: (step) {
+                if (_results.isEmpty) return;
+                setState(() => _highlight = (_highlight + step).clamp(0, _results.length - 1));
+              },
+              onClose: () => Navigator.pop(context),
+              child: TextField(
+                key: const Key('customer-query'),
+                controller: _query,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: 'Nome, código ou CPF/CNPJ', helperText: 'As sugestões aparecem a partir de 3 letras.'),
+                onChanged: (text) {
+                  _onTyping(text);
+                  setState(() {});
+                },
+                onSubmitted: (_) => _submit(),
+              ),
             ),
             if (_online == false)
               const Padding(
@@ -354,19 +429,18 @@ class _CustomerDialogState extends State<_CustomerDialog> {
               child: ListView(
                 shrinkWrap: true,
                 children: [
-                  for (final customer in _results)
+                  for (final (index, customer) in _results.indexed)
                     ListTile(
                       key: Key('customer-${customer.code}'),
+                      selected: index == _highlight,
+                      selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
                       title: Text(customer.name),
                       subtitle: Text([
                         'Código ${customer.code}',
                         ?customer.documentMasked,
                         if (customer.city != null) '${customer.city}/${customer.state ?? ''}',
                       ].join(' · ')),
-                      onTap: () async {
-                        await widget.controller.selectCustomer(customer.id);
-                        if (context.mounted) Navigator.pop(context);
-                      },
+                      onTap: () => _choose(customer),
                     ),
                 ],
               ),

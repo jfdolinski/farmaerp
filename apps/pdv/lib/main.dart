@@ -12,6 +12,7 @@ import 'core/secret_store.dart';
 import 'core/trace_id.dart';
 import 'customers/customer_service.dart';
 import 'local/local_database.dart';
+import 'pos/display_settings.dart';
 import 'pos/pdv_home.dart';
 import 'pos/pos_auth.dart';
 import 'pos/pos_controller.dart';
@@ -122,7 +123,13 @@ Future<void> main() async {
     findQuote: (key) async => api.quote(accessToken: await controller.accessToken(), key: key),
     logger: logger,
   );
-  runApp(FarmaErpPdvApp(controller: controller, pos: pos, database: database));
+  runApp(FarmaErpPdvApp(
+    controller: controller,
+    pos: pos,
+    database: database,
+    display: DisplaySettings(database),
+    appVersion: _appVersion,
+  ));
   unawaited(controller.start());
 }
 
@@ -134,9 +141,13 @@ LocalLogger _createLogger(Directory dataDirectory) => LocalLogger(
 );
 
 class FarmaErpPdvApp extends StatelessWidget {
-  const FarmaErpPdvApp({super.key, required this.controller, this.pos, this.database});
+  const FarmaErpPdvApp({super.key, required this.controller, this.pos, this.database, this.display, this.appVersion});
 
   final TerminalController controller;
+
+  /// Fonte do terminal (tamanho e tipo): vale em todas as telas, na hora.
+  final DisplaySettings? display;
+  final String? appVersion;
 
   /// Sem o caixa (testes da tela do terminal), fica só a tela do terminal.
   final PosController? pos;
@@ -144,17 +155,20 @@ class FarmaErpPdvApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    final settings = display;
+    Widget app(BuildContext context) => MaterialApp(
       title: 'FarmaERP PDV',
       debugShowCheckedModeBanner: false,
-      builder: (context, child) => EnvironmentBanner(
-        environment: appEnvironment,
-        child: child ?? const SizedBox.shrink(),
-      ),
+      theme: settings?.theme(),
+      builder: (context, child) {
+        final banner = EnvironmentBanner(environment: appEnvironment, child: child ?? const SizedBox.shrink());
+        return settings == null ? banner : settings.apply(context, banner);
+      },
       home: pos == null || database == null
           ? TerminalScreen(controller: controller)
-          : PdvHome(terminal: controller, pos: pos!, database: database!),
+          : PdvHome(terminal: controller, pos: pos!, database: database!, display: settings, appVersion: appVersion),
     );
+    return settings == null ? app(context) : ListenableBuilder(listenable: settings, builder: (context, _) => app(context));
   }
 }
 
