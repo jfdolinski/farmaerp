@@ -365,6 +365,32 @@ void main() {
         await admin('/admin/users/${operatorRow['id']}/revoke-face', {}, token: session);
         await sync.pull(token.value);
         expect(database.userByCode(3)!.hasFace, isFalse);
+
+        // Desconto automático: regra criada na retaguarda desce, entra sozinha na venda e a central
+        // confere (sem alerta) e guarda a regra no item.
+        final discountRule = await admin('/admin/discount-rules', {
+          'name': 'Dipirona E2E 7%', 'kind': 'product', 'level': 'product', 'productLookup': '7890000000017',
+          'percent': 7, 'stacking': 'cumulative', 'branchId': _branch,
+        }, token: session);
+        await sync.pull(token.value);
+        expect(await pos.identifySeller('3'), isTrue, reason: pos.notice?.message);
+        pos.scan('7890000000017');
+        final discounted = pos.cart.lines.single;
+        expect(discounted.autoApplied.map((a) => a.name), contains('Dipirona E2E 7%'));
+        pos.startPayment();
+        pos.addPayment(Payment(method: PaymentMethod.cash, amountCents: pos.cart.totalCents));
+        await pos.finish();
+        await sync.push(token.value);
+        expect(database.debugSelect("SELECT result FROM outbox WHERE kind = 'sale' ORDER BY sequence DESC LIMIT 1").single['result'], 'applied');
+        final saleList = (jsonDecode((await http.get(Uri.parse('$base/admin/sales?branch=$_branch'), headers: {'Authorization': 'Bearer $session'})).body) as List)
+            .cast<Map<String, dynamic>>();
+        final saleRow = saleList.firstWhere((row) => row['code'] == pos.lastSale!.code);
+        final saleDetail = jsonDecode((await http.get(Uri.parse('$base/admin/sales/${saleRow['id']}'), headers: {'Authorization': 'Bearer $session'})).body)
+            as Map<String, dynamic>;
+        final soldItem = (saleDetail['items'] as List).single as Map<String, dynamic>;
+        expect((soldItem['discount_rules'] as List).map((r) => (r as Map)['name']), contains('Dipirona E2E 7%'));
+        expect((saleDetail['alerts'] as List? ?? const []).where((a) => (a as Map)['kind'] == 'auto_discount'), isEmpty);
+        await admin('/admin/discount-rules/${discountRule['id']}/end', {}, token: session);
       } finally {
         await admin('/admin/products/$_dipirona/prices', {'branchId': _branch, 'price': null}, token: session);
         await admin('/admin/terminals/$terminalId/revoke', {'reason': 'Fim do teste E2E'}, token: session);

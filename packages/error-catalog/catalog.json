@@ -251,7 +251,8 @@
       "biometric_consent_id_uuid_v7_check",
       "face_template_id_uuid_v7_check",
       "customer_group_id_uuid_v7_check",
-      "discount_rule_id_uuid_v7_check"
+      "discount_rule_id_uuid_v7_check",
+      "sale_item_discount_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -1974,7 +1975,10 @@
       "biometric_consent_term_check",
       "biometric_consent_revoked_check",
       "face_template_model_check",
-      "face_template_template_check"
+      "face_template_template_check",
+      "sale_item_auto_discount_check",
+      "sale_coupon_check",
+      "sale_item_discount_amount_check"
     ]
   },
   "FA963": {
@@ -2647,5 +2651,13 @@
     "dbConstraints": [
       "discount_rule_name_check"
     ]
+  },
+  "FA832": {
+    "message": "Este cupom não vale para esta venda.",
+    "action": "Confira o código, a validade e os produtos do cupom.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
   }
 }

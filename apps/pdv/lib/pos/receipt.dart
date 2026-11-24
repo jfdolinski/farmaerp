@@ -90,8 +90,10 @@ List<ReceiptLine> buildReceipt({
         '  ${formatMilli(cart.lines[index].quantityMilli)} x ${formatCents(cart.lines[index].unitPriceCents)}',
         formatCents(cart.lines[index].totalCents),
       )),
-      if (cart.lines[index].discountCents > 0)
-        ReceiptLine(_twoColumns('  desconto', '-${formatCents(cart.lines[index].discountCents)}')),
+      for (final applied in cart.lines[index].autoApplied)
+        ReceiptLine(_twoColumns('  ${_cut(applied.name, receiptWidth - 14)}', '-${formatCents(applied.amountCents)}')),
+      if (cart.lines[index].manualDiscountCents > 0)
+        ReceiptLine(_twoColumns('  desconto', '-${formatCents(cart.lines[index].manualDiscountCents)}')),
       // Controlado: lote e receita. O documento do comprador não sai no papel.
       if (cart.lines[index].controlled case final controlled?) ...[
         for (final text in _wrap(controlled.isPending
@@ -384,3 +386,6 @@ class PdfReceiptPrinter implements ReceiptPrinter {
     lastFile = file;
   }
 }
+
+/// Corta o texto no tamanho da coluna do papel.
+String _cut(String text, int max) => text.length <= max ? text : text.substring(0, max);

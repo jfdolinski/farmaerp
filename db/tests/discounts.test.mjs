@@ -299,3 +299,122 @@ describe('descida para o PDV', () => {
     ]);
   });
 });
+
+describe('venda com desconto automático (conferência na central)', () => {
+  let session;
+  let saleNumber = 800000 + randomInt(9000);
+  // Venda a R$ 10 por unidade; auto e manual por item, com as regras que o PDV aplicou.
+  const sale = (lines, overrides = {}) => {
+    saleNumber += 1;
+    const items = lines.map((line, index) => {
+      const auto = line.auto ?? 0;
+      const discount = Math.round((auto + (line.manual ?? 0)) * 100) / 100;
+      return {
+        id: uuidV7(), line: index + 1, product_id: line.product.id, quantity: line.quantity, unit_price: 10, discount,
+        auto_discount: auto, discount_rules: line.rules ?? (auto > 0 ? [] : null),
+        total: Math.round((line.quantity * 10 - discount) * 100) / 100, ...(line.extra ?? {}),
+      };
+    });
+    const subtotal = items.reduce((sum, i) => sum + i.quantity * 10, 0);
+    const discount = Math.round(items.reduce((sum, i) => sum + i.discount, 0) * 100) / 100;
+    const total = Math.round((subtotal - discount) * 100) / 100;
+    return {
+      id: uuidV7(), number: saleNumber, cash_session_id: session, operator_id: manager.id, customer_id: null, sold_at: iso(),
+      fiscal_model: '65', items, payments: [{ id: uuidV7(), method: 'cash', amount: total }],
+      subtotal, discount_total: discount, total, ...overrides,
+    };
+  };
+  const alertsOf = async (saleId) => (await ownerPool.query(
+    "SELECT kind, detail FROM sale_alert WHERE sale_id = $1 AND kind IN ('auto_discount', 'discount_above_rule', 'discount_above_limit') ORDER BY kind",
+    [saleId],
+  )).rows;
+
+  beforeAll(async () => {
+    session = uuidV7();
+    await push([['cash_session_open', { id: session, operator_id: manager.id, opened_at: iso(), opening_float: 0 }]]);
+  });
+
+  it('o automático certo não alerta e guarda as regras; a mais vira alerta; regra encerrada depois ainda vale', async () => {
+    await ownerPool.query('UPDATE discount_rule SET deleted_at = now() WHERE economic_group_id = $1 AND deleted_at IS NULL', [a.group.id]);
+    const item = await product();
+    const tenPercent = await rule(a.admin, { name: 'Produto 10%', level: 'product', productLookup: String(item.code), percent: 10 });
+    const pix = await rule(a.admin, { name: 'PIX 5%', kind: 'payment_method', paymentMethod: 'pix', percent: 5, branchId: a.branch1.id });
+
+    const right = sale([{ product: item, quantity: 2, auto: 2, rules: [{ rule_id: tenPercent, amount: 2 }] }]);
+    expect(codes(await push([['sale', right]]))).toEqual([['applied', null]]);
+    expect(await alertsOf(right.id)).toEqual([]);
+    const stored = (await ownerPool.query('SELECT auto_discount::float, discount::float FROM sale_item WHERE id = $1', [right.items[0].id])).rows[0];
+    expect(stored).toEqual({ auto_discount: 2, discount: 2 });
+    await expect(ownerPool.query('UPDATE sale_item SET auto_discount = 0 WHERE id = $1', [right.items[0].id])).rejects.toSatisfy(hasCode('FA104'));
+    const used = (await ownerPool.query('SELECT discount_rule_id, amount::float FROM sale_item_discount WHERE sale_item_id = $1', [right.items[0].id])).rows;
+    expect(used).toEqual([{ discount_rule_id: tenPercent, amount: 2 }]);
+    const detail = (await readAs(a.admin, 'SELECT app.sale_detail($1) AS d', [right.id]))[0].d;
+    expect(detail.items[0]).toMatchObject({ auto_discount: 2, discount_rules: [{ rule_id: tenPercent, name: 'Produto 10%', amount: 2 }] });
+
+    // PIX 5% só com a venda toda em PIX: em dinheiro, o PDV não podia ter dado.
+    const wrong = sale([{ product: item, quantity: 2, auto: 3, rules: [{ rule_id: tenPercent, amount: 2 }, { rule_id: pix, amount: 1 }] }]);
+    expect(codes(await push([['sale', wrong]]))).toEqual([['applied', null]]);
+    expect(await alertsOf(wrong.id)).toEqual([{ kind: 'auto_discount', detail: expect.objectContaining({ pdv_discount: 3, expected_discount: 2 }) }]);
+    const paidPix = sale([{ product: item, quantity: 2, auto: 3, rules: [{ rule_id: tenPercent, amount: 2 }, { rule_id: pix, amount: 1 }] }]);
+    paidPix.payments = [{ id: uuidV7(), method: 'pix', amount: paidPix.total }];
+    await push([['sale', paidPix]]);
+    expect(await alertsOf(paidPix.id)).toEqual([]);
+
+    // Venda feita antes de a regra ser encerrada, recebida depois: confere com a regra.
+    const soldBefore = new Date().toISOString();
+    await committed(a.admin, (client) => client.query('SELECT app.end_discount_rule($1)', [tenPercent]));
+    const late = sale([{ product: item, quantity: 1, auto: 1, rules: [{ rule_id: tenPercent, amount: 1 }] }], { sold_at: soldBefore });
+    await push([['sale', late]]);
+    expect(await alertsOf(late.id)).toEqual([]);
+    const after = sale([{ product: item, quantity: 1, auto: 1, rules: [{ rule_id: tenPercent, amount: 1 }] }]);
+    await push([['sale', after]]);
+    expect((await alertsOf(after.id)).map((r) => r.kind)).toEqual(['auto_discount']);
+  });
+
+  it('os limites do manual valem só sobre a parte manual; cupom guardado em caixa alta', async () => {
+    await ownerPool.query('UPDATE discount_rule SET deleted_at = now() WHERE economic_group_id = $1 AND deleted_at IS NULL', [a.group.id]);
+    const item = await product();
+    const big = await rule(a.admin, { name: 'Cupom 50%', kind: 'coupon', coupon: `C${tag().toUpperCase()}`, level: 'product', productLookup: String(item.code), percent: 50 });
+    const code = (await ownerPool.query('SELECT coupon FROM discount_rule WHERE id = $1', [big])).rows[0].coupon;
+    await committed(a.admin, (client) => client.query('SELECT app.create_product_rule($1::jsonb)', [JSON.stringify({
+      typeCode: 'max_discount', level: 'product', productLookup: String(item.code), value: 5,
+    })]));
+    // 50% automático + 4% manual: o manual está dentro do máximo de 5% do produto.
+    const fine = sale([{ product: item, quantity: 10, auto: 50, manual: 4, rules: [{ rule_id: big, amount: 50 }] }], { coupon: code.toLowerCase() });
+    expect(codes(await push([['sale', fine]]))).toEqual([['applied', null]]);
+    expect(await alertsOf(fine.id)).toEqual([]);
+    expect((await ownerPool.query('SELECT coupon FROM sale WHERE id = $1', [fine.id])).rows[0].coupon).toBe(code);
+    // Manual de 6% passa do máximo do produto (o gerente do teste não pode passar da regra).
+    const above = sale([{ product: item, quantity: 10, auto: 50, manual: 6, rules: [{ rule_id: big, amount: 50 }] }], { coupon: code });
+    await push([['sale', above]]);
+    expect((await alertsOf(above.id)).map((r) => r.kind)).toContain('discount_above_rule');
+    // Sem o cupom, os 50% não valiam.
+    const noCoupon = sale([{ product: item, quantity: 10, auto: 50, rules: [{ rule_id: big, amount: 50 }] }]);
+    await push([['sale', noCoupon]]);
+    expect((await alertsOf(noCoupon.id)).map((r) => r.kind)).toEqual(['auto_discount']);
+  });
+
+  it('fora do formato: automático maior que o desconto, soma das regras errada, sem regras, regra de outro grupo, cupom longo', async () => {
+    const item = await product();
+    const ok = await rule(a.admin, { name: `Ok ${tag()}` });
+    const outsider = await rule(b.admin, { name: `Fora ${tag()}` });
+    const bad = [
+      sale([{ product: item, quantity: 1, auto: 2, manual: 0, rules: [{ rule_id: ok, amount: 2 }], extra: { discount: 1, total: 9 } }]),
+      sale([{ product: item, quantity: 1, auto: 1, rules: [{ rule_id: ok, amount: 0.5 }] }]),
+      sale([{ product: item, quantity: 1, auto: 1, rules: null, extra: { discount_rules: null } }]),
+      sale([{ product: item, quantity: 1, auto: 1, rules: [{ rule_id: 'nada', amount: 1 }] }]),
+      sale([{ product: item, quantity: 1, auto: 1, rules: [{ rule_id: ok, amount: -1 }, { rule_id: ok, amount: 2 }] }]),
+      sale([{ product: item, quantity: 1, auto: 0, extra: { auto_discount: 'x' } }]),
+      sale([{ product: item, quantity: 1 }], { coupon: 'x'.repeat(41) }),
+      sale([{ product: item, quantity: 1 }], { coupon: 12 }),
+    ];
+    expect(codes(await push(bad.map((s) => ['sale', s])))).toEqual(bad.map(() => ['conflict', 'FA962']));
+    const foreign = sale([{ product: item, quantity: 1, auto: 1, rules: [{ rule_id: outsider, amount: 1 }] }]);
+    expect(codes(await push([['sale', foreign]]))).toEqual([['conflict', 'FA004']]);
+    // PDV antigo (sem os campos novos) continua aceito.
+    const old = sale([{ product: item, quantity: 1, manual: 0 }]);
+    delete old.items[0].auto_discount;
+    delete old.items[0].discount_rules;
+    expect(codes(await push([['sale', old]]))).toEqual([['applied', null]]);
+  });
+});

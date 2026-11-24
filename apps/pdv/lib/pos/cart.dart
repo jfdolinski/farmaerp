@@ -2,6 +2,7 @@ import 'package:uuid/uuid.dart';
 
 import '../local/local_database.dart';
 import 'controlled.dart';
+import 'discount_engine.dart';
 import 'money.dart';
 import 'pos_auth.dart';
 
@@ -28,14 +29,26 @@ class CartLine {
 
   /// Preço atual da loja: muda no recálculo.
   int unitPriceCents;
-  int discountCents = 0;
 
-  /// Desconto como fração do bruto: é ele que o recálculo mantém quando preço ou quantidade mudam.
+  /// Desconto manual (operador ou supervisor), por cima dos automáticos.
+  int manualDiscountCents = 0;
+
+  /// Descontos automáticos do motor de regras, refeitos a cada mudança na venda.
+  int autoDiscountCents = 0;
+  List<AppliedDiscount> autoApplied = const [];
+
+  /// Desconto do item: automáticos mais o manual, nunca acima do item.
+  int get discountCents {
+    final sum = autoDiscountCents + manualDiscountCents;
+    return sum > grossCents ? grossCents : sum;
+  }
+
+  /// Desconto manual como fração do bruto: é ele que o recálculo mantém quando preço ou quantidade mudam.
   double? discountRate;
 
-  /// Grava o desconto em centavos e a fração que o recálculo mantém.
+  /// Grava o desconto manual em centavos e a fração que o recálculo mantém.
   void setDiscount(int cents) {
-    discountCents = cents;
+    manualDiscountCents = cents;
     discountRate = cents <= 0 || grossCents == 0 ? null : cents / grossCents;
   }
 
@@ -48,14 +61,15 @@ class CartLine {
   /// Venda sem estoque autorizada com o PDV sem internet.
   ({String supervisorId, String supervisorName, int minutesOffline})? zeroStockRelease;
 
-  /// Desconto em centésimos de ponto percentual (850 = 8,5%).
-  int get discountBp => grossCents == 0 ? 0 : (discountCents * 10000 / grossCents).ceil();
+  /// Desconto manual em centésimos de ponto percentual (850 = 8,5%).
+  int get discountBp => grossCents == 0 ? 0 : (manualDiscountCents * 10000 / grossCents).ceil();
 
   int get grossCents => lineGrossCents(unitPriceCents, quantityMilli);
   int get totalCents => grossCents - discountCents;
 
   /// Avisos do item, para a tela.
   List<String> get warnings => [
+    for (final applied in autoApplied) '${applied.name}: -${formatCents(applied.amountCents)}',
     if (product.status == 'on_order') 'Produto por encomenda',
     if (product.status == 'blocked') 'Produto bloqueado para compra: vende só o que há em estoque',
     if (zeroStockRelease != null)
@@ -100,13 +114,25 @@ class Payment {
 
 /// Cliente identificado na venda (com os convênios dele).
 class SaleCustomer {
-  const SaleCustomer({required this.id, required this.name, required this.code, this.documentMasked, this.agreements = const []});
+  const SaleCustomer({
+    required this.id,
+    required this.name,
+    required this.code,
+    this.documentMasked,
+    this.agreements = const [],
+    this.groupId,
+    this.birthDate,
+  });
 
   final String id;
   final String name;
   final int code;
   final String? documentMasked;
   final List<Map<String, dynamic>> agreements;
+
+  /// Grupo de clientes e nascimento, para os descontos por grupo e de aniversariante.
+  final String? groupId;
+  final String? birthDate;
 }
 
 /// Venda em montagem.
@@ -117,6 +143,9 @@ class Cart {
 
   /// Vendedor que atende (pedido a cada venda ou orçamento novo).
   LocalUser? seller;
+
+  /// Cupom de desconto digitado no caixa.
+  String? coupon;
 
   /// Orçamento que esta venda fecha.
   String? quoteId;
@@ -167,7 +196,7 @@ class Cart {
         ? quantityMilli
         : (quantityMilli * product.barcodeFractionMilli! / 1000).round();
     for (final line in lines) {
-      if (merge && controlled == null && line.product.id == product.id && line.discountCents == 0 && line.zeroStockRelease == null) {
+      if (merge && controlled == null && line.product.id == product.id && line.manualDiscountCents == 0 && line.zeroStockRelease == null) {
         line.quantityMilli += quantity;
         return line;
       }
@@ -225,6 +254,10 @@ SaleDraft buildSale({
       'quantity': quantity(line.quantityMilli),
       'unit_price': money(line.unitPriceCents),
       'discount': money(line.discountCents),
+      'auto_discount': money(line.autoDiscountCents),
+      'discount_rules': line.autoApplied.isEmpty
+          ? null
+          : [for (final applied in line.autoApplied) {'rule_id': applied.ruleId, 'amount': money(applied.amountCents)}],
       'total': money(line.totalCents),
       'batch_id': line.controlled?.batch?.id,
       'release': line.release == null ? null : {'supervisor_id': line.release!.supervisorId, 'reason': line.release!.reason},
@@ -283,6 +316,7 @@ SaleDraft buildSale({
       'payments': payments,
       'subtotal': money(cart.subtotalCents),
       'discount_total': money(cart.discountCents),
+      'coupon': cart.coupon,
       'total': money(cart.totalCents),
     },
   );

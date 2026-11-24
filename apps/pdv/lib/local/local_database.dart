@@ -446,6 +446,16 @@ const _migrations = <String>[
   ALTER TABLE app_user ADD COLUMN face_model TEXT;
   ALTER TABLE app_user ADD COLUMN face_template BLOB;
   ''',
+  // Descontos automáticos: as regras, a hierarquia do produto e o grupo do cliente.
+  '''
+  CREATE TABLE discount_rule (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    data TEXT NOT NULL,
+    seen_generation INTEGER NOT NULL DEFAULT 0
+  ) STRICT;
+  ALTER TABLE product ADD COLUMN discount_subject TEXT;
+  ALTER TABLE customer ADD COLUMN customer_group_id TEXT;
+  ''',
 ];
 
 /// Pessoa que pode entrar no PDV, com o que veio da central.
@@ -498,11 +508,15 @@ class SaleProduct {
     this.barcodeFractionMilli,
     this.maxDiscountBp,
     this.maxDiscountUntil,
+    this.discountSubject = const {},
   });
 
   /// Desconto máximo em centésimos de ponto (750 = 7,5%); vazio é sem regra.
   final int? maxDiscountBp;
   final DateTime? maxDiscountUntil;
+
+  /// Hierarquia do motor (família, fabricante, categorias, grupos), para os descontos automáticos.
+  final Map<String, Object?> discountSubject;
 
   /// Regra de desconto que vale agora (a que já venceu não vale).
   int? maxDiscountAt(DateTime now) =>
@@ -875,6 +889,16 @@ class LocalDatabase {
         } else {
           _upsertCustomer(id, data);
         }
+      case 'discount_rule':
+        if (data == null) {
+          _db.execute('DELETE FROM discount_rule WHERE id = ?', [id]);
+        } else {
+          _db.execute(
+            'INSERT INTO discount_rule (id, data, seen_generation) VALUES (?, ?, ?) '
+            'ON CONFLICT (id) DO UPDATE SET data = excluded.data, seen_generation = excluded.seen_generation',
+            [id, jsonEncode(data), generation],
+          );
+        }
       default:
         // Tipo novo de uma versão mais nova da central: fica para a próxima atualização do PDV.
         break;
@@ -884,9 +908,11 @@ class LocalDatabase {
   void _upsertProduct(Uint8List id, Map<String, dynamic> data, int generation) {
     _db.execute(
       'INSERT INTO product (id, code, name, manufacturer, active_ingredient, controlled_class, ms_registration, '
-      'ncm, cest, status, price_cents, fraction_milli, batch_required, seen_generation, max_discount_bp, max_discount_until) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET '
+      'ncm, cest, status, price_cents, fraction_milli, batch_required, seen_generation, max_discount_bp, max_discount_until, '
+      'discount_subject) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET '
       'max_discount_bp = excluded.max_discount_bp, max_discount_until = excluded.max_discount_until, '
+      'discount_subject = excluded.discount_subject, '
       'code = excluded.code, name = excluded.name, manufacturer = excluded.manufacturer, '
       'active_ingredient = excluded.active_ingredient, controlled_class = excluded.controlled_class, '
       'ms_registration = excluded.ms_registration, ncm = excluded.ncm, cest = excluded.cest, '
@@ -909,6 +935,7 @@ class LocalDatabase {
         generation,
         data['max_discount'] == null ? null : ((data['max_discount'] as num) * 100).round(),
         data['max_discount_until'],
+        data['discount_subject'] is Map ? jsonEncode(data['discount_subject']) : null,
       ],
     );
     _db.execute('DELETE FROM product_search WHERE product_id = ?', [id]);
@@ -1108,6 +1135,7 @@ class LocalDatabase {
     const columns = [
       'code', 'person_type', 'name', 'trade_name', 'document', 'birth_date', 'phone', 'email', 'postal_code',
       'street', 'street_number', 'complement', 'district', 'city', 'city_code', 'state', 'agreements',
+      'customer_group_id',
     ];
     final search = normalizeSearch('${data['name'] ?? ''} ${data['trade_name'] ?? ''}');
     _db.execute(
@@ -1363,7 +1391,24 @@ class LocalDatabase {
     barcodeFractionMilli: row['barcode_fraction'] as int?,
     maxDiscountBp: row['max_discount_bp'] as int?,
     maxDiscountUntil: DateTime.tryParse(row['max_discount_until'] as String? ?? ''),
+    discountSubject: _subject(row['discount_subject'] as String?, uuidText(row['id'] as List<int>)),
   );
+
+  /// Onde o produto está na hierarquia do motor; sem a informação (carga antiga), só o próprio id.
+  static Map<String, Object?> _subject(String? json, String productId) {
+    if (json == null) return {'id': productId};
+    try {
+      return (jsonDecode(json) as Map).cast<String, Object?>();
+    } on FormatException {
+      return {'id': productId};
+    }
+  }
+
+  /// Regras de desconto que vieram da central (o cálculo filtra a validade e a filial).
+  List<Map<String, dynamic>> get discountRules => [
+    for (final row in _db.select('SELECT data FROM discount_rule'))
+      (jsonDecode(row['data'] as String) as Map).cast<String, dynamic>(),
+  ];
 
   /// Dados da filial e da empresa (para o comprovante) e o último número que a central conhece.
   Map<String, dynamic>? get fiscal {

@@ -31,6 +31,7 @@ interface SaleDetail {
   subtotal: number;
   discount_total: number;
   total: number;
+  coupon: string | null;
   items: {
     id: string;
     line: number;
@@ -41,6 +42,8 @@ interface SaleDetail {
     unit_price: number;
     central_price: number | null;
     discount: number;
+    auto_discount: number;
+    discount_rules: { rule_id: string; name: string; amount: number }[];
     total: number;
     batches: { number: string; quantity: number }[];
   }[];
@@ -109,6 +112,7 @@ function SaleView({ sale }: { sale: SaleDetail }) {
           {dateTimeText(sale.sold_at)} · {sale.branch_name} · {sale.terminal_name} · Operador: {sale.operator_name}
           {sale.seller_name && ` · Vendedor: ${sale.seller_name}`}
         </p>
+        {sale.coupon && <p>Cupom: {sale.coupon}</p>}
         <p>
           Cliente: {sale.customer_name ? `${sale.customer_name} (código ${sale.customer_code})` : "Não identificado"}
         </p>
@@ -170,7 +174,17 @@ function SaleView({ sale }: { sale: SaleDetail }) {
                   </td>
                   <td>{quantityText(item.quantity)}</td>
                   <td>{brl(item.unit_price)}</td>
-                  <td>{item.discount > 0 ? brl(item.discount) : "—"}</td>
+                  <td>
+                    {item.discount > 0 ? brl(item.discount) : "—"}
+                    {(item.discount_rules ?? []).map((rule) => (
+                      <small key={rule.rule_id}>
+                        {rule.name}: {brl(rule.amount)}
+                      </small>
+                    ))}
+                    {item.discount - (item.auto_discount ?? 0) > 0.004 && (item.auto_discount ?? 0) > 0 && (
+                      <small>Manual: {brl(item.discount - item.auto_discount)}</small>
+                    )}
+                  </td>
                   <td>{brl(item.total)}</td>
                 </tr>
               ))}

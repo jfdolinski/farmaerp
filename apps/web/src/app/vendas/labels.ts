@@ -31,6 +31,7 @@ export const ALERT_LABELS: Record<string, string> = {
   quote_status: "Venda de orçamento que já não estava aberto",
   return_permission: "Devolução feita sem a permissão",
   return_credit: "Crédito de devolução usado sem saldo ou fora das regras",
+  auto_discount: "Desconto automático acima do que as regras davam",
 };
 
 export const brl = (value: number | string | null) =>
@@ -67,6 +68,8 @@ export function alertText(kind: string, detail: Record<string, unknown>): string
     }
     case "return_permission":
       return `${label}: ${detail.return_code}${detail.late ? ", fora do prazo da loja e sem a liberação de outra pessoa" : ", sem a permissão nem a liberação de quem tem"}.`;
+    case "auto_discount":
+      return `${label}: o PDV deu ${brl(detail.pdv_discount as number)}, as regras davam ${brl(detail.expected_discount as number)}.`;
     case "return_credit": {
       const problems: Record<string, string> = {
         balance: `passou do saldo (${brl(detail.balance as number)})`,

@@ -16,6 +16,7 @@ import 'cart.dart';
 import 'cash.dart';
 import 'controlled.dart';
 import 'discount.dart';
+import 'discount_engine.dart';
 import 'money.dart';
 import 'pos_auth.dart';
 import 'receipt.dart';
@@ -454,14 +455,88 @@ class PosController extends ChangeNotifier {
   /// mesma fração. Roda a cada mudança (itens, quantidade, cliente, pagamento). As regras por cliente
   /// e por forma de pagamento entram aqui quando chegarem (Etapa 7). Se o total mudar com pagamento
   /// lançado, o pagamento é refeito.
+  /// Contexto da venda para os descontos automáticos, com outras formas de pagamento se pedido.
+  DiscountContext _discountContext({List<String>? methods}) {
+    final now = _clock();
+    final local = now.toLocal();
+    final customer = cart.customer;
+    return DiscountContext(
+      at: now,
+      today: DateTime(local.year, local.month, local.day),
+      branchId: (database.fiscal?['branch'] as Map?)?['id'] as String?,
+      paymentMethods: methods ?? [for (final payment in cart.payments) payment.method.code],
+      hasCustomer: customer != null,
+      customerGroupId: customer?.groupId,
+      customerBirthDate: customer?.birthDate,
+      agreementIds: [
+        for (final payment in cart.payments)
+          if (payment.agreementId != null) payment.agreementId!,
+      ],
+      coupon: cart.coupon,
+    );
+  }
+
+  List<DiscountLine> get _discountLines => [
+    for (var index = 0; index < cart.lines.length; index += 1)
+      DiscountLine(
+        line: index + 1,
+        quantityMilli: cart.lines[index].quantityMilli,
+        unitPriceCents: cart.lines[index].unitPriceCents,
+        subject: cart.lines[index].product.discountSubject.isEmpty
+            ? {'id': cart.lines[index].product.id}
+            : cart.lines[index].product.discountSubject,
+      ),
+  ];
+
+  /// Refaz os descontos automáticos da venda (motor de regras, igual à central).
+  void applyAutoDiscounts() {
+    final result = calculateDiscounts(database.discountRules, _discountLines, _discountContext());
+    for (var index = 0; index < cart.lines.length; index += 1) {
+      final line = cart.lines[index];
+      line.autoDiscountCents = result[index].totalCents;
+      line.autoApplied = result[index].applied;
+    }
+  }
+
+  /// Quanto falta se o resto for pago nesta forma (o desconto pela forma de pagamento já conta).
+  int remainingIfPaidWith(PaymentMethod method) {
+    final methods = [for (final payment in cart.payments) payment.method.code, method.code];
+    final result = calculateDiscounts(database.discountRules, _discountLines, _discountContext(methods: methods));
+    var total = 0;
+    for (var index = 0; index < cart.lines.length; index += 1) {
+      final line = cart.lines[index];
+      final sum = result[index].totalCents + line.manualDiscountCents;
+      total += line.grossCents - (sum > line.grossCents ? line.grossCents : sum);
+    }
+    final remaining = total - cart.paidCents;
+    return remaining > 0 ? remaining : 0;
+  }
+
+  /// Cupom digitado no caixa: vale se algum desconto de cupom passar a valer; senão, FA832.
+  bool applyCoupon(String code) {
+    final value = code.trim().toUpperCase();
+    cart.coupon = value.isEmpty ? null : value;
+    reprice();
+    if (value.isNotEmpty && !cart.lines.any((line) => line.autoApplied.any((applied) => applied.kind == 'coupon'))) {
+      cart.coupon = null;
+      reprice();
+      _fail('FA832');
+      return false;
+    }
+    notice = null;
+    notifyListeners();
+    return true;
+  }
+
   void reprice() {
     final before = cart.totalCents;
     for (final line in cart.lines) {
       final current = database.saleProductById(line.product.id);
       if (current?.priceCents != null) line.unitPriceCents = current!.priceCents!;
       final rate = line.discountRate;
-      if (rate != null) line.discountCents = math.min(line.grossCents, (line.grossCents * rate).round());
+      if (rate != null) line.manualDiscountCents = math.min(line.grossCents, (line.grossCents * rate).round());
     }
+    applyAutoDiscounts();
     if (cart.totalCents != before && cart.payments.isNotEmpty) {
       cart.payments.clear();
       info = 'O total mudou: refaça o pagamento.';
@@ -506,6 +581,7 @@ class PosController extends ChangeNotifier {
     try {
       final data = await lookup(key.trim());
       final skipped = <String>[];
+      final quoteDiscounts = <CartLine, double>{};
       final sellerId = data['seller_id'] as String?;
       cart.seller = sellerId == null ? null : database.userById(sellerId);
       cart.quoteId = data['id'] as String;
@@ -533,8 +609,10 @@ class PosController extends ChangeNotifier {
         final discount = (item['discount'] as num?) ?? 0;
         final line = cart.add(product, quantityMilli: quantity, merge: discount <= 0);
         if (discount > 0) {
+          // O desconto do orçamento (na mesma fração, com o preço de agora) inclui os automáticos:
+          // o manual é o que passa deles.
           final gross = (item['quantity'] as num) * (item['unit_price'] as num);
-          line.discountRate = gross <= 0 ? null : discount / gross;
+          if (gross > 0) quoteDiscounts[line] = discount / gross;
           final release = item['release'] as Map<String, dynamic>?;
           if (release != null) {
             final supervisorId = release['supervisor_id'] as String;
@@ -547,10 +625,14 @@ class PosController extends ChangeNotifier {
         }
       }
       reprice();
+      for (final entry in quoteDiscounts.entries) {
+        final manual = (entry.key.grossCents * entry.value).round() - entry.key.autoDiscountCents;
+        entry.key.setDiscount(manual > 0 ? math.min(manual, entry.key.grossCents) : 0);
+      }
       // Sem liberação, o desconto do orçamento fica no que o operador pode dar sozinho.
       for (final line in cart.lines) {
-        if (line.discountCents == 0 || line.release != null) continue;
-        if (checkDiscount(line: line, discountCents: line.discountCents, operator: current, now: now) == DiscountNeed.none) continue;
+        if (line.manualDiscountCents == 0 || line.release != null) continue;
+        if (checkDiscount(line: line, discountCents: line.manualDiscountCents, operator: current, now: now) == DiscountNeed.none) continue;
         final limit = discountLimitBp(current) ?? 10000;
         final rule = current.can('sales.discount_override') ? 10000 : (line.product.maxDiscountAt(now) ?? 10000);
         line.setDiscount((line.grossCents * math.min(limit, rule) / 10000).floor());
@@ -566,7 +648,10 @@ class PosController extends ChangeNotifier {
             code: customer['code']! as int,
             documentMasked: maskDocument(customer['document'] as String?),
             agreements: ((customer['agreements'] as List?) ?? const []).cast<Map<String, dynamic>>(),
+            groupId: customer['customer_group_id'] as String?,
+            birthDate: customer['birth_date'] as String?,
           );
+          reprice();
         } on ApiException {
           skipped.add('o cliente (identifique de novo)');
         }
@@ -1108,6 +1193,8 @@ class PosController extends ChangeNotifier {
         code: data['code']! as int,
         documentMasked: maskDocument(data['document'] as String?),
         agreements: ((data['agreements'] as List?) ?? const []).cast<Map<String, dynamic>>(),
+        groupId: data['customer_group_id'] as String?,
+        birthDate: data['birth_date'] as String?,
       );
       reprice();
     } on ApiException catch (error) {
@@ -1182,6 +1269,8 @@ class PosController extends ChangeNotifier {
     }
     reprice();
     cart.payments.add(payment);
+    // Desconto pela forma de pagamento (ou pelo convênio) passa a valer com o pagamento lançado.
+    applyAutoDiscounts();
     notice = null;
     notifyListeners();
   }

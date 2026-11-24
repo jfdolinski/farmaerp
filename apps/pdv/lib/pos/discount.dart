@@ -27,7 +27,7 @@ DiscountNeed checkDiscount({
   required LocalUser operator,
   required DateTime now,
 }) {
-  if (discountCents < 0 || discountCents > line.grossCents) throw const PosException('FA980');
+  if (discountCents < 0 || discountCents > line.grossCents - line.autoDiscountCents) throw const PosException('FA980');
   if (discountCents == 0) return DiscountNeed.none;
   final percent = (discountCents * 10000 / line.grossCents).ceil();
   final ruleMax = line.product.maxDiscountAt(now);

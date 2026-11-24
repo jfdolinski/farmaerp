@@ -305,7 +305,13 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - **Cadastro:** `/descontos`, com `rules.manage` (filial ou rede). Editar é encerrar e criar outro (`app.create_discount_rule`, `app.end_discount_rule`). O simulador (`app.simulate_discounts`, `rules.view`) mostra, para uma venda de exemplo, quais descontos valem e por quê. Erros: FA826 a FA831, além dos do motor (FA702 a FA704).
 - **Grupos de clientes:** em `/descontos`, com `customers.manage`. O grupo de cada cliente fica na ficha dele (`app.set_customer_group`). Grupo com clientes ou com desconto em vigor não sai (FA105).
 - **Descida para o PDV:** as regras em vigor ou futuras da filial e da rede descem como o 6º tipo (`discount_rule`); encerrada ou vencida desce vazia. O produto desce com a hierarquia (`discount_subject`) e o cliente guardado, com o grupo.
-- **O desconto manual do caixa** (limite do operador, máximo do produto e liberação do supervisor) continua por cima dos automáticos. A aplicação no PDV e a conferência na central chegam no PR 7A-2.
+- **No caixa:** o PDV refaz os descontos automáticos a cada mudança na venda (itens, quantidade, cliente, pagamento e cupom), com a mesma conta da central (`lib/pos/discount_engine.dart`). Cada item mostra as regras que valeram, e o comprovante lista cada uma.
+  - **Forma de pagamento:** ao escolher a forma, o valor sugerido já vem com o desconto dela (por exemplo, PIX). Pagamento misto tira esse desconto.
+  - **Cupom:** campo na tela de pagamento. Código que não dá desconto nenhum na venda é recusado (FA832).
+  - **Desconto manual:** vai por cima dos automáticos e só até o que sobra do item. O limite do operador e o máximo do produto valem só sobre a parte manual.
+  - **Orçamento puxado no caixa:** o desconto do orçamento é refeito na mesma fração; o manual é o que passa dos automáticos de agora.
+- **Na central:** cada item traz a parte automática (`auto_discount`) e as regras com o valor de cada uma (`sale_item_discount`), e a venda traz o cupom. A central refaz a conta com as regras da hora da venda (inclusive as encerradas depois). Se o PDV deu mais que o esperado, a venda vale e fica o alerta "Desconto automático acima do que as regras davam". O detalhe da venda mostra as regras e o cupom.
+- **Formato 4 da descida:** os PDVs refazem a carga para receber as regras, a hierarquia dos produtos e o grupo dos clientes.
 
 ## Estoque
 
