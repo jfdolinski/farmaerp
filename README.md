@@ -343,7 +343,7 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - Impressora térmica em ESC/POS pela fila do Windows (tipo RAW, página 860 para os acentos), escolhida no ícone de impressora do caixa.
   - Sem impressora configurada, sai em PDF em `Documentos\FarmaERP\comprovantes`.
   - Falha na impressão não desfaz a venda e mostra "Reimprimir".
-- **Atalhos:** F2 vai para a leitura, F4 identifica o cliente, F10 abre o pagamento, Esc volta.
+- **Atalhos:** F2 vai para a leitura, F4 identifica o cliente, F6 sangria, F7 suprimento, F8 fecha o caixa, F10 abre o pagamento, Esc volta.
 - **Desconto no item:** em R$ ou %.
   - Dentro do limite de desconto do operador (perfis) e do máximo do produto (motor de regras, que desce com o produto e vence com a regra), vale na hora.
   - Acima, um supervisor libera no próprio terminal com código, PIN e motivo. Ele precisa ser outra pessoa, ter limite que cubra o desconto e, acima do máximo do produto, `sales.discount_override` (dele ou do operador).
@@ -358,6 +358,24 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - O cliente identificado vai na venda e no comprovante, com o documento mascarado.
   - Os convênios dele descem com o cadastro.
   - O pagamento em convênio aparece só com cliente que tenha convênio, com a matrícula. O saldo do convênio chega com o financeiro do cliente (Etapa 7).
+
+**Sangria, suprimento e fechamento**
+
+- **Sangria em três níveis**, pelo limite de sangria (`cash_withdrawal`) dos perfis, que desce com o usuário:
+  - até o limite do operador, ele faz sozinho;
+  - acima, outra pessoa com limite que cubra o valor libera no próprio terminal com código e PIN (o supervisor);
+  - acima do limite do supervisor, o gerente (FA991 e FA992).
+- A sangria nunca passa do dinheiro que deve estar na gaveta (FA993) e exige valor e motivo (FA994). Sai um comprovante com as assinaturas para ir com o envelope.
+- **Suprimento:** troco que entra na gaveta, com motivo e comprovante; não pede liberação.
+- **Fechamento com conferência cega:** o operador informa o que contou em dinheiro, cartão de crédito, cartão de débito e PIX, sem ver o esperado (FA997), confirma e volta para a entrada.
+  - O comprovante do fechamento mostra só o contado.
+  - A central calcula o esperado: dinheiro = fundo de troco + vendas em dinheiro (menos o troco) + suprimentos − sangrias; as outras formas, a soma das vendas. Convênio não passa pelo caixa.
+  - A diferença fica em `cash_session_count`; qualquer diferença vira alerta.
+- **Na central:** movimentos e fechamento sobem pela outbox (`cash_movement` e `cash_session_close`).
+  - Fora do formato ou de turno de outro terminal: conflito FA995. Turno já fechado: FA996.
+  - A sangria acima do limite sem liberação válida vale (o dinheiro já saiu) e vira alerta. A liberação válida aparece em `/liberacoes` como "Sangria do caixa".
+- **Retaguarda:** `/caixas` lista os turnos por período, filial e situação, com vendas, sangrias, suprimentos e a diferença. O detalhe mostra a conferência por forma (no turno aberto, o esperado de agora), os movimentos com quem liberou e os alertas. Exige `sales.view`.
+- **No seed:** o Operador Centro não tem limite de sangria (toda sangria pede liberação); o Gerente Centro (PIN 1357) libera até R$ 1.000.
 
 **Controlados**
 

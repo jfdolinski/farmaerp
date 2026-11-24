@@ -304,6 +304,41 @@ describe('descida para o PDV contra o banco real', () => {
     expect((await asOperator.expect(200)).body).toEqual([]);
   });
 
+  it('caixa: sangria liberada pelo gerente, fechamento cego e conferência na retaguarda', async () => {
+    const push = (items: Json[]) =>
+      request(server()).post('/terminals/sync/push').set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`)
+        .send({ items: items.map((item) => { sequence += 1; return { id: uuidV7(), sequence, ...item }; }) });
+    const operatorId = '019a0000-0000-7000-8000-000000000009';
+    const managerId = '019a0000-0000-7000-8000-00000000000d';
+    const sessionId = uuidV7();
+    const at = () => new Date().toISOString();
+    await push([{ kind: 'cash_session_open', payload: { id: sessionId, operator_id: operatorId, opened_at: at(), opening_float: 100 } }]).expect(200);
+    const withdrawal = { id: uuidV7(), cash_session_id: sessionId, kind: 'withdrawal', amount: 80, reason: 'Envelope do cofre', operator_id: operatorId, released_by: managerId, moved_at: at() };
+    const results = (await push([
+      { kind: 'cash_movement', payload: { id: uuidV7(), cash_session_id: sessionId, kind: 'supply', amount: 20, reason: 'Troco', operator_id: operatorId, released_by: null, moved_at: at() } },
+      { kind: 'cash_movement', payload: withdrawal },
+      { kind: 'cash_session_close', payload: { cash_session_id: sessionId, closed_by: operatorId, closed_at: at(), counts: { cash: 35, credit_card: 0, debit_card: 0, pix: 0 }, note: null } },
+      { kind: 'cash_movement', payload: { ...withdrawal, id: uuidV7() } },
+    ]).expect(200)).body.results as Json[];
+    expect(results.map((r) => [r.status, r.code])).toEqual([['applied', null], ['applied', null], ['applied', null], ['conflict', 'FA996']]);
+
+    const asManager = (path: string) => request(server()).get(`/admin${path}`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(MANAGER_EMAIL)}`);
+    const listed = ((await asManager('/cash-sessions?status=closed').expect(200)).body as Json[]).find((row) => row.id === sessionId);
+    expect(listed).toMatchObject({ status: 'closed', alert_count: 1 });
+    expect(Number(listed!.difference_total)).toBe(-5);
+    const detail = (await asManager(`/cash-sessions/${sessionId}`).expect(200)).body as Json;
+    expect(detail.counts[0]).toMatchObject({ method: 'cash', counted: 35, expected: 40, difference: -5 });
+    expect(detail.movements.map((m: Json) => [m.kind, m.released_by_name]).sort()).toEqual([['supply', null], ['withdrawal', 'Gerente Centro']]);
+    const releases = (await asManager('/supervisor-releases?action=cash.withdrawal').expect(200)).body as Json[];
+    expect(releases.some((row) => row.reason === 'Envelope do cofre')).toBe(true);
+    for (const query of ['?status=nada', '?from=ontem', '?branch=x']) {
+      expect((await asManager(`/cash-sessions${query}`).expect(422)).body).toMatchObject({ code: 'FA005' });
+    }
+    expect((await asManager(`/cash-sessions/${uuidV7()}`).expect(404)).body).toMatchObject({ code: 'FA006' });
+    const asOperator = request(server()).get(`/admin/cash-sessions/${sessionId}`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(OPERATOR_EMAIL)}`);
+    expect((await asOperator.expect(404)).body).toMatchObject({ code: 'FA006' });
+  });
+
   it('estoque das outras filiais e tempo sem internet para a venda sem estoque', async () => {
     const auth = (call: request.Test) => call.set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`);
     const network = (await auth(request(server()).get(`/terminals/stock/${DIPIRONA}`)).expect(200)).body as Json[];

@@ -203,6 +203,28 @@ void main() {
         expect(dispensed['batch_number'], 'CLZ01');
         expect(dispensed['buyer_document_masked'], '******321');
         expect(controlled.body, isNot(contains('987654321')));
+
+        // Caixa: sangria acima do limite do operador (zero no seed) liberada pelo Gerente Centro e
+        // fechamento cego. A central calcula o esperado e a retaguarda vê a conferência.
+        final shift = pos.session!.id;
+        expect(await pos.withdraw(5000, 'Envelope E2E'), isFalse);
+        expect(await pos.releaseWithdrawal(5000, 'Envelope E2E', '2', '1357'), isTrue, reason: pos.notice?.message);
+        expect(await pos.closeShift({'cash': 1000, 'credit_card': 0, 'debit_card': 0, 'pix': 0}, note: 'Teste E2E'), isTrue);
+        await sync.push(token.value);
+        expect(database.outboxPending, 0);
+        expect(
+          database.debugSelect("SELECT result FROM outbox WHERE kind IN ('cash_movement', 'cash_session_close')").map((r) => r['result']),
+          ['applied', 'applied'],
+        );
+        final cash = await http.get(Uri.parse('$base/admin/cash-sessions/$shift'), headers: {'Authorization': 'Bearer $session'});
+        final detail = jsonDecode(cash.body) as Map<String, dynamic>;
+        expect(detail['status'], 'closed', reason: '${cash.statusCode} ${cash.body}');
+        expect(detail['closing_note'], 'Teste E2E');
+        expect((detail['movements'] as List).single, containsPair('released_by_name', 'Gerente Centro'));
+        final cashCount = (detail['counts'] as List).cast<Map<String, dynamic>>().first;
+        expect(cashCount['method'], 'cash');
+        expect(cashCount['counted'], 10);
+        expect(cashCount['difference'], closeTo((cashCount['counted'] as num) - (cashCount['expected'] as num), 0.001));
       } finally {
         await admin('/admin/products/$_dipirona/prices', {'branchId': _branch, 'price': null}, token: session);
         await admin('/admin/terminals/$terminalId/revoke', {'reason': 'Fim do teste E2E'}, token: session);
