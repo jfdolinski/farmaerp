@@ -8,8 +8,10 @@ import '../customers/customer_service.dart';
 import '../local/local_database.dart';
 import '../terminal/terminal_api.dart';
 import 'cart.dart';
+import 'cash.dart';
 import 'controlled.dart';
 import 'discount.dart';
+import 'money.dart';
 import 'pos_auth.dart';
 import 'receipt.dart';
 
@@ -111,6 +113,7 @@ class PosController extends ChangeNotifier {
     if (busy) return;
     busy = true;
     notice = null;
+    info = null;
     notifyListeners();
     try {
       operator = await auth.verify(code, pin, permission: 'sales.sell');
@@ -355,6 +358,164 @@ class PosController extends ChangeNotifier {
     pendingControlled = null;
     notice = null;
     notifyListeners();
+  }
+
+  /// Sangria: até o limite do operador, vale na hora (devolve true); acima, devolve false e a tela
+  /// pede quem libere. Nunca retira mais do que o dinheiro que deve estar na gaveta (FA993).
+  Future<bool?> withdraw(int amountCents, String reason) async {
+    final current = operator;
+    final open = session;
+    if (current == null || open == null || busy) return null;
+    try {
+      _checkMovement(amountCents, reason);
+      if (amountCents > database.cashInDrawerCents(open.id)) throw const PosException('FA993');
+      if (withdrawalNeedsRelease(current, amountCents)) {
+        notice = null;
+        notifyListeners();
+        return false;
+      }
+      await _recordMovement('withdrawal', amountCents, reason, current, null);
+      return true;
+    } on PosException catch (error) {
+      _fail(error.code);
+      return null;
+    }
+  }
+
+  /// Quem libera a sangria acima do limite: outra pessoa, com limite que cubra o valor.
+  Future<bool> releaseWithdrawal(int amountCents, String reason, String code, String pin) async {
+    final current = operator;
+    final open = session;
+    if (current == null || open == null || busy) return false;
+    busy = true;
+    notice = null;
+    notifyListeners();
+    try {
+      _checkMovement(amountCents, reason);
+      if (amountCents > database.cashInDrawerCents(open.id)) throw const PosException('FA993');
+      final releaser = await auth.verify(code, pin);
+      checkWithdrawalReleaser(operator: current, releaser: releaser, amountCents: amountCents);
+      await _recordMovement('withdrawal', amountCents, reason, current, releaser);
+      return true;
+    } on PosException catch (error) {
+      notice = ErrorDisplay.fromCode(error.code);
+      return false;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  /// Suprimento: troco que entra na gaveta. Não precisa de liberação.
+  Future<bool> supply(int amountCents, String reason) async {
+    final current = operator;
+    if (current == null || session == null || busy) return false;
+    try {
+      _checkMovement(amountCents, reason);
+      await _recordMovement('supply', amountCents, reason, current, null);
+      return true;
+    } on PosException catch (error) {
+      _fail(error.code);
+      return false;
+    }
+  }
+
+  void _checkMovement(int amountCents, String reason) {
+    if (!cart.isEmpty || paying) throw const PosException('FA998');
+    if (amountCents <= 0 || reason.trim().isEmpty || reason.trim().length > 500) throw const PosException('FA994');
+  }
+
+  Future<void> _recordMovement(String kind, int amountCents, String reason, LocalUser current, LocalUser? releaser) async {
+    final now = _clock();
+    database.recordCashMovement(
+      sessionId: session!.id,
+      kind: kind,
+      amountCents: amountCents,
+      reason: reason.trim(),
+      operatorId: current.id,
+      releasedBy: releaser?.id,
+      now: now,
+    );
+    final withdrawal = kind == 'withdrawal';
+    logger?.info(withdrawal ? 'Sangria registrada' : 'Suprimento registrado', fields: {
+      'user_code': current.code,
+      if (releaser != null) 'releaser_code': releaser.code,
+    });
+    notice = null;
+    info = withdrawal ? 'Sangria de ${formatCents(amountCents)} registrada.' : 'Suprimento de ${formatCents(amountCents)} registrado.';
+    onSaleSaved?.call();
+    final lines = buildCashMovementReceipt(
+      fiscal: database.fiscal,
+      withdrawal: withdrawal,
+      amountCents: amountCents,
+      reason: reason.trim(),
+      operatorName: current.name,
+      releaserName: releaser?.name,
+      at: now,
+      terminalNumber: terminalNumber() ?? 0,
+    );
+    await _printLines(withdrawal ? 'sangria' : 'suprimento', lines);
+    notifyListeners();
+  }
+
+  /// Fechamento com conferência cega: o operador informa o que contou de cada forma, sem ver o
+  /// esperado. A diferença é calculada na central. Depois do fechamento, volta para a entrada.
+  Future<bool> closeShift(Map<String, int?> countedCents, {String? note}) async {
+    final current = operator;
+    final open = session;
+    if (current == null || open == null || busy) return false;
+    try {
+      if (!cart.isEmpty || paying) throw const PosException('FA998');
+      if (countedMethods.keys.any((method) => countedCents[method] == null || countedCents[method]! < 0)) {
+        throw const PosException('FA997');
+      }
+      if (note != null && note.trim().length > 500) throw const PosException('FA997');
+    } on PosException catch (error) {
+      _fail(error.code);
+      return false;
+    }
+    busy = true;
+    notifyListeners();
+    final now = _clock();
+    final counted = {for (final method in countedMethods.keys) method: countedCents[method]!};
+    final text = note?.trim();
+    database.closeSession(
+      sessionId: open.id,
+      closedBy: current.id,
+      countedCents: counted,
+      note: text == null || text.isEmpty ? null : text,
+      now: now,
+    );
+    logger?.info('Caixa fechado', fields: {'user_code': current.code});
+    onSaleSaved?.call();
+    final lines = buildClosingReceipt(
+      fiscal: database.fiscal,
+      countedCents: counted,
+      labels: countedMethods,
+      operatorName: current.name,
+      openedAt: open.openedAt,
+      at: now,
+      terminalNumber: terminalNumber() ?? 0,
+      note: text,
+    );
+    busy = false;
+    await _printLines('fechamento', lines);
+    final printProblem = notice;
+    logout();
+    session = null;
+    notice = printProblem;
+    info = 'Caixa fechado. A conferência fica com a gerência.';
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> _printLines(String name, List<ReceiptLine> lines) async {
+    try {
+      await printer().print(name, lines);
+    } catch (error, stack) {
+      logger?.error('Falha ao imprimir o comprovante de caixa', errorCode: 'FA973', error: error, stackTrace: stack);
+      notice = ErrorDisplay.fromCode('FA973');
+    }
   }
 
   /// Desconto em centavos no item. Dentro do limite do operador vale na hora; acima, devolve

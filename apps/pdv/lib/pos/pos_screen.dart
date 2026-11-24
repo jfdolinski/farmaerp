@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../core/error_display.dart';
 import 'cart.dart';
+import 'cash_dialogs.dart';
 import 'money.dart';
 import 'pos_controller.dart';
 import 'controlled_dialog.dart';
@@ -50,6 +51,23 @@ class PosScreen extends StatelessWidget {
                   icon: const Icon(Icons.print),
                   onPressed: onPrinterSettings,
                 ),
+              if (operator != null && controller.session != null) ...[
+                TextButton(
+                  key: const Key('cash-withdrawal'),
+                  onPressed: () => showCashMovementDialog(context, controller, withdrawal: true),
+                  child: const Text('Sangria (F6)'),
+                ),
+                TextButton(
+                  key: const Key('cash-supply'),
+                  onPressed: () => showCashMovementDialog(context, controller, withdrawal: false),
+                  child: const Text('Suprimento (F7)'),
+                ),
+                TextButton(
+                  key: const Key('close-shift'),
+                  onPressed: () => showCloseShiftDialog(context, controller),
+                  child: const Text('Fechar caixa (F8)'),
+                ),
+              ],
               if (operator != null)
                 TextButton(
                   key: const Key('logout'),
@@ -151,6 +169,11 @@ class _LoginViewState extends State<_LoginView> {
               const SizedBox(height: 16),
               if (controller.notice != null)
                 _Notice(notice: controller.notice!),
+              if (controller.info != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(controller.info!, key: const Key('login-info'), textAlign: TextAlign.center),
+                ),
               TextField(
                 key: const Key('login-code'),
                 controller: _code,
@@ -311,6 +334,12 @@ class _SaleViewState extends State<_SaleView> {
         const SingleActivator(LogicalKeyboardKey.f2): _scanFocus.requestFocus,
         const SingleActivator(LogicalKeyboardKey.f4): () =>
             showCustomerDialog(context, controller),
+        const SingleActivator(LogicalKeyboardKey.f6): () =>
+            showCashMovementDialog(context, controller, withdrawal: true),
+        const SingleActivator(LogicalKeyboardKey.f7): () =>
+            showCashMovementDialog(context, controller, withdrawal: false),
+        const SingleActivator(LogicalKeyboardKey.f8): () =>
+            showCloseShiftDialog(context, controller),
       },
       child: Focus(
         autofocus: true,

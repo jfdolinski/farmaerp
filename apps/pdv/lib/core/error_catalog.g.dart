@@ -1204,4 +1204,52 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'A venda fica nos conflitos de sincronização. Atualize o PDV e confira com o farmacêutico.',
     retryable: false,
   ),
+  'FA991': ErrorCatalogEntry(
+    code: 'FA991',
+    message: 'Esta sangria passa do seu limite.',
+    action: 'Peça a um supervisor para liberar com o código e o PIN dele.',
+    retryable: false,
+  ),
+  'FA992': ErrorCatalogEntry(
+    code: 'FA992',
+    message: 'O limite de sangria de quem liberou não cobre este valor.',
+    action: 'Chame o gerente ou outra pessoa com limite maior. Quem pediu não pode liberar a própria sangria.',
+    retryable: false,
+  ),
+  'FA993': ErrorCatalogEntry(
+    code: 'FA993',
+    message: 'O valor da sangria é maior que o dinheiro no caixa.',
+    action: 'Confira o valor. A sangria só retira o dinheiro que está na gaveta.',
+    retryable: false,
+  ),
+  'FA994': ErrorCatalogEntry(
+    code: 'FA994',
+    message: 'Informe o valor e o motivo do movimento de caixa.',
+    action: 'O valor precisa ser maior que zero, e o motivo ajuda na conferência.',
+    retryable: false,
+  ),
+  'FA995': ErrorCatalogEntry(
+    code: 'FA995',
+    message: 'O movimento ou o fechamento de caixa enviado pelo terminal está inconsistente.',
+    action: 'Fica nos conflitos de sincronização, na retaguarda. Confira com o operador e atualize o PDV.',
+    retryable: false,
+  ),
+  'FA996': ErrorCatalogEntry(
+    code: 'FA996',
+    message: 'Este turno de caixa já está fechado.',
+    action: 'Fica nos conflitos de sincronização. Abra um novo turno para continuar vendendo.',
+    retryable: false,
+  ),
+  'FA997': ErrorCatalogEntry(
+    code: 'FA997',
+    message: 'Informe o valor contado de cada forma de pagamento.',
+    action: 'Conte o dinheiro da gaveta e some os comprovantes de cartão e PIX. Sem movimento, informe zero.',
+    retryable: false,
+  ),
+  'FA998': ErrorCatalogEntry(
+    code: 'FA998',
+    message: 'Termine ou cancele a venda antes de mexer no caixa.',
+    action: 'Finalize a venda em andamento ou retire os itens.',
+    retryable: false,
+  ),
 };

@@ -239,7 +239,10 @@
       "sale_payment_id_uuid_v7_check",
       "sale_alert_id_uuid_v7_check",
       "user_pin_id_uuid_v7_check",
-      "controlled_dispensing_id_uuid_v7_check"
+      "controlled_dispensing_id_uuid_v7_check",
+      "cash_movement_id_uuid_v7_check",
+      "cash_session_count_id_uuid_v7_check",
+      "cash_alert_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -2186,5 +2189,79 @@
       "controlled_dispensing_complete_check",
       "controlled_dispensing_item_key"
     ]
+  },
+  "FA991": {
+    "message": "Esta sangria passa do seu limite.",
+    "action": "Peça a um supervisor para liberar com o código e o PIN dele.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA992": {
+    "message": "O limite de sangria de quem liberou não cobre este valor.",
+    "action": "Chame o gerente ou outra pessoa com limite maior. Quem pediu não pode liberar a própria sangria.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA993": {
+    "message": "O valor da sangria é maior que o dinheiro no caixa.",
+    "action": "Confira o valor. A sangria só retira o dinheiro que está na gaveta.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA994": {
+    "message": "Informe o valor e o motivo do movimento de caixa.",
+    "action": "O valor precisa ser maior que zero, e o motivo ajuda na conferência.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA995": {
+    "message": "O movimento ou o fechamento de caixa enviado pelo terminal está inconsistente.",
+    "action": "Fica nos conflitos de sincronização, na retaguarda. Confira com o operador e atualize o PDV.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": [
+      "cash_movement_kind_check",
+      "cash_movement_amount_check",
+      "cash_movement_reason_check",
+      "cash_movement_release_check",
+      "cash_session_count_method_check",
+      "cash_session_count_counted_check",
+      "cash_session_count_method_key",
+      "cash_alert_kind_check",
+      "cash_session_closing_note_check"
+    ]
+  },
+  "FA996": {
+    "message": "Este turno de caixa já está fechado.",
+    "action": "Fica nos conflitos de sincronização. Abra um novo turno para continuar vendendo.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA997": {
+    "message": "Informe o valor contado de cada forma de pagamento.",
+    "action": "Conte o dinheiro da gaveta e some os comprovantes de cartão e PIX. Sem movimento, informe zero.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA998": {
+    "message": "Termine ou cancele a venda antes de mexer no caixa.",
+    "action": "Finalize a venda em andamento ou retire os itens.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
   }
 }

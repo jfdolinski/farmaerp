@@ -353,6 +353,28 @@ const _migrations = <String>[
   ALTER TABLE product ADD COLUMN max_discount_until TEXT;
   ALTER TABLE customer ADD COLUMN agreements TEXT NOT NULL DEFAULT '[]';
   ''',
+  // Sangria, suprimento e fechamento do caixa (com o que foi contado).
+  '''
+  CREATE TABLE cash_movement (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    cash_session_id BLOB NOT NULL REFERENCES cash_session (id),
+    kind TEXT NOT NULL CHECK (kind IN ('withdrawal', 'supply')),
+    amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+    reason TEXT NOT NULL,
+    operator_id BLOB NOT NULL,
+    released_by BLOB,
+    moved_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT,
+    version INTEGER NOT NULL DEFAULT 1,
+    updated_by BLOB,
+    trace_id BLOB
+  ) STRICT;
+  CREATE INDEX cash_movement_session_idx ON cash_movement (cash_session_id);
+  ALTER TABLE cash_session ADD COLUMN closed_by BLOB;
+  ALTER TABLE cash_session ADD COLUMN counted TEXT;
+  ''',
 ];
 
 /// Pessoa que pode entrar no PDV, com o que veio da central.
@@ -1284,6 +1306,78 @@ class LocalDatabase {
         }
         enqueue('sale', payload, now: now);
       });
+
+  /// Dinheiro que deve estar na gaveta agora: fundo de troco + vendas em dinheiro (menos o troco)
+  /// + suprimentos - sangrias. Só para conferir a sangria; o operador não vê este valor.
+  int cashInDrawerCents(String sessionId) {
+    final id = uuidBytes(sessionId);
+    final row = _db.select(
+      'SELECT '
+      '(SELECT opening_float_cents FROM cash_session WHERE id = ?) '
+      "+ COALESCE((SELECT SUM(p.amount_cents - p.change_cents) FROM sale_payment p JOIN sale s ON s.id = p.sale_id "
+      "WHERE s.cash_session_id = ? AND p.method = 'cash'), 0) "
+      "+ COALESCE((SELECT SUM(amount_cents) FROM cash_movement WHERE cash_session_id = ? AND kind = 'supply'), 0) "
+      "- COALESCE((SELECT SUM(amount_cents) FROM cash_movement WHERE cash_session_id = ? AND kind = 'withdrawal'), 0) AS cents",
+      [id, id, id, id],
+    ).first;
+    return row['cents'] as int? ?? 0;
+  }
+
+  /// Sangria ou suprimento: grava aqui e põe na outbox, na mesma transação.
+  String recordCashMovement({
+    required String sessionId,
+    required String kind,
+    required int amountCents,
+    required String reason,
+    required String operatorId,
+    String? releasedBy,
+    required DateTime now,
+  }) => _transaction(() {
+    final id = const Uuid().v7();
+    final at = now.toUtc().toIso8601String();
+    _db.execute(
+      'INSERT INTO cash_movement (id, cash_session_id, kind, amount_cents, reason, operator_id, released_by, moved_at, '
+      'created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        uuidBytes(id), uuidBytes(sessionId), kind, amountCents, reason, uuidBytes(operatorId),
+        releasedBy == null ? null : uuidBytes(releasedBy), at, at, at,
+      ],
+    );
+    enqueue('cash_movement', {
+      'id': id,
+      'cash_session_id': sessionId,
+      'kind': kind,
+      'amount': amountCents / 100,
+      'reason': reason,
+      'operator_id': operatorId,
+      'released_by': releasedBy,
+      'moved_at': at,
+    }, now: now);
+    return id;
+  });
+
+  /// Fecha o turno com o que foi contado (em centavos, por forma). O esperado é calculado na central.
+  void closeSession({
+    required String sessionId,
+    required String closedBy,
+    required Map<String, int> countedCents,
+    String? note,
+    required DateTime now,
+  }) => _transaction(() {
+    final at = now.toUtc().toIso8601String();
+    _db.execute(
+      "UPDATE cash_session SET status = 'closed', closed_at = ?, closed_by = ?, counted = ?, updated_at = ?, "
+      "version = version + 1 WHERE id = ? AND status = 'open'",
+      [at, uuidBytes(closedBy), jsonEncode(countedCents), at, uuidBytes(sessionId)],
+    );
+    enqueue('cash_session_close', {
+      'cash_session_id': sessionId,
+      'closed_by': closedBy,
+      'closed_at': at,
+      'counts': {for (final entry in countedCents.entries) entry.key: entry.value / 100},
+      'note': note,
+    }, now: now);
+  });
 
   /// Configuração local do terminal (por exemplo, a impressora).
   String? setting(String key) => _state('setting:$key');

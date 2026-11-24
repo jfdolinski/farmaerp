@@ -114,6 +114,79 @@ List<ReceiptLine> buildReceipt({
   ];
 }
 
+/// Cabeçalho comum dos comprovantes de caixa.
+List<ReceiptLine> _cashHeader(Map<String, dynamic>? fiscal, String title, DateTime at, int terminalNumber) {
+  final branch = (fiscal?['branch'] as Map?) ?? const {};
+  final company = (fiscal?['company'] as Map?) ?? const {};
+  final local = at.toLocal();
+  String two(int value) => value.toString().padLeft(2, '0');
+  return [
+    ReceiptLine((company['trade_name'] ?? company['legal_name'] ?? '') as String, bold: true, center: true),
+    ReceiptLine('${branch['name'] ?? ''} · Caixa $terminalNumber', center: true),
+    const ReceiptLine(''),
+    ReceiptLine(title, bold: true, center: true),
+    ReceiptLine('${two(local.day)}/${two(local.month)}/${local.year} ${two(local.hour)}:${two(local.minute)}', center: true),
+    ReceiptLine('-' * receiptWidth),
+  ];
+}
+
+/// Comprovante de sangria ou suprimento, para ir junto com o envelope (com as assinaturas).
+List<ReceiptLine> buildCashMovementReceipt({
+  required Map<String, dynamic>? fiscal,
+  required bool withdrawal,
+  required int amountCents,
+  required String reason,
+  required String operatorName,
+  String? releaserName,
+  required DateTime at,
+  required int terminalNumber,
+}) => [
+  ..._cashHeader(fiscal, withdrawal ? 'SANGRIA' : 'SUPRIMENTO', at, terminalNumber),
+  ReceiptLine(_twoColumns('Valor', formatCents(amountCents)), bold: true),
+  for (final text in _wrap('Motivo: $reason')) ReceiptLine(text),
+  ReceiptLine('Operador: $operatorName'),
+  if (releaserName != null) ReceiptLine('Liberada por: $releaserName'),
+  const ReceiptLine(''),
+  const ReceiptLine(''),
+  const ReceiptLine('______________________________', center: true),
+  const ReceiptLine('Operador', center: true),
+  const ReceiptLine(''),
+  const ReceiptLine('______________________________', center: true),
+  ReceiptLine(withdrawal ? 'Quem recebeu o dinheiro' : 'Quem entregou o dinheiro', center: true),
+];
+
+/// Comprovante do fechamento: só o que o operador contou. O esperado e a diferença ficam na retaguarda.
+List<ReceiptLine> buildClosingReceipt({
+  required Map<String, dynamic>? fiscal,
+  required Map<String, int> countedCents,
+  required Map<String, String> labels,
+  required String operatorName,
+  required DateTime openedAt,
+  required DateTime at,
+  required int terminalNumber,
+  String? note,
+}) {
+  final local = openedAt.toLocal();
+  String two(int value) => value.toString().padLeft(2, '0');
+  return [
+    ..._cashHeader(fiscal, 'FECHAMENTO DE CAIXA', at, terminalNumber),
+    ReceiptLine('Aberto em ${two(local.day)}/${two(local.month)} ${two(local.hour)}:${two(local.minute)}'),
+    ReceiptLine('Operador: $operatorName'),
+    ReceiptLine('-' * receiptWidth),
+    const ReceiptLine('Valores contados', bold: true),
+    for (final entry in countedCents.entries) ReceiptLine(_twoColumns(labels[entry.key] ?? entry.key, formatCents(entry.value))),
+    if (note != null && note.trim().isNotEmpty) ...[
+      const ReceiptLine(''),
+      for (final text in _wrap('Observação: ${note.trim()}')) ReceiptLine(text),
+    ],
+    const ReceiptLine(''),
+    const ReceiptLine('A conferência é feita pela gerência.', center: true),
+    const ReceiptLine(''),
+    const ReceiptLine('______________________________', center: true),
+    const ReceiptLine('Operador', center: true),
+  ];
+}
+
 /// Para onde vai o comprovante.
 abstract class ReceiptPrinter {
   /// Descrição curta para a tela (nome da impressora ou a pasta do PDF).
