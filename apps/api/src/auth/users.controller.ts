@@ -18,6 +18,8 @@ import { generateTemporaryPassword, hashPassword } from './password.js';
 import { hashPin, isAcceptablePin } from './pin.js';
 import { type AuthenticatedRequest, SessionGuard } from './session.guard.js';
 
+const AUTH_MODES = new Set(['any', 'pin', 'face', 'fingerprint']);
+
 /** Gestão de usuários. Quem pode fazer o quê é decidido pelo banco. */
 @Controller('admin/users')
 @UseGuards(SessionGuard)
@@ -30,7 +32,7 @@ export class UsersController {
   list() {
     return this.database.withContext(async (client) => {
       const { rows } = await client.query(
-        `SELECT u.id, u.code, u.name, u.email, u.is_active,
+        `SELECT u.id, u.code, u.name, u.email, u.is_active, u.pdv_auth_mode,
                 u.id = ANY (app.user_ids_with_access()) AS has_access,
                 COALESCE(
                   (SELECT array_agg(ub.branch_id)
@@ -167,6 +169,23 @@ export class UsersController {
     const hash = await hashPin(pin);
     await this.database.withContext((client) =>
       client.query('SELECT app.set_user_pin($1, $2, $3)', [userId, hash, request.ip ?? '']),
+    );
+    return { status: 'ok' };
+  }
+
+  /** Forma de entrar no PDV (qualquer uma, só PIN, só câmera ou só digital). Mesma regra do PIN. */
+  @Post(':id/auth-mode')
+  @HttpCode(200)
+  async authMode(
+    @Param('id') id: string,
+    @RequestBody() rawBody: unknown,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const userId = requireUuid(id);
+    const mode = asBody(rawBody).mode;
+    if (typeof mode !== 'string' || !AUTH_MODES.has(mode)) throw new AppError('FA819');
+    await this.database.withContext((client) =>
+      client.query('SELECT app.set_user_auth_mode($1, $2, $3)', [userId, mode, request.ip ?? '']),
     );
     return { status: 'ok' };
   }

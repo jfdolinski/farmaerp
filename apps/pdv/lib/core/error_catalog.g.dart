@@ -670,6 +670,24 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Ligue o controle de lote na origem ou registre a entrada no destino com o lote.',
     retryable: false,
   ),
+  'FA819': ErrorCatalogEntry(
+    code: 'FA819',
+    message: 'Escolha uma forma de entrar no PDV válida.',
+    action: 'Use qualquer uma, só PIN, só câmera ou só digital.',
+    retryable: false,
+  ),
+  'FA820': ErrorCatalogEntry(
+    code: 'FA820',
+    message: 'Este usuário não entra com PIN.',
+    action: 'Use a forma configurada para ele ou peça ao gerente para liberar a entrada.',
+    retryable: false,
+  ),
+  'FA821': ErrorCatalogEntry(
+    code: 'FA821',
+    message: 'Quem libera a entrada precisa da permissão e ser outra pessoa.',
+    action: 'Chame o gerente da loja para liberar com o código e o PIN dele.',
+    retryable: false,
+  ),
   'FA870': ErrorCatalogEntry(
     code: 'FA870',
     message: 'Informe o motivo da devolução.',

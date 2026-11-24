@@ -337,6 +337,15 @@ void main() {
         final credits = await http.get(Uri.parse('$base/admin/returns?destination=credit'), headers: {'Authorization': 'Bearer $session'});
         final creditRow = (jsonDecode(credits.body) as List).cast<Map<String, dynamic>>().singleWhere((row) => row['code'] == creditReturn.code);
         expect(num.parse('${creditRow['credit_used']}') * 100, creditReturn.totalCents);
+
+        // Autenticação: cada entrada e liberação subiu e foi aceita; a retaguarda lista as do caixa.
+        await sync.push(token.value);
+        final authResults = database.debugSelect("SELECT result FROM outbox WHERE kind = 'auth_event'").map((r) => r['result']).toSet();
+        expect(authResults, {'applied'});
+        final entries = await http.get(Uri.parse('$base/admin/pdv-auth-events'), headers: {'Authorization': 'Bearer $session'});
+        final authListed = (jsonDecode(entries.body) as List).cast<Map<String, dynamic>>();
+        expect(authListed.where((row) => row['purpose'] == 'login' && row['user_name'] == 'Operador Centro'), isNotEmpty);
+        expect(authListed.where((row) => row['purpose'] == 'approval' && row['user_name'] == 'Gerente Centro'), isNotEmpty);
       } finally {
         await admin('/admin/products/$_dipirona/prices', {'branchId': _branch, 'price': null}, token: session);
         await admin('/admin/terminals/$terminalId/revoke', {'reason': 'Fim do teste E2E'}, token: session);

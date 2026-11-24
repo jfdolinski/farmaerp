@@ -373,7 +373,8 @@ void main() {
       expect(find.byKey(const Key('last-change')), findsOneWidget);
       expect(printer.printed.keys, ['1-000008']);
       expect(saved, 2);
-      expect(database.outboxPending, 2);
+      // Entrada do operador, abertura do turno e a venda.
+      expect(database.outboxPending, 3);
       expect(controller.cart.isEmpty, isTrue);
     });
 

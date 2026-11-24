@@ -339,6 +339,42 @@ describe('descida para o PDV contra o banco real', () => {
     expect((await asOperator.expect(404)).body).toMatchObject({ code: 'FA006' });
   });
 
+  it('autenticação: forma de entrar no PDV, entradas e liberações na retaguarda', async () => {
+    const push = (items: Json[]) =>
+      request(server()).post('/terminals/sync/push').set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`)
+        .send({ items: items.map((item) => { sequence += 1; return { id: uuidV7(), sequence, ...item }; }) });
+    const operatorId = '019a0000-0000-7000-8000-000000000009';
+    const managerId = '019a0000-0000-7000-8000-00000000000d';
+    const asManager = (method: 'get' | 'post', path: string) =>
+      request(server())[method](`/admin${path}`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(MANAGER_EMAIL)}`);
+    try {
+      await admin('post', `/users/${operatorId}/auth-mode`).send({ mode: 'face' }).expect(200);
+      const users = (await admin('get', '/users').expect(200)).body as Json[];
+      expect(users.find((u) => u.id === operatorId)).toMatchObject({ pdv_auth_mode: 'face' });
+      expect((await admin('post', `/users/${operatorId}/auth-mode`).send({ mode: 'senha' }).expect(422)).body).toMatchObject({ code: 'FA819' });
+      expect((await admin('post', `/users/${operatorId}/auth-mode`).send({}).expect(422)).body).toMatchObject({ code: 'FA819' });
+      const asOperator = request(server()).post(`/admin/users/${managerId}/auth-mode`).set('X-Forwarded-For', ip)
+        .set('Authorization', `Bearer ${sessions.get(OPERATOR_EMAIL)}`).send({ mode: 'face' });
+      expect((await asOperator).body).toMatchObject({ code: 'FA002' });
+
+      const at = new Date().toISOString();
+      const outside = { id: uuidV7(), user_id: operatorId, event: 'success', purpose: 'login', method: 'pin', authorized_by: null, occurred_at: at };
+      const released = { ...outside, id: uuidV7(), method: 'manager_release', authorized_by: managerId };
+      const results = (await push([{ kind: 'auth_event', payload: outside }, { kind: 'auth_event', payload: released }]).expect(200)).body.results as Json[];
+      expect(results.map((r) => [r.status, r.code])).toEqual([['applied', null], ['applied', null]]);
+      const marked = (await asManager('get', `/pdv-auth-events?alerts=1&branch=${BRANCH_CENTRO}`).expect(200)).body as Json[];
+      expect(marked.find((row) => row.id === outside.id)).toMatchObject({ alert: 'outside_mode', user_name: 'Operador Centro', method: 'pin' });
+      expect(marked.some((row) => row.id === released.id)).toBe(false);
+      const all = (await asManager('get', '/pdv-auth-events').expect(200)).body as Json[];
+      expect(all.find((row) => row.id === released.id)).toMatchObject({ alert: null, authorized_by_name: 'Gerente Centro' });
+      for (const query of ['?alerts=sim', '?from=ontem', '?branch=x']) {
+        expect((await asManager('get', `/pdv-auth-events${query}`).expect(422)).body).toMatchObject({ code: 'FA005' });
+      }
+    } finally {
+      await admin('post', `/users/${operatorId}/auth-mode`).send({ mode: 'pin' }).expect(200);
+    }
+  });
+
   it('orçamento: sobe pela outbox, plaquinha, parâmetros da filial e vendedor na venda', async () => {
     const push = (items: Json[]) =>
       request(server()).post('/terminals/sync/push').set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`)

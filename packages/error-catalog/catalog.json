@@ -246,7 +246,8 @@
       "quote_id_uuid_v7_check",
       "quote_item_id_uuid_v7_check",
       "sale_return_id_uuid_v7_check",
-      "sale_return_item_id_uuid_v7_check"
+      "sale_return_item_id_uuid_v7_check",
+      "pdv_auth_event_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -1948,7 +1949,14 @@
       "sale_payment_agreement_check",
       "sale_alert_kind_check",
       "stock_movement_sale_item_check",
-      "sale_payment_return_check"
+      "sale_payment_return_check",
+      "pdv_auth_event_event_check",
+      "pdv_auth_event_purpose_check",
+      "pdv_auth_event_method_check",
+      "pdv_auth_event_alert_check",
+      "pdv_auth_event_release_check",
+      "pdv_auth_event_release_success_check",
+      "pdv_auth_event_self_check"
     ]
   },
   "FA963": {
@@ -2495,6 +2503,32 @@
   "FA873": {
     "message": "O valor passa do saldo do crédito de devolução.",
     "action": "Use até o saldo e complete com outra forma de pagamento.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA819": {
+    "message": "Escolha uma forma de entrar no PDV válida.",
+    "action": "Use qualquer uma, só PIN, só câmera ou só digital.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "user_account_pdv_auth_mode_check"
+    ]
+  },
+  "FA820": {
+    "message": "Este usuário não entra com PIN.",
+    "action": "Use a forma configurada para ele ou peça ao gerente para liberar a entrada.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA821": {
+    "message": "Quem libera a entrada precisa da permissão e ser outra pessoa.",
+    "action": "Chame o gerente da loja para liberar com o código e o PIN dele.",
     "httpStatus": 422,
     "severity": "warning",
     "retryable": false,

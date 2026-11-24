@@ -119,6 +119,19 @@ export async function setPdvPin(
   return { done: true };
 }
 
+export async function setPdvAuthMode(
+  _previous: UserFormState,
+  form: FormData,
+): Promise<UserFormState> {
+  const result = await apiFetch(`/admin/users/${text(form, "id")}/auth-mode`, {
+    method: "POST",
+    body: { mode: text(form, "mode") },
+  });
+  if (!result.ok) return handleFailure(result.error);
+  refresh();
+  return { done: true };
+}
+
 export async function issueTemporaryPassword(
   _previous: UserFormState,
   form: FormData,

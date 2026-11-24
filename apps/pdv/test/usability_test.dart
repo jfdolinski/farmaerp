@@ -340,7 +340,7 @@ void main() {
     expect(text('loja'), caps('Loja Centro · Caixa 3'));
     expect(text('operador'), startsWith(caps('Operador: Operador Centro · turno desde ')));
     expect(text('vendedor'), caps('Vendedor: —'));
-    expect(text('internet'), startsWith(caps('Sem internet: as vendas sobem quando voltar · 1 a enviar')));
+    expect(text('internet'), startsWith(caps('Sem internet: as vendas sobem quando voltar · 2 a enviar')));
     expect(text('versao'), caps('v1.2.3'));
     expect(find.byKey(const Key('status-agora')), findsOneWidget);
     // Não mostra valores do turno (o fechamento é cego).

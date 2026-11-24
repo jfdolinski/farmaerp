@@ -188,16 +188,45 @@ class _LoginView extends StatefulWidget {
 class _LoginViewState extends State<_LoginView> {
   final _code = TextEditingController();
   final _pin = TextEditingController();
+  final _managerCode = TextEditingController();
+  final _managerPin = TextEditingController();
   final _codeFocus = FocusNode();
   final _pinFocus = FocusNode();
+  final _managerCodeFocus = FocusNode();
+  final _managerPinFocus = FocusNode();
+
+  /// O código digitado é de quem só entra pela câmera ou pela digital, e este terminal não tem o
+  /// aparelho: em vez do PIN, o gerente libera.
+  bool _release = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _code.addListener(() {
+      final release = widget.controller.loginNeedsRelease(_code.text);
+      if (release != _release) setState(() => _release = release);
+    });
+  }
 
   @override
   void dispose() {
     _code.dispose();
     _pin.dispose();
+    _managerCode.dispose();
+    _managerPin.dispose();
     _codeFocus.dispose();
     _pinFocus.dispose();
+    _managerCodeFocus.dispose();
+    _managerPinFocus.dispose();
     super.dispose();
+  }
+
+  Future<void> _submitRelease() async {
+    await widget.controller.releaseLogin(_code.text, _managerCode.text, _managerPin.text);
+    _managerPin.clear();
+    if (mounted && widget.controller.operator == null) {
+      (_managerCode.text.trim().isEmpty ? _managerCodeFocus : _managerPinFocus).requestFocus();
+    }
   }
 
   Future<void> _submit() async {
@@ -242,9 +271,47 @@ class _LoginViewState extends State<_LoginView> {
                 decoration: const InputDecoration(labelText: 'Seu código'),
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                onSubmitted: (_) => _pinFocus.requestFocus(),
+                onSubmitted: (_) => (_release ? _managerCodeFocus : _pinFocus).requestFocus(),
               ),
               const SizedBox(height: 12),
+              if (_release) ...[
+                const Text(
+                  'Este usuário entra pela câmera ou pela digital, que não estão disponíveis neste terminal. '
+                  'O gerente libera a entrada com o código e o PIN dele, e fica registrado.',
+                  key: Key('login-release-hint'),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const Key('release-manager-code'),
+                  controller: _managerCode,
+                  focusNode: _managerCodeFocus,
+                  decoration: const InputDecoration(labelText: 'Código do gerente'),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  onSubmitted: (_) => _managerPinFocus.requestFocus(),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const Key('release-manager-pin'),
+                  controller: _managerPin,
+                  focusNode: _managerPinFocus,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'PIN do gerente'),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(6),
+                  ],
+                  onSubmitted: (_) => _submitRelease(),
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  key: const Key('release-submit'),
+                  onPressed: controller.busy ? null : _submitRelease,
+                  child: Text(controller.busy ? 'Conferindo...' : 'Liberar a entrada'),
+                ),
+              ] else ...[
               TextField(
                 key: const Key('login-pin'),
                 controller: _pin,
@@ -269,6 +336,7 @@ class _LoginViewState extends State<_LoginView> {
                 'O PIN é definido pelo gerente na retaguarda, em Usuários.',
                 textAlign: TextAlign.center,
               ),
+              ],
             ],
           ),
         ),

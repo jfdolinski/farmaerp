@@ -33,6 +33,7 @@ import { QuotesController } from './sales/quotes.controller.js';
 import { TerminalQuotesController } from './terminals/terminal-quotes.controller.js';
 import { TerminalReturnsController } from './terminals/terminal-returns.controller.js';
 import { ReturnsController } from './sales/returns.controller.js';
+import { PdvAuthEventsController } from './auth/pdv-auth-events.controller.js';
 import { SalesController } from './sales/sales.controller.js';
 import { OfflineRulesController, TerminalStockController } from './terminals/offline-rules.controller.js';
 import { TerminalCustomersController } from './terminals/terminal-customers.controller.js';
@@ -70,6 +71,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     QuotesController,
     TerminalQuotesController,
     TerminalReturnsController,
+    PdvAuthEventsController,
     ReturnsController,
     OfflineRulesController,
     TerminalStockController,
