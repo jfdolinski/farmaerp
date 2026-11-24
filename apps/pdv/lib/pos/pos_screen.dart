@@ -8,6 +8,7 @@ import 'money.dart';
 import 'pos_controller.dart';
 import 'controlled_dialog.dart';
 import 'pos_dialogs.dart';
+import 'quote_panels.dart';
 
 /// Caixa: entrada, abertura do turno e venda. Tudo funciona sem internet.
 class PosScreen extends StatelessWidget {
@@ -31,7 +32,11 @@ class PosScreen extends StatelessWidget {
         return Scaffold(
           appBar: AppBar(
             title: Text(
-              operator == null ? 'FarmaERP PDV' : 'Caixa · ${operator.name}',
+              controller.quoteMode
+                  ? 'Orçamento'
+                  : operator == null
+                  ? 'FarmaERP PDV'
+                  : 'Caixa · ${operator.name}',
             ),
             actions: [
               if (!online)
@@ -76,7 +81,9 @@ class PosScreen extends StatelessWidget {
                 ),
             ],
           ),
-          body: switch ((operator, controller.session)) {
+          body: controller.quoteMode
+              ? _SaleView(controller: controller)
+              : switch ((operator, controller.session)) {
             (null, _) => _LoginView(controller: controller),
             (_, null) => _OpenShiftView(controller: controller),
             _ => _SaleView(controller: controller),
@@ -354,7 +361,9 @@ class _SaleViewState extends State<_SaleView> {
                 scanFocus: _scanFocus,
                 onScan: _submitScan,
               );
-              final side = controller.paying
+              final side = controller.quoteMode
+                  ? QuotePanel(controller: controller)
+                  : controller.paying
                   ? _PaymentPanel(controller: controller)
                   : _TotalsPanel(controller: controller, cart: cart);
               if (wide) {
@@ -411,6 +420,7 @@ class _ItemsPanel extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
+        SellerPanel(controller: controller, onIdentified: scanFocus.requestFocus),
         if (controller.pendingControlled != null)
           ControlledPanel(controller: controller, pending: controller.pendingControlled!),
         if (controller.pendingZeroStock != null)
@@ -423,7 +433,7 @@ class _ItemsPanel extends StatelessWidget {
           controller: scan,
           focusNode: scanFocus,
           autofocus: true,
-          enabled: !controller.paying,
+          enabled: !controller.paying && controller.seller != null,
           decoration: const InputDecoration(
             labelText: 'Código de barras, código do produto ou nome (F2)',
             prefixIcon: Icon(Icons.qr_code_scanner),

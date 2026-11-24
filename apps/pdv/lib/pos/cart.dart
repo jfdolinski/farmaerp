@@ -95,6 +95,9 @@ class Cart {
   final payments = <Payment>[];
   SaleCustomer? customer;
 
+  /// Vendedor que atende (pedido a cada venda ou orçamento novo).
+  LocalUser? seller;
+
   /// Quanto deste produto já está na venda.
   int quantityOf(String productId) =>
       lines.where((line) => line.product.id == productId).fold(0, (sum, line) => sum + line.quantityMilli);
@@ -124,8 +127,9 @@ class Cart {
 
   /// Acrescenta o produto (ou soma no item igual que já está na venda). Controlado só entra com a
   /// liberação do farmacêutico, e cada um fica no seu item (receita e lote próprios).
-  CartLine add(SaleProduct product, {int quantityMilli = 1000, ControlledRelease? controlled}) {
-    if ((product.controlledClass != null) != (controlled != null)) throw const PosException('FA986');
+  /// No orçamento, o controlado entra sem a receita (ela é do caixa) ([quote]).
+  CartLine add(SaleProduct product, {int quantityMilli = 1000, ControlledRelease? controlled, bool quote = false}) {
+    if (!quote && (product.controlledClass != null) != (controlled != null)) throw const PosException('FA986');
     if (product.priceCents == null) throw const PosException('FA974');
     if (quantityMilli <= 0) throw const PosException('FA975');
     // Código lido com fracionamento (caixa com 10, por exemplo) vale a fração. No controlado, a
@@ -148,6 +152,7 @@ class Cart {
     lines.clear();
     payments.clear();
     customer = null;
+    seller = null;
   }
 }
 
@@ -238,10 +243,58 @@ SaleDraft buildSale({
       'cash_session_id': session.id,
       'operator_id': operator.id,
       'customer_id': cart.customer?.id,
+      'seller_id': cart.seller?.id,
       'sold_at': now.toUtc().toIso8601String(),
       'fiscal_model': '65',
       'items': items,
       'payments': payments,
+      'subtotal': money(cart.subtotalCents),
+      'discount_total': money(cart.discountCents),
+      'total': money(cart.totalCents),
+    },
+  );
+}
+
+/// Orçamento pronto para gravar e subir. As contas batem como as da venda.
+SaleDraft buildQuote({
+  required Cart cart,
+  required int number,
+  required int terminalNumber,
+  required DateTime now,
+  int? cardNumber,
+}) {
+  if (cart.isEmpty) throw const PosException('FA975');
+  final seller = cart.seller;
+  if (seller == null) throw const PosException('FA881');
+  if (cardNumber != null && (cardNumber < 1 || cardNumber > 9999)) throw const PosException('FA882');
+  const uuid = Uuid();
+  double money(int cents) => cents / 100;
+  final items = [
+    for (var index = 0; index < cart.lines.length; index += 1)
+      {
+        'id': uuid.v7(),
+        'line': index + 1,
+        'product_id': cart.lines[index].product.id,
+        'quantity': cart.lines[index].quantityMilli / 1000,
+        'unit_price': money(cart.lines[index].unitPriceCents),
+        'discount': money(cart.lines[index].discountCents),
+        'total': money(cart.lines[index].totalCents),
+        'release': cart.lines[index].release == null
+            ? null
+            : {'supervisor_id': cart.lines[index].release!.supervisorId, 'reason': cart.lines[index].release!.reason},
+      },
+  ];
+  return SaleDraft(
+    code: 'O$terminalNumber-${number.toString().padLeft(6, '0')}',
+    itemRows: const [],
+    payload: {
+      'id': uuid.v7(),
+      'number': number,
+      'seller_id': seller.id,
+      'customer_id': cart.customer?.id,
+      'card_number': cardNumber,
+      'quoted_at': now.toUtc().toIso8601String(),
+      'items': items,
       'subtotal': money(cart.subtotalCents),
       'discount_total': money(cart.discountCents),
       'total': money(cart.totalCents),

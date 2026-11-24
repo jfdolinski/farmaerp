@@ -8,6 +8,8 @@ import {
   AddTerminal,
   ApproveForm,
   OfflineMinutesForm,
+  SaleSettingsForm,
+  ProfileForm,
   AutoRefresh,
   ReasonAction,
   UnblockButton,
@@ -129,7 +131,7 @@ async function TerminalsContent() {
   const canStructure = can(user, "structure.manage");
   const [terminals, branches] = await Promise.all([
     apiFetch<MonitorRow[]>("/admin/terminals"),
-    apiFetch<{ id: string; name: string; offline_zero_stock_minutes: number }[]>("/admin/branches"),
+    apiFetch<{ id: string; name: string; offline_zero_stock_minutes: number; quote_validity_days: number; seller_pin_required: boolean }[]>("/admin/branches"),
   ]);
 
   if (!terminals.ok) redirectIfNeeded(terminals.error, "/terminais");
@@ -153,6 +155,23 @@ async function TerminalsContent() {
               <li key={branch.id}>
                 <strong>{branch.name}</strong>{" "}
                 <OfflineMinutesForm scope="branch" id={branch.id} current={branch.offline_zero_stock_minutes} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {canStructure && branches.ok && branches.data.length > 0 && (
+        <section className={styles.card}>
+          <h2>Orçamento e vendedor</h2>
+          <p className={styles.hint}>
+            Por quanto tempo o orçamento vale no caixa e se o vendedor digita o PIN junto com o código.
+          </p>
+          <ul className={styles.bullets}>
+            {branches.data.map((branch) => (
+              <li key={branch.id}>
+                <strong>{branch.name}</strong>{" "}
+                <SaleSettingsForm id={branch.id} days={branch.quote_validity_days} pin={branch.seller_pin_required} />
               </li>
             ))}
           </ul>
@@ -232,6 +251,9 @@ async function TerminalsContent() {
                             label="Recusar"
                           />
                         </>
+                      )}
+                      {(terminal.status === "active" || terminal.status === "blocked") && canApprove && terminal.profile && (
+                        <ProfileForm id={terminal.id} current={terminal.profile} />
                       )}
                       {terminal.status === "active" && canApprove && (
                         <OfflineMinutesForm

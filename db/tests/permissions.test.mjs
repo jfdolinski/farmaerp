@@ -14,12 +14,12 @@ afterAll(closePools);
 
 const ALL = [
   'agreements.manage', 'audit.view', 'branches.view_all', 'controlled.dispense', 'controlled.view', 'customers.manage', 'customers.view', 'fiscal.certificate', 'fiscal.manage', 'fiscal.view', 'products.manage', 'products.price', 'products.reactivate',
-  'products.status', 'products.view', 'purchases.cost_override', 'purchases.manage', 'purchases.post', 'purchases.view', 'releases.view', 'roles.assign', 'roles.manage', 'rules.manage', 'rules.view', 'sales.discount_override', 'sales.sell', 'sales.view', 'sales.zero_stock_release',
+  'products.status', 'products.view', 'purchases.cost_override', 'purchases.manage', 'purchases.post', 'purchases.view', 'releases.view', 'roles.assign', 'roles.manage', 'rules.manage', 'rules.view', 'sales.discount_override', 'sales.quote', 'sales.sell', 'sales.view', 'sales.zero_stock_release',
   'stock.adjust', 'stock.batch', 'stock.batch_override', 'stock.loss', 'stock.transfer', 'stock.view', 'structure.manage', 'sync.resolve', 'sync.view',
   'terminals.approve', 'terminals.block', 'terminals.request', 'terminals.revoke', 'terminals.view',
   'users.manage', 'users.reset_password', 'users.view',
 ];
-const MANAGER = ['controlled.view', 'customers.manage', 'customers.view', 'fiscal.certificate', 'products.view', 'purchases.manage', 'purchases.post', 'purchases.view', 'releases.view', 'sales.sell', 'sales.view', 'sales.zero_stock_release', 'stock.batch_override', 'stock.loss', 'stock.transfer', 'stock.view', 'sync.resolve', 'sync.view', 'terminals.block', 'terminals.request', 'terminals.view', 'users.reset_password', 'users.view'];
+const MANAGER = ['controlled.view', 'customers.manage', 'customers.view', 'fiscal.certificate', 'products.view', 'purchases.manage', 'purchases.post', 'purchases.view', 'releases.view', 'sales.quote', 'sales.sell', 'sales.view', 'sales.zero_stock_release', 'stock.batch_override', 'stock.loss', 'stock.transfer', 'stock.view', 'sync.resolve', 'sync.view', 'terminals.block', 'terminals.request', 'terminals.view', 'users.reset_password', 'users.view'];
 
 const has = async (client, code, branchId = null) =>
   (await client.query('SELECT app.has_permission($1, $2) AS ok', [code, branchId])).rows[0].ok;
@@ -49,7 +49,7 @@ describe('catálogo e perfis iniciais', () => {
     expect(rows.map((row) => row.code)).toEqual(ALL);
   });
 
-  it('todo grupo novo já nasce com os quatro perfis', async () => {
+  it('todo grupo novo já nasce com os cinco perfis', async () => {
     await asOwner(async (client) => {
       const { rows: [group] } = await client.query(`INSERT INTO economic_group (name) VALUES ('Novo') RETURNING id`);
       const { rows } = await client.query(
@@ -58,6 +58,7 @@ describe('catálogo e perfis iniciais', () => {
       );
       expect(rows).toEqual([
         { name: 'Administrador', system_key: 'administrator' },
+        { name: 'Balconista', system_key: null },
         { name: 'Farmacêutico', system_key: null },
         { name: 'Gerente', system_key: null },
         { name: 'Operador de caixa', system_key: null },
@@ -68,8 +69,9 @@ describe('catálogo e perfis iniciais', () => {
   it.each([
     ['Administrador', ALL],
     ['Gerente', MANAGER],
-    ['Farmacêutico', ['controlled.dispense', 'controlled.view', 'sales.sell']],
-    ['Operador de caixa', ['sales.sell']],
+    ['Farmacêutico', ['controlled.dispense', 'controlled.view', 'sales.quote', 'sales.sell']],
+    ['Operador de caixa', ['sales.quote', 'sales.sell']],
+    ['Balconista', ['sales.quote']],
   ])('%s tem as permissões da tabela', async (name, expected) => {
     await asOwner(async (client) => {
       const role = await roleNamed(client, a.group, name);

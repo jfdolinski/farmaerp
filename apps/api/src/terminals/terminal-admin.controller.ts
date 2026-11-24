@@ -12,6 +12,7 @@ import { Throttle } from '@nestjs/throttler';
 import { SessionGuard } from '../auth/session.guard.js';
 import { asBody, optionalText, requireUuid } from '../common/parse.js';
 import { DatabaseService } from '../database.service.js';
+import { AppError } from '../observability/app-error.js';
 
 /** Rotas da retaguarda. As permissões são decididas pelo banco. */
 @Controller('admin')
@@ -25,7 +26,7 @@ export class TerminalAdminController {
   branches() {
     return this.database.withContext(async (client) => {
       const { rows } = await client.query(
-        'SELECT id, name, state, pmc_region, offline_zero_stock_minutes FROM v_branch ORDER BY name',
+        'SELECT id, name, state, pmc_region, offline_zero_stock_minutes, quote_validity_days, seller_pin_required FROM v_branch ORDER BY name',
       );
       return rows;
     });
@@ -91,6 +92,17 @@ export class TerminalAdminController {
       ]),
     );
     return { status: 'active' };
+  }
+
+  /** Caixa, orçamento ou autoatendimento. O PDV muda de modo na próxima sincronização. */
+  @Post('terminals/:id/profile')
+  @HttpCode(200)
+  async profile(@Param('id') id: string, @RequestBody() rawBody: unknown) {
+    const terminalId = requireUuid(id);
+    const value = asBody(rawBody).profile;
+    if (typeof value !== 'string') throw new AppError('FA218');
+    await this.database.withContext((client) => client.query('SELECT app.set_terminal_profile($1, $2)', [terminalId, value]));
+    return { status: 'ok' };
   }
 
   @Post('terminals/:id/block')

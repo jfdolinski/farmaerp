@@ -242,7 +242,9 @@
       "controlled_dispensing_id_uuid_v7_check",
       "cash_movement_id_uuid_v7_check",
       "cash_session_count_id_uuid_v7_check",
-      "cash_alert_id_uuid_v7_check"
+      "cash_alert_id_uuid_v7_check",
+      "quote_id_uuid_v7_check",
+      "quote_item_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -2263,5 +2265,68 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": []
+  },
+  "FA880": {
+    "message": "Este código não é de um vendedor desta loja.",
+    "action": "Confira o código. O vendedor precisa ter a permissão de orçar ou de vender nesta filial.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA881": {
+    "message": "Informe o código do vendedor antes de passar os produtos.",
+    "action": "Digite o código de quem está atendendo o cliente.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA882": {
+    "message": "O número da plaquinha precisa ficar entre 1 e 9999.",
+    "action": "Confira o número escrito no cartão.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA883": {
+    "message": "O orçamento enviado pelo terminal está inconsistente.",
+    "action": "Fica nos conflitos de sincronização, na retaguarda. Atualize o PDV e confira com o vendedor.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": [
+      "quote_number_check",
+      "quote_code_check",
+      "quote_card_number_check",
+      "quote_status_check",
+      "quote_subtotal_check",
+      "quote_discount_total_check",
+      "quote_total_check",
+      "quote_replaced_check",
+      "quote_converted_check",
+      "quote_expiry_check",
+      "quote_terminal_number_key",
+      "quote_open_card_key",
+      "quote_item_line_check",
+      "quote_item_quantity_check",
+      "quote_item_unit_price_check",
+      "quote_item_discount_check",
+      "quote_item_total_check",
+      "quote_item_release_reason_check",
+      "quote_item_release_check",
+      "quote_item_line_key"
+    ]
+  },
+  "FA884": {
+    "message": "A validade do orçamento precisa ficar entre 0 e 90 dias.",
+    "action": "Use 0 para valer até o fim do dia.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "branch_quote_validity_days_check"
+    ]
   }
 }

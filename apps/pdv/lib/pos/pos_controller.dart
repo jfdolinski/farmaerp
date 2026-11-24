@@ -86,6 +86,64 @@ class PosController extends ChangeNotifier {
 
   LocalUser? operator;
   LocalCashSession? session;
+
+  /// Terminal de orçamento: sem entrada de operador nem turno; cada orçamento é do vendedor.
+  bool get quoteMode => database.terminalProfile == 'quote';
+
+  /// Quem responde pelos limites de desconto: no caixa, o operador; no orçamento, o vendedor.
+  LocalUser? get actor => quoteMode ? cart.seller : operator;
+
+  /// Vendedor fixo do terminal (autoatendimento) entra sozinho.
+  void _applyFixedSeller() {
+    if (cart.seller != null) return;
+    final id = database.fixedSellerId;
+    if (id != null) cart.seller = database.userById(id);
+  }
+
+  /// O vendedor se identifica com o código (e o PIN, se a filial exigir). Precisa poder orçar ou vender.
+  Future<bool> identifySeller(String code, [String pin = '']) async {
+    if (busy) return false;
+    busy = true;
+    notice = null;
+    notifyListeners();
+    try {
+      final LocalUser user;
+      if (database.sellerPinRequired) {
+        user = await auth.verify(code, pin);
+      } else {
+        final number = int.tryParse(code.trim());
+        final found = number == null ? null : database.userByCode(number);
+        if (found == null) throw const PosException('FA880');
+        user = found;
+      }
+      if (!user.can('sales.quote') && !user.can('sales.sell')) throw const PosException('FA880');
+      cart.seller = user;
+      info = null;
+      logger?.info('Vendedor identificado', fields: {'seller_code': user.code});
+      return true;
+    } on PosException catch (error) {
+      notice = ErrorDisplay.fromCode(error.code);
+      return false;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  /// Vendedor desta venda ou orçamento (o fixo do terminal entra sozinho).
+  LocalUser? get seller {
+    _applyFixedSeller();
+    return cart.seller;
+  }
+
+  /// Troca o vendedor (os itens ficam).
+  void changeSeller() {
+    cart.seller = null;
+    notifyListeners();
+  }
+
+  /// Último orçamento concluído neste terminal (para reimprimir).
+  CompletedSale? lastQuote;
   final cart = Cart();
   bool paying = false;
   bool busy = false;
@@ -154,6 +212,8 @@ class PosController extends ChangeNotifier {
     if (value.isEmpty) return;
     notice = null;
     info = null;
+    _applyFixedSeller();
+    if (cart.seller == null) return _fail('FA881');
     if (RegExp(r'^\d+$').hasMatch(value)) {
       final product = database.saleProductByCode(value);
       if (product == null) return _fail('FA970');
@@ -166,7 +226,17 @@ class PosController extends ChangeNotifier {
   }
 
   void add(SaleProduct product, {int quantityMilli = 1000}) {
+    _applyFixedSeller();
+    if (cart.seller == null) return _fail('FA881');
     try {
+      // No orçamento, controlado e falta de estoque só avisam: a receita e a venda são do caixa.
+      if (quoteMode) {
+        cart.add(product, quantityMilli: quantityMilli, quote: true);
+        results = const [];
+        notice = null;
+        notifyListeners();
+        return;
+      }
       final quantity = product.barcodeFractionMilli == null
           ? quantityMilli
           : (quantityMilli * product.barcodeFractionMilli! / 1000).round();
@@ -521,7 +591,7 @@ class PosController extends ChangeNotifier {
   /// Desconto em centavos no item. Dentro do limite do operador vale na hora; acima, devolve
   /// [DiscountNeed.release] e a tela pede o supervisor.
   DiscountNeed applyDiscount(CartLine line, int discountCents) {
-    final current = operator;
+    final current = actor;
     if (current == null) return DiscountNeed.none;
     try {
       final need = checkDiscount(line: line, discountCents: discountCents, operator: current, now: _clock());
@@ -541,7 +611,7 @@ class PosController extends ChangeNotifier {
 
   /// O supervisor libera o desconto com o código e o PIN dele, e o motivo fica registrado.
   Future<bool> releaseDiscount(CartLine line, int discountCents, String code, String pin, String reason) async {
-    final current = operator;
+    final current = actor;
     if (current == null || busy) return false;
     busy = true;
     notice = null;
@@ -693,8 +763,58 @@ class PosController extends ChangeNotifier {
     }
   }
 
+  /// Conclui o orçamento: grava, põe na outbox e imprime o cupom (se pedido). A plaquinha é opcional,
+  /// mas sem ela o cupom sai sempre.
+  Future<bool> finishQuote({int? cardNumber, bool printCoupon = true}) async {
+    if (!quoteMode || busy) return false;
+    busy = true;
+    notice = null;
+    notifyListeners();
+    try {
+      final now = _clock();
+      final draft = buildQuote(
+        cart: cart,
+        number: database.nextQuoteNumber,
+        terminalNumber: terminalNumber() ?? 0,
+        now: now,
+        cardNumber: cardNumber,
+      );
+      database.saveQuote(draft.payload, code: draft.code, now: now);
+      final local = now.toLocal();
+      final validUntil = DateTime(local.year, local.month, local.day).add(Duration(days: database.quoteValidityDays));
+      final lines = buildQuoteReceipt(
+        fiscal: database.fiscal,
+        quoteCode: draft.code,
+        quotedAt: now,
+        validUntil: validUntil,
+        cart: cart,
+        cardNumber: cardNumber,
+      );
+      lastQuote = CompletedSale(code: draft.code, totalCents: cart.totalCents, changeCents: 0, lines: lines);
+      logger?.info('Orçamento concluído', fields: {
+        'quote_code': draft.code,
+        'items': cart.lines.length,
+        'seller_code': cart.seller?.code,
+        'card': cardNumber != null,
+      });
+      cart.clear();
+      info = cardNumber == null
+          ? 'Orçamento ${draft.code} concluído.'
+          : 'Orçamento ${draft.code} concluído na plaquinha $cardNumber.';
+      onSaleSaved?.call();
+      if (printCoupon || cardNumber == null) await _print(lastQuote!);
+      return true;
+    } on PosException catch (error) {
+      notice = ErrorDisplay.fromCode(error.code);
+      return false;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> reprint() async {
-    final sale = lastSale;
+    final sale = quoteMode ? lastQuote : lastSale;
     if (sale == null || busy) return;
     busy = true;
     notifyListeners();

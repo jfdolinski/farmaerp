@@ -52,6 +52,7 @@ LocalDatabase seeded() {
         'company': {'trade_name': 'Farmácia Demonstração'},
         'series': const [],
         'last_sale_number': null,
+        'fixed_seller_id': operatorId,
       }),
       user(operatorId, 3, 'Operador Centro', const ['sales.sell']),
       user(managerId, 5, 'Gerente Centro', const ['sales.sell', 'controlled.view']),

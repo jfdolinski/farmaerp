@@ -37,7 +37,7 @@ beforeAll(async () => {
   await grant(supervisor, supervisorRole, a.branch1);
 
   // Balconista: vê estoque, sem perda.
-  const clerkRole = (await ownerPool.query(`INSERT INTO role (economic_group_id, name) VALUES ($1, 'Balconista') RETURNING *`, [a.group.id])).rows[0];
+  const clerkRole = (await ownerPool.query(`INSERT INTO role (economic_group_id, name) VALUES ($1, 'Atendente de teste') RETURNING *`, [a.group.id])).rows[0];
   await ownerPool.query(`INSERT INTO role_permission (role_id, permission_id) SELECT $1, id FROM permission WHERE code = 'stock.view'`, [clerkRole.id]);
   clerk = await insertUser('Balconista limites', a.group.id);
   await link(clerk, a.branch1);

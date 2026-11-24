@@ -339,6 +339,61 @@ describe('descida para o PDV contra o banco real', () => {
     expect((await asOperator.expect(404)).body).toMatchObject({ code: 'FA006' });
   });
 
+  it('orçamento: sobe pela outbox, plaquinha, parâmetros da filial e vendedor na venda', async () => {
+    const push = (items: Json[]) =>
+      request(server()).post('/terminals/sync/push').set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`)
+        .send({ items: items.map((item) => { sequence += 1; return { id: uuidV7(), sequence, ...item }; }) });
+    const operatorId = '019a0000-0000-7000-8000-000000000009';
+    const number = Math.floor(Date.now() / 1000) % 900000 + 1;
+    const quote = (n: number, card: number | null) => ({
+      id: uuidV7(), number: n, seller_id: operatorId, customer_id: DEMO_CUSTOMER, card_number: card, quoted_at: new Date().toISOString(),
+      items: [{ id: uuidV7(), line: 1, product_id: DIPIRONA, quantity: 3, unit_price: 12.9, discount: 0.7, total: 38 }],
+      subtotal: 38.7, discount_total: 0.7, total: 38,
+    });
+    const first = quote(number, 15);
+    const second = quote(number + 1, 15);
+    const results = (await push([{ kind: 'quote', payload: first }, { kind: 'quote', payload: second }, { kind: 'quote', payload: { ...quote(number + 2, null), total: 1 } }]).expect(200)).body.results as Json[];
+    expect(results.map((r) => [r.status, r.code])).toEqual([['applied', null], ['applied', null], ['conflict', 'FA883']]);
+
+    const asManager = (path: string) => request(server()).get(`/admin${path}`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(MANAGER_EMAIL)}`);
+    const listed = (await asManager('/quotes?status=all').expect(200)).body as Json[];
+    expect(listed.find((row) => row.id === first.id)).toMatchObject({ status: 'replaced', card_number: 15 });
+    expect(listed.find((row) => row.id === second.id)).toMatchObject({ status: 'open', customer_name: 'Cliente Demonstração', item_count: 1 });
+    expect(((await asManager('/quotes?status=open').expect(200)).body as Json[]).map((row) => row.id)).toContain(second.id);
+    const detail = (await asManager(`/quotes/${first.id}`).expect(200)).body as Json;
+    expect(detail).toMatchObject({ status: 'replaced', replaced_by_code: listed.find((row) => row.id === second.id)!.code, items: [{ quantity: 3, total: 38 }] });
+    for (const query of ['?status=nada', '?from=ontem', '?branch=x']) {
+      expect((await asManager(`/quotes${query}`).expect(422)).body).toMatchObject({ code: 'FA005' });
+    }
+    expect((await asManager(`/quotes/${uuidV7()}`).expect(404)).body).toMatchObject({ code: 'FA006' });
+
+    // Parâmetros da filial: quem mexe na estrutura; descem nos dados fiscais.
+    const post = (body: Json, email = ADMIN_EMAIL) =>
+      request(server()).post(`/admin/branches/${BRANCH_CENTRO}/sale-settings`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(email)}`).send(body);
+    await post({ quoteValidityDays: 2, sellerPinRequired: true }).expect(200);
+    const branches = (await request(server()).get('/admin/branches').set('X-Forwarded-For', ip).set('Authorization', `Bearer ${session}`).expect(200)).body as Json[];
+    expect(branches.find((row) => row.id === BRANCH_CENTRO)).toMatchObject({ quote_validity_days: 2, seller_pin_required: true });
+    expect((await pullAll(null)).find('fiscal', BRANCH_CENTRO)?.data).toMatchObject({
+      quote_validity_days: 2, seller_pin_required: true, terminal_profile: 'cashier', last_quote_number: number + 1,
+    });
+    for (const body of [{ quoteValidityDays: 91, sellerPinRequired: false }, { quoteValidityDays: '2', sellerPinRequired: false }, { quoteValidityDays: 1, sellerPinRequired: 'sim' }]) {
+      expect((await post(body).expect(422)).body).toMatchObject({ code: 'FA884' });
+    }
+    expect((await post({ quoteValidityDays: 1, sellerPinRequired: false }, OPERATOR_EMAIL).expect(403)).body).toMatchObject({ code: 'FA002' });
+    await post({ quoteValidityDays: 0, sellerPinRequired: false }).expect(200);
+
+    // Perfil do terminal: vira orçamento e desce para o PDV; volta para caixa.
+    const profile = (body: Json, email = ADMIN_EMAIL) =>
+      request(server()).post(`/admin/terminals/${terminalId}/profile`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(email)}`).send(body);
+    await profile({ profile: 'quote' }).expect(200);
+    expect((await pullAll(null)).find('fiscal', BRANCH_CENTRO)?.data).toMatchObject({ terminal_profile: 'quote' });
+    for (const body of [{ profile: 'balcao' }, { profile: 1 }, {}]) {
+      expect((await profile(body).expect(422)).body).toMatchObject({ code: 'FA218' });
+    }
+    expect((await profile({ profile: 'cashier' }, OPERATOR_EMAIL).expect(403)).body).toMatchObject({ code: 'FA002' });
+    await profile({ profile: 'cashier' }).expect(200);
+  });
+
   it('estoque das outras filiais e tempo sem internet para a venda sem estoque', async () => {
     const auth = (call: request.Test) => call.set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`);
     const network = (await auth(request(server()).get(`/terminals/stock/${DIPIRONA}`)).expect(200)).body as Json[];

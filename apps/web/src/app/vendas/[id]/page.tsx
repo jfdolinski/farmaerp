@@ -19,6 +19,7 @@ interface SaleDetail {
   sold_at: string;
   received_at: string;
   operator_name: string;
+  seller_name: string | null;
   customer_name: string | null;
   customer_code: number | null;
   fiscal_model: string | null;
@@ -100,6 +101,7 @@ function SaleView({ sale }: { sale: SaleDetail }) {
       <section className={styles.card}>
         <p>
           {dateTimeText(sale.sold_at)} · {sale.branch_name} · {sale.terminal_name} · Operador: {sale.operator_name}
+          {sale.seller_name && ` · Vendedor: ${sale.seller_name}`}
         </p>
         <p>
           Cliente: {sale.customer_name ? `${sale.customer_name} (código ${sale.customer_code})` : "Não identificado"}

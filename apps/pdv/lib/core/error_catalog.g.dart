@@ -670,6 +670,36 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Ligue o controle de lote na origem ou registre a entrada no destino com o lote.',
     retryable: false,
   ),
+  'FA880': ErrorCatalogEntry(
+    code: 'FA880',
+    message: 'Este código não é de um vendedor desta loja.',
+    action: 'Confira o código. O vendedor precisa ter a permissão de orçar ou de vender nesta filial.',
+    retryable: false,
+  ),
+  'FA881': ErrorCatalogEntry(
+    code: 'FA881',
+    message: 'Informe o código do vendedor antes de passar os produtos.',
+    action: 'Digite o código de quem está atendendo o cliente.',
+    retryable: false,
+  ),
+  'FA882': ErrorCatalogEntry(
+    code: 'FA882',
+    message: 'O número da plaquinha precisa ficar entre 1 e 9999.',
+    action: 'Confira o número escrito no cartão.',
+    retryable: false,
+  ),
+  'FA883': ErrorCatalogEntry(
+    code: 'FA883',
+    message: 'O orçamento enviado pelo terminal está inconsistente.',
+    action: 'Fica nos conflitos de sincronização, na retaguarda. Atualize o PDV e confira com o vendedor.',
+    retryable: false,
+  ),
+  'FA884': ErrorCatalogEntry(
+    code: 'FA884',
+    message: 'A validade do orçamento precisa ficar entre 0 e 90 dias.',
+    action: 'Use 0 para valer até o fim do dia.',
+    retryable: false,
+  ),
   'FA901': ErrorCatalogEntry(
     code: 'FA901',
     message: 'Já existe um cliente com este documento.',

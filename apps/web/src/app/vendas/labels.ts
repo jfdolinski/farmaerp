@@ -26,6 +26,7 @@ export const ALERT_LABELS: Record<string, string> = {
   controlled_pending: "Controlado vendido com estoque negativo, pendente de dados para o SNGPC",
   prescription_expired: "Receita vencida ou com data no futuro",
   prescription_type: "Tipo de receita diferente do exigido pela lista do produto",
+  seller_permission: "Vendedor sem permissão de orçar ou vender na filial",
 };
 
 export const brl = (value: number | string | null) =>
