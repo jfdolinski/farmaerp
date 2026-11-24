@@ -125,6 +125,8 @@ void main() {
           terminalNumber: () => terminalNumber,
           customers: customers,
           networkStock: (productId) => client.networkStock(accessToken: token.value, productId: productId),
+          openQuotes: () => client.openQuotes(accessToken: token.value),
+          findQuote: (key) => client.quote(accessToken: token.value, key: key),
         );
         await pos.login('3', '2468');
         expect(pos.notice, isNull);
@@ -248,6 +250,27 @@ void main() {
         await admin('/admin/terminals/$terminalId/profile', {'profile': 'cashier'}, token: session);
         await sync.pull(token.value);
         expect(pos.quoteMode, isFalse);
+
+        // De volta ao caixa: turno novo, o orçamento aparece nos pendentes, é puxado pelo código do
+        // cupom (com o vendedor dele) e vira venda na central.
+        await pos.login('3', '2468');
+        pos.openShift(5000);
+        final pendingQuotes = await pos.pendingQuotes();
+        expect(pendingQuotes!.map((q) => q['code']), contains(quoteCode));
+        pos.scan(quoteCode);
+        for (var i = 0; i < 50 && pos.cart.quoteCode == null; i += 1) {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        }
+        expect(pos.cart.quoteCode, quoteCode, reason: pos.notice?.message);
+        expect(pos.seller?.name, 'Operador Centro');
+        pos.startPayment();
+        pos.addPayment(Payment(method: PaymentMethod.cash, amountCents: pos.cart.totalCents));
+        await pos.finish();
+        await sync.push(token.value);
+        final converted = await http.get(Uri.parse('$base/admin/quotes?status=converted'), headers: {'Authorization': 'Bearer $session'});
+        final done = (jsonDecode(converted.body) as List).cast<Map<String, dynamic>>().singleWhere((row) => row['code'] == quoteCode);
+        expect(done['sale_code'], pos.lastSale!.code);
+        expect((await pos.findQuote!(quoteCode).then<Object>((v) => v, onError: (Object e) => e)), isA<ApiException>().having((e) => e.code, 'code', 'FA886'));
       } finally {
         await admin('/admin/products/$_dipirona/prices', {'branchId': _branch, 'price': null}, token: session);
         await admin('/admin/terminals/$terminalId/revoke', {'reason': 'Fim do teste E2E'}, token: session);

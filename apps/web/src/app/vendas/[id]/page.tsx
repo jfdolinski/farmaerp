@@ -20,6 +20,8 @@ interface SaleDetail {
   received_at: string;
   operator_name: string;
   seller_name: string | null;
+  quote_id: string | null;
+  quote_code: string | null;
   customer_name: string | null;
   customer_code: number | null;
   fiscal_model: string | null;
@@ -110,6 +112,11 @@ function SaleView({ sale }: { sale: SaleDetail }) {
           {FISCAL_LABELS[sale.fiscal_status] ?? sale.fiscal_status}
           {sale.fiscal_model && ` · modelo ${sale.fiscal_model === "65" ? "NFC-e" : "NF-e"}`}
         </p>
+        {sale.quote_id && (
+          <p>
+            Veio do orçamento <Link href={`/orcamentos/${sale.quote_id}`}>{sale.quote_code}</Link>
+          </p>
+        )}
         {late && (
           <p className={styles.hint}>Chegou à central em {dateTimeText(sale.received_at)} (o terminal estava sem internet).</p>
         )}

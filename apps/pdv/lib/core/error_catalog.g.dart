@@ -700,6 +700,42 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Use 0 para valer até o fim do dia.',
     retryable: false,
   ),
+  'FA885': ErrorCatalogEntry(
+    code: 'FA885',
+    message: 'Orçamento não encontrado nesta loja.',
+    action: 'Confira o número da plaquinha ou leia de novo o código do cupom. Orçamento de outra loja não vale aqui.',
+    retryable: false,
+  ),
+  'FA886': ErrorCatalogEntry(
+    code: 'FA886',
+    message: 'Este orçamento já virou venda.',
+    action: 'Confira com o cliente. Para comprar de novo, passe os produtos.',
+    retryable: false,
+  ),
+  'FA887': ErrorCatalogEntry(
+    code: 'FA887',
+    message: 'Este orçamento venceu.',
+    action: 'Passe os produtos de novo: o preço é o de hoje.',
+    retryable: false,
+  ),
+  'FA888': ErrorCatalogEntry(
+    code: 'FA888',
+    message: 'A plaquinha deste orçamento foi usada em outro orçamento.',
+    action: 'Peça o cupom ao cliente ou confira a plaquinha com o vendedor.',
+    retryable: false,
+  ),
+  'FA889': ErrorCatalogEntry(
+    code: 'FA889',
+    message: 'Retire os itens da venda antes de puxar um orçamento.',
+    action: 'Finalize ou cancele a venda em andamento.',
+    retryable: false,
+  ),
+  'FA890': ErrorCatalogEntry(
+    code: 'FA890',
+    message: 'Sem internet, o orçamento não pode ser buscado.',
+    action: 'Passe os produtos do cupom um a um. A plaquinha depende da internet.',
+    retryable: false,
+  ),
   'FA901': ErrorCatalogEntry(
     code: 'FA901',
     message: 'Já existe um cliente com este documento.',

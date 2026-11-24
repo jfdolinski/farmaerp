@@ -30,6 +30,7 @@ import { SyncConflictsController } from './terminals/sync-conflicts.controller.j
 import { ControlledController } from './sales/controlled.controller.js';
 import { CashSessionsController } from './sales/cash-sessions.controller.js';
 import { QuotesController } from './sales/quotes.controller.js';
+import { TerminalQuotesController } from './terminals/terminal-quotes.controller.js';
 import { SalesController } from './sales/sales.controller.js';
 import { OfflineRulesController, TerminalStockController } from './terminals/offline-rules.controller.js';
 import { TerminalCustomersController } from './terminals/terminal-customers.controller.js';
@@ -65,6 +66,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     ControlledController,
     CashSessionsController,
     QuotesController,
+    TerminalQuotesController,
     OfflineRulesController,
     TerminalStockController,
     SyncConflictsController,

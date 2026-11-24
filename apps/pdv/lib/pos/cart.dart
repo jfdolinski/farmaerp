@@ -22,10 +22,21 @@ enum PaymentMethod {
 class CartLine {
   CartLine({required this.product, required this.quantityMilli, required this.unitPriceCents});
 
-  final SaleProduct product;
+  SaleProduct product;
   int quantityMilli;
-  final int unitPriceCents;
+
+  /// Preço atual da loja: muda no recálculo.
+  int unitPriceCents;
   int discountCents = 0;
+
+  /// Desconto como fração do bruto: é ele que o recálculo mantém quando preço ou quantidade mudam.
+  double? discountRate;
+
+  /// Grava o desconto em centavos e a fração que o recálculo mantém.
+  void setDiscount(int cents) {
+    discountCents = cents;
+    discountRate = cents <= 0 || grossCents == 0 ? null : cents / grossCents;
+  }
 
   /// Liberação do desconto feita no PDV por outra pessoa (supervisor).
   ({String supervisorId, String supervisorName, String reason})? release;
@@ -98,6 +109,10 @@ class Cart {
   /// Vendedor que atende (pedido a cada venda ou orçamento novo).
   LocalUser? seller;
 
+  /// Orçamento que esta venda fecha.
+  String? quoteId;
+  String? quoteCode;
+
   /// Quanto deste produto já está na venda.
   int quantityOf(String productId) =>
       lines.where((line) => line.product.id == productId).fold(0, (sum, line) => sum + line.quantityMilli);
@@ -128,7 +143,8 @@ class Cart {
   /// Acrescenta o produto (ou soma no item igual que já está na venda). Controlado só entra com a
   /// liberação do farmacêutico, e cada um fica no seu item (receita e lote próprios).
   /// No orçamento, o controlado entra sem a receita (ela é do caixa) ([quote]).
-  CartLine add(SaleProduct product, {int quantityMilli = 1000, ControlledRelease? controlled, bool quote = false}) {
+  /// [merge] falso mantém o item separado (desconto próprio vindo do orçamento, por exemplo).
+  CartLine add(SaleProduct product, {int quantityMilli = 1000, ControlledRelease? controlled, bool quote = false, bool merge = true}) {
     if (!quote && (product.controlledClass != null) != (controlled != null)) throw const PosException('FA986');
     if (product.priceCents == null) throw const PosException('FA974');
     if (quantityMilli <= 0) throw const PosException('FA975');
@@ -138,7 +154,7 @@ class Cart {
         ? quantityMilli
         : (quantityMilli * product.barcodeFractionMilli! / 1000).round();
     for (final line in lines) {
-      if (controlled == null && line.product.id == product.id && line.discountCents == 0 && line.zeroStockRelease == null) {
+      if (merge && controlled == null && line.product.id == product.id && line.discountCents == 0 && line.zeroStockRelease == null) {
         line.quantityMilli += quantity;
         return line;
       }
@@ -153,6 +169,8 @@ class Cart {
     payments.clear();
     customer = null;
     seller = null;
+    quoteId = null;
+    quoteCode = null;
   }
 }
 
@@ -244,6 +262,7 @@ SaleDraft buildSale({
       'operator_id': operator.id,
       'customer_id': cart.customer?.id,
       'seller_id': cart.seller?.id,
+      'quote_id': cart.quoteId,
       'sold_at': now.toUtc().toIso8601String(),
       'fiscal_model': '65',
       'items': items,

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
@@ -54,6 +55,8 @@ class PosController extends ChangeNotifier {
     this.onSaleSaved,
     this.customers,
     this.networkStock,
+    this.openQuotes,
+    this.findQuote,
     this.logger,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now;
@@ -66,6 +69,13 @@ class PosController extends ChangeNotifier {
 
   /// Produto sem estoque esperando a autorização do gerente.
   PendingZeroStock? pendingZeroStock;
+
+  /// Orçamentos da loja (com internet): a lista dos pendentes e a busca pela plaquinha ou pelo cupom.
+  final Future<List<Map<String, dynamic>>> Function()? openQuotes;
+  final Future<Map<String, dynamic>> Function(String key)? findQuote;
+
+  /// Controlados do orçamento esperando a receita, um por vez.
+  final controlledQueue = <PendingControlled>[];
 
   /// Controlado esperando a receita e o farmacêutico.
   PendingControlled? pendingControlled;
@@ -188,6 +198,7 @@ class PosController extends ChangeNotifier {
   void logout() {
     operator = null;
     pendingControlled = null;
+    controlledQueue.clear();
     pendingZeroStock = null;
     cart.clear();
     paying = false;
@@ -212,6 +223,11 @@ class PosController extends ChangeNotifier {
     if (value.isEmpty) return;
     notice = null;
     info = null;
+    // Cupom do orçamento: traz o vendedor junto.
+    if (!quoteMode && RegExp(r'^[Oo]\d+-\d{6,}$').hasMatch(value)) {
+      unawaited(loadQuote(value.toUpperCase()));
+      return;
+    }
     _applyFixedSeller();
     if (cart.seller == null) return _fail('FA881');
     if (RegExp(r'^\d+$').hasMatch(value)) {
@@ -265,6 +281,7 @@ class PosController extends ChangeNotifier {
         return;
       }
       cart.add(product, quantityMilli: quantityMilli);
+      reprice();
       results = const [];
       notice = null;
     } on PosException catch (error) {
@@ -295,6 +312,7 @@ class PosController extends ChangeNotifier {
       if (!supervisor.can('sales.zero_stock_release')) throw const PosException('FA981');
       final line = cart.add(pending.product, quantityMilli: pending.quantityMilli);
       line.zeroStockRelease = (supervisorId: supervisor.id, supervisorName: supervisor.name, minutesOffline: pending.minutesOffline);
+      reprice();
       pendingZeroStock = null;
       logger?.warn('Venda sem estoque autorizada sem internet', fields: {
         'product_code': pending.product.code,
@@ -312,6 +330,147 @@ class PosController extends ChangeNotifier {
   void cancelZeroStock() {
     pendingZeroStock = null;
     notifyListeners();
+  }
+
+  /// Recalcula a venda com as condições de agora: preço atual da loja e o desconto de cada item na
+  /// mesma fração. Roda a cada mudança (itens, quantidade, cliente, pagamento). As regras por cliente
+  /// e por forma de pagamento entram aqui quando chegarem (Etapa 7). Se o total mudar com pagamento
+  /// lançado, o pagamento é refeito.
+  void reprice() {
+    final before = cart.totalCents;
+    for (final line in cart.lines) {
+      final current = database.saleProductById(line.product.id);
+      if (current?.priceCents != null) line.unitPriceCents = current!.priceCents!;
+      final rate = line.discountRate;
+      if (rate != null) line.discountCents = math.min(line.grossCents, (line.grossCents * rate).round());
+    }
+    if (cart.totalCents != before && cart.payments.isNotEmpty) {
+      cart.payments.clear();
+      info = 'O total mudou: refaça o pagamento.';
+    }
+  }
+
+  /// Lista dos orçamentos pendentes da loja; sem internet, FA890.
+  Future<List<Map<String, dynamic>>?> pendingQuotes() async {
+    final lookup = openQuotes;
+    if (lookup == null) {
+      _fail('FA890');
+      return null;
+    }
+    try {
+      return await lookup();
+    } on ApiException catch (error) {
+      _fail(const {'FA001', 'FA008', 'FA009'}.contains(error.code) ? 'FA890' : error.code);
+      return null;
+    }
+  }
+
+  /// Puxa o orçamento (plaquinha ou código do cupom) para a venda: vendedor, cliente e itens com o
+  /// preço de agora e o desconto do orçamento na mesma fração (com a liberação que veio). Item sem
+  /// estoque ou fora deste terminal fica de fora, com aviso; controlado abre a receita, um por vez.
+  Future<bool> loadQuote(String key) async {
+    final lookup = findQuote;
+    final current = operator;
+    if (quoteMode || current == null || session == null || busy) return false;
+    if (!cart.isEmpty) {
+      _fail('FA889');
+      return false;
+    }
+    if (lookup == null) {
+      _fail('FA890');
+      return false;
+    }
+    busy = true;
+    notice = null;
+    info = null;
+    results = const [];
+    notifyListeners();
+    try {
+      final data = await lookup(key.trim());
+      final skipped = <String>[];
+      final sellerId = data['seller_id'] as String?;
+      cart.seller = sellerId == null ? null : database.userById(sellerId);
+      cart.quoteId = data['id'] as String;
+      cart.quoteCode = data['code'] as String;
+      final now = _clock();
+      for (final item in ((data['items'] as List?) ?? const []).cast<Map<String, dynamic>>()) {
+        final product = database.saleProductById(item['product_id'] as String);
+        final quantity = ((item['quantity'] as num) * 1000).round();
+        if (product == null) {
+          skipped.add('item ${item['line']}, que não está neste terminal');
+          continue;
+        }
+        if (product.priceCents == null) {
+          skipped.add('${product.name}, sem preço');
+          continue;
+        }
+        if (product.controlledClass != null) {
+          controlledQueue.add(PendingControlled(product: product, quantityMilli: quantity));
+          continue;
+        }
+        if (product.status != 'on_order' && product.stockMilli - cart.quantityOf(product.id) - quantity < 0) {
+          skipped.add('${product.name}, sem estoque');
+          continue;
+        }
+        final discount = (item['discount'] as num?) ?? 0;
+        final line = cart.add(product, quantityMilli: quantity, merge: discount <= 0);
+        if (discount > 0) {
+          final gross = (item['quantity'] as num) * (item['unit_price'] as num);
+          line.discountRate = gross <= 0 ? null : discount / gross;
+          final release = item['release'] as Map<String, dynamic>?;
+          if (release != null) {
+            final supervisorId = release['supervisor_id'] as String;
+            line.release = (
+              supervisorId: supervisorId,
+              supervisorName: database.userById(supervisorId)?.name ?? 'supervisor',
+              reason: release['reason'] as String,
+            );
+          }
+        }
+      }
+      reprice();
+      // Sem liberação, o desconto do orçamento fica no que o operador pode dar sozinho.
+      for (final line in cart.lines) {
+        if (line.discountCents == 0 || line.release != null) continue;
+        if (checkDiscount(line: line, discountCents: line.discountCents, operator: current, now: now) == DiscountNeed.none) continue;
+        final limit = discountLimitBp(current) ?? 10000;
+        final rule = current.can('sales.discount_override') ? 10000 : (line.product.maxDiscountAt(now) ?? 10000);
+        line.setDiscount((line.grossCents * math.min(limit, rule) / 10000).floor());
+      }
+      final customerId = data['customer_id'] as String?;
+      final service = customers;
+      if (customerId != null && service != null) {
+        try {
+          final customer = await service.select(customerId);
+          cart.customer = SaleCustomer(
+            id: customerId,
+            name: customer['name']! as String,
+            code: customer['code']! as int,
+            documentMasked: maskDocument(customer['document'] as String?),
+            agreements: ((customer['agreements'] as List?) ?? const []).cast<Map<String, dynamic>>(),
+          );
+        } on ApiException {
+          skipped.add('o cliente (identifique de novo)');
+        }
+      }
+      _nextControlled();
+      info = 'Orçamento ${data['code']} carregado.${skipped.isEmpty ? '' : ' Ficou de fora: ${skipped.join('; ')}.'}';
+      logger?.info('Orçamento puxado no caixa', fields: {'quote_code': data['code'], 'skipped': skipped.length});
+      return true;
+    } on ApiException catch (error) {
+      cart.clear();
+      controlledQueue.clear();
+      notice = ErrorDisplay.fromCode(const {'FA001', 'FA008', 'FA009'}.contains(error.code) ? 'FA890' : error.code, traceId: error.traceId);
+      return false;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  /// Próximo controlado do orçamento, se houver.
+  void _nextControlled() {
+    if (pendingControlled == null && controlledQueue.isNotEmpty) pendingControlled = controlledQueue.removeAt(0);
   }
 
   /// Lotes do controlado com saldo para esta venda (descontado o que já está nela), FEFO.
@@ -371,6 +530,8 @@ class PosController extends ChangeNotifier {
       cart.add(pending.product, quantityMilli: quantityMilli, controlled: release);
       cart.payments.clear();
       pendingControlled = null;
+      _nextControlled();
+      reprice();
       // Sem dados pessoais no log: só o produto, o lote e quem liberou.
       logger?.info('Controlado liberado', fields: {
         'product_code': pending.product.code,
@@ -410,6 +571,8 @@ class PosController extends ChangeNotifier {
       cart.add(pending.product, quantityMilli: quantityMilli, controlled: release);
       cart.payments.clear();
       pendingControlled = null;
+      _nextControlled();
+      reprice();
       logger?.warn('Controlado liberado sem saldo em lote', fields: {
         'product_code': pending.product.code,
         'pharmacist_code': pharmacist.code,
@@ -426,6 +589,7 @@ class PosController extends ChangeNotifier {
 
   void cancelControlled() {
     pendingControlled = null;
+    _nextControlled();
     notice = null;
     notifyListeners();
   }
@@ -596,7 +760,7 @@ class PosController extends ChangeNotifier {
     try {
       final need = checkDiscount(line: line, discountCents: discountCents, operator: current, now: _clock());
       if (need == DiscountNeed.none) {
-        line.discountCents = discountCents;
+        line.setDiscount(discountCents);
         line.release = null;
         cart.payments.clear();
         notice = null;
@@ -620,7 +784,7 @@ class PosController extends ChangeNotifier {
       if (reason.trim().isEmpty) throw const PosException('FA978');
       final supervisor = await auth.verify(code, pin);
       checkSupervisor(line: line, discountCents: discountCents, operator: current, supervisor: supervisor, now: _clock());
-      line.discountCents = discountCents;
+      line.setDiscount(discountCents);
       line.release = (supervisorId: supervisor.id, supervisorName: supervisor.name, reason: reason.trim());
       cart.payments.clear();
       logger?.info('Desconto liberado por supervisor', fields: {'product_code': line.product.code, 'supervisor_code': supervisor.code});
@@ -650,6 +814,7 @@ class PosController extends ChangeNotifier {
         documentMasked: maskDocument(data['document'] as String?),
         agreements: ((data['agreements'] as List?) ?? const []).cast<Map<String, dynamic>>(),
       );
+      reprice();
     } on ApiException catch (error) {
       notice = ErrorDisplay.fromCode(error.code, traceId: error.traceId);
     } finally {
@@ -661,6 +826,7 @@ class PosController extends ChangeNotifier {
   void clearCustomer() {
     cart.customer = null;
     cart.payments.removeWhere((payment) => payment.method == PaymentMethod.agreement);
+    reprice();
     notifyListeners();
   }
 
@@ -686,12 +852,14 @@ class PosController extends ChangeNotifier {
       if (local == null || local.quantityMilli - others < quantityMilli) return _fail('FA988');
     }
     line.quantityMilli = quantityMilli;
+    reprice();
     notifyListeners();
   }
 
   void remove(CartLine line) {
     cart.lines.remove(line);
     cart.payments.clear();
+    reprice();
     notifyListeners();
   }
 
@@ -711,6 +879,7 @@ class PosController extends ChangeNotifier {
   void addPayment(Payment payment) {
     if (payment.amountCents <= 0) return _fail('FA972');
     if (payment.method == PaymentMethod.agreement && cart.customer == null) return _fail('FA983');
+    reprice();
     cart.payments.add(payment);
     notice = null;
     notifyListeners();
@@ -718,6 +887,7 @@ class PosController extends ChangeNotifier {
 
   void removePayment(Payment payment) {
     cart.payments.remove(payment);
+    reprice();
     notifyListeners();
   }
 

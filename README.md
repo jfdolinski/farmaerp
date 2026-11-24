@@ -343,7 +343,7 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - Impressora térmica em ESC/POS pela fila do Windows (tipo RAW, página 860 para os acentos), escolhida no ícone de impressora do caixa.
   - Sem impressora configurada, sai em PDF em `Documentos\FarmaERP\comprovantes`.
   - Falha na impressão não desfaz a venda e mostra "Reimprimir".
-- **Atalhos:** F2 vai para a leitura, F4 identifica o cliente, F6 sangria, F7 suprimento, F8 fecha o caixa, F10 abre o pagamento, Esc volta.
+- **Atalhos:** F2 vai para a leitura, F3 puxa o orçamento, F4 identifica o cliente, F6 sangria, F7 suprimento, F8 fecha o caixa, F10 abre o pagamento, Esc volta.
 - **Desconto no item:** em R$ ou %.
   - Dentro do limite de desconto do operador (perfis) e do máximo do produto (motor de regras, que desce com o produto e vence com a regra), vale na hora.
   - Acima, um supervisor libera no próprio terminal com código, PIN e motivo. Ele precisa ser outra pessoa, ter limite que cubra o desconto e, acima do máximo do produto, `sales.discount_override` (dele ou do operador).
@@ -375,7 +375,13 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - **Validade:** parâmetro da filial em dias, em Terminais, "Orçamento e vendedor" (0: até o fim do dia; até 90).
 - **Retaguarda:** `/orcamentos` lista por período, filial e situação (aberto, virou venda, substituído, vencido), com a conversão; o detalhe mostra os itens e as liberações. Exige `sales.view`.
 - **Perfis:** Operador de caixa, Gerente e Farmacêutico orçam; o perfil novo Balconista só orça.
-- **No caixa** (próximo PR): lista dos orçamentos pendentes, busca pela plaquinha ou pelo cupom e recálculo do preço a cada mudança.
+- **No caixa (F3, ou lendo o cupom no campo de leitura):** com internet, mostra os orçamentos pendentes da loja e puxa pela plaquinha ou pelo código do cupom.
+  - Vem com o vendedor e o cliente do orçamento.
+  - Os itens entram com o preço de agora e o desconto do orçamento na mesma fração, com a liberação que veio. Sem liberação, o desconto fica no que o operador dá sozinho.
+  - Item sem estoque ou que não está no terminal fica de fora, com aviso. Controlado abre a receita, um por vez.
+  - Mensagens próprias: não encontrado nesta loja (FA885), já virou venda (FA886), vencido (FA887), plaquinha usada em outro orçamento (FA888), venda em andamento (FA889) e sem internet (FA890; aí o operador passa os produtos do cupom um a um).
+  - A venda leva o orçamento (`quote_id`). Na central, o orçamento aberto, válido na hora da venda e da mesma loja vira venda. Senão, a venda vale e fica o alerta "Venda de orçamento que já não estava aberto".
+- **Recálculo:** a venda é recalculada a cada mudança (itens, quantidade, cliente, forma de pagamento): preço atual da loja e o desconto de cada item na mesma fração. Se o total mudar com pagamento lançado, o pagamento é refeito. As regras por cliente e por forma de pagamento entram nesse mesmo recálculo na Etapa 7.
 
 **Sangria, suprimento e fechamento**
 

@@ -79,6 +79,7 @@ List<ReceiptLine> buildReceipt({
     ReceiptLine(_twoColumns('Venda $saleCode', when)),
     ReceiptLine('Caixa $terminalNumber · Operador: $operatorName'),
     if (cart.seller != null && cart.seller!.name != operatorName) ReceiptLine('Vendedor: ${cart.seller!.name}'),
+    if (cart.quoteCode != null) ReceiptLine('Orçamento ${cart.quoteCode}'),
     if (customer != null)
       for (final text in _wrap('Cliente: ${customer.name}${customer.documentMasked == null ? '' : ' · ${customer.documentMasked}'}'))
         ReceiptLine(text),

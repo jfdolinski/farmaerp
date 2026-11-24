@@ -155,6 +155,26 @@ class FakeApi implements TerminalApi {
     throw response;
   }
 
+  /// Orçamentos da loja: lista e busca; [quoteResponse] por chave, ou exceção.
+  List<Map<String, dynamic>> openQuoteList = const [];
+  final quoteResponse = <String, Object>{};
+  final quoteKeys = <String>[];
+
+  @override
+  Future<List<Map<String, dynamic>>> openQuotes({required String accessToken}) async {
+    _maybeFail();
+    return openQuoteList;
+  }
+
+  @override
+  Future<Map<String, dynamic>> quote({required String accessToken, required String key}) async {
+    _maybeFail();
+    quoteKeys.add(key);
+    final response = quoteResponse[key] ?? const ApiException('FA885');
+    if (response is Map<String, dynamic>) return response;
+    throw response;
+  }
+
   @override
   Future<List<PushResult>> push({
     required String accessToken,

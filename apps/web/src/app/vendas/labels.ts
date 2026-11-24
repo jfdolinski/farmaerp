@@ -27,6 +27,7 @@ export const ALERT_LABELS: Record<string, string> = {
   prescription_expired: "Receita vencida ou com data no futuro",
   prescription_type: "Tipo de receita diferente do exigido pela lista do produto",
   seller_permission: "Vendedor sem permissão de orçar ou vender na filial",
+  quote_status: "Venda de orçamento que já não estava aberto",
 };
 
 export const brl = (value: number | string | null) =>
@@ -51,6 +52,16 @@ export function alertText(kind: string, detail: Record<string, unknown>): string
       return `${label}: ${percent(detail.percent)}, limite do operador ${percent(detail.operator_limit)}.`;
     case "offline_zero_stock":
       return `${label}: ${detail.minutes_offline} min sem sincronizar${detail.supervisor_allowed ? ", autorizado pelo gerente" : ", autorizado por quem não tinha a permissão"}.`;
+    case "quote_status": {
+      const reasons: Record<string, string> = {
+        converted: "já tinha virado outra venda",
+        replaced: "a plaquinha tinha ido para outro orçamento",
+        expired: "estava vencido",
+        cancelled: "estava cancelado",
+        other_branch: "é de outra loja",
+      };
+      return `Orçamento ${detail.quote_code}: ${reasons[detail.status as string] ?? detail.status}.`;
+    }
     case "negative_stock":
       return `${label}: saldo ${Number(detail.balance).toLocaleString("pt-BR")}.`;
     default:

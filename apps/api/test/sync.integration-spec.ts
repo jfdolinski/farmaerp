@@ -367,6 +367,32 @@ describe('descida para o PDV contra o banco real', () => {
     }
     expect((await asManager(`/quotes/${uuidV7()}`).expect(404)).body).toMatchObject({ code: 'FA006' });
 
+    // No caixa: lista dos pendentes, busca pela plaquinha e pelo código; a venda fecha o orçamento.
+    const asTerminal = (path: string) => request(server()).get(`/terminals/quotes${path}`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`);
+    const pending = (await asTerminal('').expect(200)).body as Json[];
+    expect(pending.map((row) => row.id)).toContain(second.id);
+    expect(pending.map((row) => row.id)).not.toContain(first.id);
+    const byCard = (await asTerminal('/15').expect(200)).body as Json;
+    expect(byCard).toMatchObject({ id: second.id, seller_id: operatorId, customer_id: DEMO_CUSTOMER, items: [{ product_id: DIPIRONA, quantity: 3 }] });
+    const secondCode = listed.find((row) => row.id === second.id)!.code as string;
+    expect((await asTerminal(`/${secondCode.toLowerCase()}`).expect(200)).body).toMatchObject({ id: second.id });
+    expect((await asTerminal(`/${listed.find((row) => row.id === first.id)!.code}`).expect(422)).body).toMatchObject({ code: 'FA888' });
+    expect((await asTerminal('/9999').expect(404)).body).toMatchObject({ code: 'FA885' });
+    const shift = uuidV7();
+    await push([{ kind: 'cash_session_open', payload: { id: shift, operator_id: operatorId, opened_at: new Date().toISOString(), opening_float: 0 } }]).expect(200);
+    const saleNumber = Math.floor(Date.now() / 1000) % 900000 + 300001;
+    const fromQuote = {
+      id: uuidV7(), number: saleNumber, cash_session_id: shift, operator_id: operatorId, customer_id: DEMO_CUSTOMER, seller_id: operatorId,
+      quote_id: second.id, sold_at: new Date().toISOString(), fiscal_model: '65',
+      items: [{ id: uuidV7(), line: 1, product_id: DIPIRONA, quantity: 3, unit_price: 12.9, discount: 0.7, total: 38 }],
+      payments: [{ id: uuidV7(), method: 'pix', amount: 38 }], subtotal: 38.7, discount_total: 0.7, total: 38,
+    };
+    expect((await push([{ kind: 'sale', payload: fromQuote }]).expect(200)).body.results[0]).toMatchObject({ status: 'applied' });
+    expect((await asTerminal('/15').expect(404)).body).toMatchObject({ code: 'FA885' });
+    expect((await asTerminal(`/${secondCode}`).expect(422)).body).toMatchObject({ code: 'FA886' });
+    expect((await asManager(`/quotes/${second.id}`).expect(200)).body).toMatchObject({ status: 'converted', sale_id: fromQuote.id });
+    expect((await asManager(`/sales/${fromQuote.id}`).expect(200)).body).toMatchObject({ quote_code: secondCode, seller_name: 'Operador Centro' });
+
     // Parâmetros da filial: quem mexe na estrutura; descem nos dados fiscais.
     const post = (body: Json, email = ADMIN_EMAIL) =>
       request(server()).post(`/admin/branches/${BRANCH_CENTRO}/sale-settings`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(email)}`).send(body);
