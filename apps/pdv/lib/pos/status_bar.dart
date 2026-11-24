@@ -1,7 +1,9 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 
+import '../ui/caps.dart';
+import 'display_settings.dart';
 import 'pos_controller.dart';
 
 /// Barra inferior fixa do caixa (e do orçamento): loja, terminal, operador e turno, vendedor,
@@ -49,7 +51,7 @@ class _PosStatusBarState extends State<PosStatusBar> {
     final pending = database.outboxPending;
     final colors = Theme.of(context).colorScheme;
     final parts = <(String, String)>[
-      ('loja', '${branch ?? 'Loja'} · ${controller.quoteMode ? 'Orçamento' : 'Caixa'} ${number ?? '-'}'),
+      ('loja', '${branch ?? 'Loja'} · ${TerminalKind.of(database.terminalProfile).label} ${number ?? '-'}'),
       if (!controller.quoteMode)
         ('operador', controller.operator == null
             ? 'Sem operador'

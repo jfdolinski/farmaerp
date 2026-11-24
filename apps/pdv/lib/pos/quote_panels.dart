@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 import 'package:flutter/services.dart';
 
+import '../ui/caps.dart';
 import 'focus_kit.dart';
 import 'money.dart';
 import 'pos_controller.dart';
@@ -183,7 +184,7 @@ class _QuotePanelState extends State<QuotePanel> {
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.person),
                 title: Text(cart.customer!.name),
-                trailing: IconButton(tooltip: 'Tirar o cliente', icon: const Icon(Icons.close), onPressed: controller.clearCustomer),
+                trailing: IconButton(tooltip: 'TIRAR O CLIENTE', icon: const Icon(Icons.close), onPressed: controller.clearCustomer),
               ),
             const SizedBox(height: 8),
             Text('${cart.lines.length} ${cart.lines.length == 1 ? 'item' : 'itens'}'),

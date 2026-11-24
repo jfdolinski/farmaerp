@@ -356,7 +356,9 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - Código de barras, código do produto e cupom do orçamento vão direto com Enter.
 - **Consulta do produto:** o botão de informação, na busca e em cada item, mostra os dados de cadastro que o terminal tem (códigos de barras, princípio ativo, fabricante, registro no MS, NCM, CEST, lista de controlado, situação, preço, desconto máximo, fracionamento, estoque e lotes), mesmo sem internet.
 - **Cliente com autocompletar:** a partir de 3 letras, busca sozinho e Enter escolhe o marcado. Na janela do orçamento (F3), a lista de pendentes filtra enquanto digita.
-- **Fonte do PDV:** no ícone de texto da barra de cima, o tamanho (de 80% a 160%) e o tipo (fontes do sistema). Vale só para o terminal, fica no banco local e é aplicada na hora.
+- **Aparência do PDV:** no ícone de paleta da barra de cima, a fonte (tamanho de 80% a 160%, tipo e negrito) e a cor base. Vale só para o terminal, fica no banco local e é aplicada na hora.
+  - **Tipo do terminal:** a cor base ganha um tom por tipo: orçamento claro, caixa médio, autoatendimento forte. A barra de cima mostra o ícone e o nome ("Caixa 1 · Operador") e uma faixa com o tipo em letras grandes; a barra inferior também mostra o tipo. Assim cada terminal é reconhecido de longe, sem depender só da cor.
+  - **Caixa alta:** todo o PDV aparece em caixa alta, inclusive o que se digita (senha e PIN ficam como estão). As telas usam `Text`, `TextField` e `InputDecoration` de `lib/ui/caps.dart`, que convertem na hora de mostrar. O comprovante impresso não muda.
 - **Barra inferior fixa:**
   - loja e número do caixa;
   - operador e hora da abertura do turno;

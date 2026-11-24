@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 import 'package:path_provider/path_provider.dart';
 
 import 'core/app_environment.dart';
@@ -20,6 +20,7 @@ import 'sync/sync_service.dart';
 import 'terminal/terminal_api.dart';
 import 'terminal/terminal_controller.dart';
 import 'terminal/terminal_screen.dart';
+import 'ui/caps.dart';
 
 const _apiUrl = String.fromEnvironment(
   'API_URL',

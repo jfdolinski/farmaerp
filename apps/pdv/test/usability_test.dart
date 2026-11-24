@@ -7,9 +7,12 @@ import 'package:farmaerp_pdv/pos/focus_kit.dart';
 import 'package:farmaerp_pdv/pos/pos_auth.dart';
 import 'package:farmaerp_pdv/pos/pos_controller.dart';
 import 'package:farmaerp_pdv/pos/pos_screen.dart';
+import 'package:farmaerp_pdv/ui/caps.dart' show caps;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'caps_finders.dart';
 
 import 'app_test.dart' show FakeApi;
 import 'pos_test.dart' show FakePrinter, hashFor;
@@ -278,8 +281,8 @@ void main() {
       await tester.tap(find.byKey(Key('info-result-$second')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('product-info')), findsOneWidget);
-      expect(find.text('30049099'), findsOneWidget);
-      await tester.tap(find.text('Fechar'));
+      expect(findText('30049099'), findsOneWidget);
+      await tester.tap(findText('Fechar'));
       await tester.pumpAndSettle();
 
       await tester.testTextInput.receiveAction(TextInputAction.done);
@@ -314,7 +317,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       await tester.pumpAndSettle();
-      expect(api.searchQueries, ['dem']);
+      expect(api.searchQueries, ['DEM']);
       expect(tester.widget<ListTile>(find.byKey(const Key('customer-7'))).selected, isTrue);
       await tester.testTextInput.receiveAction(TextInputAction.done);
       for (var i = 0; i < 40 && controller.cart.customer == null; i += 1) {
@@ -334,17 +337,17 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: PosScreen(controller: controller, online: false, appVersion: '1.2.3')));
     await tester.pumpAndSettle();
     String text(String key) => tester.widget<Text>(find.byKey(Key('status-$key'))).data!;
-    expect(text('loja'), 'Loja Centro · Caixa 3');
-    expect(text('operador'), startsWith('Operador: Operador Centro · turno desde '));
-    expect(text('vendedor'), 'Vendedor: —');
-    expect(text('internet'), startsWith('Sem internet: as vendas sobem quando voltar · 1 a enviar'));
-    expect(text('versao'), 'v1.2.3');
+    expect(text('loja'), caps('Loja Centro · Caixa 3'));
+    expect(text('operador'), startsWith(caps('Operador: Operador Centro · turno desde ')));
+    expect(text('vendedor'), caps('Vendedor: —'));
+    expect(text('internet'), startsWith(caps('Sem internet: as vendas sobem quando voltar · 1 a enviar')));
+    expect(text('versao'), caps('v1.2.3'));
     expect(find.byKey(const Key('status-agora')), findsOneWidget);
     // Não mostra valores do turno (o fechamento é cego).
-    expect(find.descendant(of: find.byKey(const Key('pos-status-bar')), matching: find.textContaining('R\$')), findsNothing);
+    expect(find.descendant(of: find.byKey(const Key('pos-status-bar')), matching: findTextContaining('R\$')), findsNothing);
     await tester.runAsync(() => controller.identifySeller('3'));
     await tester.pumpAndSettle();
-    expect(text('vendedor'), 'Vendedor: Operador Centro');
+    expect(text('vendedor'), caps('Vendedor: Operador Centro'));
     expect(find.byKey(const Key('pos-offline')), findsNothing);
     // Pagamento não muda nada aqui.
     expect(Payment(method: PaymentMethod.cash, amountCents: 1).amountCents, 1);

@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
+
+import '../ui/caps.dart';
 
 /// Ambiente definido na compilação: `--dart-define=APP_ENV=homologation`.
 const appEnvironment = String.fromEnvironment(

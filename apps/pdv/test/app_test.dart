@@ -8,6 +8,8 @@ import 'package:farmaerp_pdv/terminal/terminal_identity.dart';
 import 'package:farmaerp_pdv/terminal/terminal_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'caps_finders.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
@@ -673,8 +675,8 @@ void main() {
       });
       await tester.pump();
 
-      expect(find.text('K7M2-XQ9P'), findsOneWidget);
-      expect(find.text('Cadastre este terminal'), findsOneWidget);
+      expect(findText('K7M2-XQ9P'), findsOneWidget);
+      expect(findText('Cadastre este terminal'), findsOneWidget);
     });
 
     testWidgets('mostra o número do terminal aprovado', (tester) async {
@@ -684,7 +686,7 @@ void main() {
       });
       await tester.pump();
 
-      expect(find.text('Terminal número 2'), findsOneWidget);
+      expect(findText('Terminal número 2'), findsOneWidget);
     });
 
     testWidgets('mostra o bloqueio com a referência', (tester) async {
@@ -699,8 +701,8 @@ void main() {
       });
       await tester.pump();
 
-      expect(find.text('Terminal bloqueado'), findsOneWidget);
-      expect(find.text('Código FA304 · Ref. a1b2c3d4'), findsOneWidget);
+      expect(findText('Terminal bloqueado'), findsOneWidget);
+      expect(findText('Código FA304 · Ref. a1b2c3d4'), findsOneWidget);
     });
 
     testWidgets('revogado oferece novo cadastro', (tester) async {
@@ -712,7 +714,7 @@ void main() {
       });
       await tester.pump();
 
-      expect(find.text('Fazer novo cadastro'), findsOneWidget);
+      expect(findText('Fazer novo cadastro'), findsOneWidget);
     });
 
     testWidgets('avisa quando está sem conexão', (tester) async {
@@ -725,7 +727,7 @@ void main() {
       await tester.pump();
 
       expect(find.byKey(const Key('offline-notice')), findsOneWidget);
-      expect(find.text('Terminal aprovado'), findsOneWidget);
+      expect(findText('Terminal aprovado'), findsOneWidget);
     });
   });
 }

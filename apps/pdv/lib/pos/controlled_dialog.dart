@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 import 'package:flutter/services.dart';
 
+import '../ui/caps.dart';
 import 'controlled.dart';
 import 'focus_kit.dart';
 import 'money.dart';

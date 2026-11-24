@@ -1,5 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 import 'package:flutter/services.dart';
+
+import '../ui/caps.dart';
 
 /// Seleciona todo o texto do campo: o operador digita por cima, sem apagar.
 void selectAllText(TextEditingController controller) {

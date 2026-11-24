@@ -1,6 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text, InputDecoration;
 
 import '../core/error_display.dart';
+import '../ui/caps.dart';
 import 'terminal_controller.dart';
 
 class TerminalScreen extends StatelessWidget {
@@ -216,7 +217,7 @@ class _Notice extends StatelessWidget {
           Text(notice.action, textAlign: TextAlign.center),
         ],
         SelectableText(
-          notice.reference,
+          caps(notice.reference),
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodySmall,
         ),

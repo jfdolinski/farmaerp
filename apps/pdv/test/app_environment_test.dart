@@ -2,6 +2,8 @@ import 'package:farmaerp_pdv/core/app_environment.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'caps_finders.dart';
+
 void main() {
   group('isApiUrlAllowed', () {
     test('desenvolvimento aceita HTTP local', () {
@@ -45,14 +47,14 @@ void main() {
 
     testWidgets('aparece na homologação', (tester) async {
       await pump(tester, 'homologation');
-      expect(find.textContaining('HOMOLOGAÇÃO'), findsOneWidget);
+      expect(findTextContaining('HOMOLOGAÇÃO'), findsOneWidget);
       expect(find.text('conteúdo'), findsOneWidget);
     });
 
     testWidgets('não aparece nos demais ambientes', (tester) async {
       for (final environment in ['development', 'production']) {
         await pump(tester, environment);
-        expect(find.textContaining('HOMOLOGAÇÃO'), findsNothing);
+        expect(findTextContaining('HOMOLOGAÇÃO'), findsNothing);
         expect(find.text('conteúdo'), findsOneWidget);
       }
     });
