@@ -127,6 +127,14 @@ Future<void> main() async {
     saleForReturn: (code) async => api.saleForReturn(accessToken: await controller.accessToken(), code: code),
     returnDocument: (code) async => api.returnDocument(accessToken: await controller.accessToken(), code: code),
     returnCredit: (code) async => api.returnCredit(accessToken: await controller.accessToken(), code: code),
+    cashbackBalance: (customerId) async => api.cashback(accessToken: await controller.accessToken(), customerId: customerId),
+    cashbackReserve: (customerId, amount, saleTotal) async => api.cashbackReserve(
+      accessToken: await controller.accessToken(),
+      customerId: customerId,
+      amount: amount,
+      saleTotal: saleTotal,
+    ),
+    cashbackRelease: (reservationId) async => api.cashbackRelease(accessToken: await controller.accessToken(), reservationId: reservationId),
     findQuote: (key) async => api.quote(accessToken: await controller.accessToken(), key: key),
     logger: logger,
   );

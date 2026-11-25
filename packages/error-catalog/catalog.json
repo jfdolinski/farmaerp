@@ -2900,5 +2900,13 @@
       "cashback_allocation_amount_check",
       "sale_return_cashback_refund_check"
     ]
+  },
+  "FA855": {
+    "message": "O cashback só pode ser usado com internet.",
+    "action": "Use outra forma de pagamento. O saldo continua guardado para a próxima compra.",
+    "httpStatus": 503,
+    "severity": "warning",
+    "retryable": true,
+    "dbConstraints": []
   }
 }

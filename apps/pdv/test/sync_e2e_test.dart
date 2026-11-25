@@ -130,6 +130,10 @@ void main() {
           saleForReturn: (code) => client.saleForReturn(accessToken: token.value, code: code),
           returnDocument: (code) => client.returnDocument(accessToken: token.value, code: code),
           returnCredit: (code) => client.returnCredit(accessToken: token.value, code: code),
+          cashbackBalance: (id) => client.cashback(accessToken: token.value, customerId: id),
+          cashbackReserve: (id, amount, total) =>
+              client.cashbackReserve(accessToken: token.value, customerId: id, amount: amount, saleTotal: total),
+          cashbackRelease: (id) => client.cashbackRelease(accessToken: token.value, reservationId: id),
         );
         await pos.login('3', '2468');
         expect(pos.notice, isNull);
@@ -424,6 +428,40 @@ void main() {
         expect((creditDetail['payments'] as List).single, containsPair('amount', 1));
         final creditReleases = jsonDecode((await http.get(Uri.parse('$base/admin/supervisor-releases?action=sales.store_credit'), headers: {'Authorization': 'Bearer $session'})).body);
         expect((creditReleases as List), isNotEmpty);
+        // Cashback: regra de 5% na Dipirona e o consentimento do cliente; a venda ganha, a seguinte
+        // usa (reservado na central, confirmado pela venda) e a central mostra o extrato.
+        final cashbackRule = await admin('/admin/rules', {'typeCode': 'cashback', 'value': 5, 'level': 'product', 'productLookup': '7890000000017'}, token: session);
+        await admin('/admin/customers/$_demoCustomer/consents', {'purpose': 'cashback', 'granted': true, 'channel': 'store'}, token: session);
+        await sync.pull(token.value);
+        expect(database.productDetails(_dipirona), isNotNull);
+        await pos.selectCustomer(_demoCustomer);
+        expect(await pos.identifySeller('3'), isTrue, reason: pos.notice?.message);
+        pos.scan('7890000000017');
+        pos.setQuantity(pos.cart.lines.single, 10000);
+        pos.startPayment();
+        pos.addPayment(Payment(method: PaymentMethod.cash, amountCents: pos.cart.totalCents));
+        await pos.finish();
+        await sync.push(token.value);
+        await pos.selectCustomer(_demoCustomer);
+        expect(await pos.identifySeller('3'), isTrue, reason: pos.notice?.message);
+        pos.scan('7890000000017');
+        pos.startPayment();
+        await pos.loadCashback();
+        expect(pos.saleCashback?.consent, isTrue);
+        expect(pos.saleCashback!.availableCents, greaterThan(0));
+        expect(await pos.addCashback(50), isTrue, reason: pos.notice?.message);
+        pos.addPayment(Payment(method: PaymentMethod.cash, amountCents: pos.cart.totalCents - 50));
+        await pos.finish();
+        await sync.push(token.value);
+        expect(
+          database.debugSelect("SELECT result FROM outbox WHERE kind = 'sale' ORDER BY sequence DESC LIMIT 1").single['result'],
+          'applied',
+        );
+        final statement = jsonDecode((await http.get(Uri.parse('$base/admin/customers/$_demoCustomer/cashback'), headers: {'Authorization': 'Bearer $session'})).body)
+            as Map<String, dynamic>;
+        expect((statement['entries'] as List).map((e) => '${(e as Map)['kind']} ${e['status']}'), containsAll(['earn null', 'use confirmed']));
+        await admin('/admin/rules/${cashbackRule['id']}/end', {}, token: session);
+
         // Depois da descida, o terminal tem o crediário da central (e não conta de novo o que subiu).
         await sync.pull(token.value);
         expect(pos.creditForReceipt(_demoCustomer)!.account.summary(pos.creditToday).principalOpenCents, creditCents - 100);

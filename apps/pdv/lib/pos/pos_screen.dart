@@ -1062,6 +1062,11 @@ class _PaymentPanelState extends State<_PaymentPanel> {
   /// O que falta, já com o desconto da forma escolhida (por exemplo, PIX com desconto).
   void _fillRemaining() {
     var remaining = widget.controller.remainingIfPaidWith(_method);
+    // No cashback, sugere o que dá para usar (saldo e máximo da rede).
+    if (_method == PaymentMethod.cashback && widget.controller.saleCashback != null) {
+      final usable = widget.controller.cashbackUsableCents;
+      if (usable < remaining) remaining = usable;
+    }
     // No crediário, sugere o que cabe no disponível.
     final credit = _method == PaymentMethod.storeCredit ? widget.controller.saleCredit : null;
     if (credit != null) {
@@ -1088,6 +1093,16 @@ class _PaymentPanelState extends State<_PaymentPanel> {
       return;
     }
     if (_method == PaymentMethod.storeCredit) return _addCredit(cents);
+    if (_method == PaymentMethod.cashback) {
+      if (await widget.controller.addCashback(cents) && mounted) {
+        setState(() {
+          _error = null;
+          _fillRemaining();
+        });
+        _refocusAmount();
+      }
+      return;
+    }
     final card =
         _method == PaymentMethod.creditCard ||
         _method == PaymentMethod.debitCard;
@@ -1227,6 +1242,18 @@ class _PaymentPanelState extends State<_PaymentPanel> {
     ];
   }
 
+  Widget _cashbackInfo(PosController controller) {
+    final info = controller.saleCashback;
+    final text = controller.cashbackOffline
+        ? 'Sem internet: o cashback não pode ser usado agora.'
+        : info == null
+        ? 'Buscando o saldo de cashback...'
+        : !info.consent
+        ? 'O cliente não autorizou o cashback.'
+        : 'Cashback: saldo ${formatCents(info.availableCents)} · pode usar até ${formatCents(controller.cashbackUsableCents)} nesta compra';
+    return Text(text, key: const Key('cashback-info'), style: const TextStyle(fontWeight: FontWeight.bold));
+  }
+
   /// Volta para o valor, com o que falta selecionado.
   void _refocusAmount() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1265,16 +1292,21 @@ class _PaymentPanelState extends State<_PaymentPanel> {
               children: [
                 for (final method in PaymentMethod.values)
                   if ((method != PaymentMethod.agreement || (cart.customer?.agreements.isNotEmpty ?? false)) &&
-                      (method != PaymentMethod.storeCredit || cart.customer?.credit != null))
+                      (method != PaymentMethod.storeCredit || cart.customer?.credit != null) &&
+                      (method != PaymentMethod.cashback || cart.customer != null))
                     ChoiceChip(
                       key: Key('method-${method.code}'),
                       label: Text(method.label),
                       selected: _method == method,
-                      onSelected: (_) => setState(() {
-                        _method = method;
-                        _error = null;
-                        _fillRemaining();
-                      }),
+                      onSelected: (_) async {
+                        setState(() {
+                          _method = method;
+                          _error = null;
+                        });
+                        // O saldo do cashback vem da central na hora (só com internet).
+                        if (method == PaymentMethod.cashback && controller.saleCashback == null) await controller.loadCashback();
+                        if (mounted) setState(_fillRemaining);
+                      },
                     ),
               ],
             ),
@@ -1335,6 +1367,7 @@ class _PaymentPanelState extends State<_PaymentPanel> {
               onSubmitted: (_) => _add(),
             ),
             if (_method == PaymentMethod.storeCredit) ..._creditFields(controller),
+            if (_method == PaymentMethod.cashback) _cashbackInfo(controller),
             if (_method == PaymentMethod.agreement)
               DropdownButtonFormField<Map<String, dynamic>>(
                 key: const Key('agreement'),

@@ -16,7 +16,8 @@ enum PaymentMethod {
   pix('pix', 'PIX'),
   agreement('agreement', 'Convênio'),
   returnCredit('return_credit', 'Crédito de devolução'),
-  storeCredit('store_credit', 'Crediário');
+  storeCredit('store_credit', 'Crediário'),
+  cashback('cashback', 'Cashback');
 
   const PaymentMethod(this.code, this.label);
 
@@ -103,6 +104,7 @@ class Payment {
     this.dependentId,
     this.dependentName,
     this.creditRelease,
+    this.reservationId,
   });
 
   final PaymentMethod method;
@@ -124,6 +126,9 @@ class Payment {
   final String? dependentId;
   final String? dependentName;
   final ({String supervisorId, String supervisorName, String reason})? creditRelease;
+
+  /// Cashback: a reserva feita na central (a venda confirma).
+  final String? reservationId;
 }
 
 /// Cliente identificado na venda (com os convênios dele).
@@ -313,6 +318,7 @@ SaleDraft buildSale({
       'agreement_id': payment.agreementId,
       'agreement_registration': payment.agreementRegistration,
       'return_id': payment.returnId,
+      'reservation_id': payment.reservationId,
       if (payment.method == PaymentMethod.storeCredit) ...{
         'installments': [for (final installment in payment.installments ?? const <ScheduledInstallment>[]) installment.toJson()],
         'dependent_id': payment.dependentId,

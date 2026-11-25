@@ -483,6 +483,11 @@ const _migrations = <String>[
   DROP TABLE sale_return;
   ALTER TABLE sale_return_new RENAME TO sale_return;
   ''',
+  // Cashback: o percentual do produto (para o comprovante) e a parte do cashback na devolução.
+  '''
+  ALTER TABLE product ADD COLUMN cashback_bp INTEGER;
+  ALTER TABLE sale_return ADD COLUMN cashback_refund_cents INTEGER NOT NULL DEFAULT 0;
+  ''',
 ];
 
 /// Pessoa que pode entrar no PDV, com o que veio da central.
@@ -536,7 +541,11 @@ class SaleProduct {
     this.maxDiscountBp,
     this.maxDiscountUntil,
     this.discountSubject = const {},
+    this.cashbackBp,
   });
+
+  /// Cashback do produto em centésimos de ponto (500 = 5%), pelo motor de regras; vazio é sem regra.
+  final int? cashbackBp;
 
   /// Desconto máximo em centésimos de ponto (750 = 7,5%); vazio é sem regra.
   final int? maxDiscountBp;
@@ -936,9 +945,10 @@ class LocalDatabase {
     _db.execute(
       'INSERT INTO product (id, code, name, manufacturer, active_ingredient, controlled_class, ms_registration, '
       'ncm, cest, status, price_cents, fraction_milli, batch_required, seen_generation, max_discount_bp, max_discount_until, '
-      'discount_subject) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET '
+      'discount_subject, cashback_bp) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET '
       'max_discount_bp = excluded.max_discount_bp, max_discount_until = excluded.max_discount_until, '
+      'cashback_bp = excluded.cashback_bp, '
       'discount_subject = excluded.discount_subject, '
       'code = excluded.code, name = excluded.name, manufacturer = excluded.manufacturer, '
       'active_ingredient = excluded.active_ingredient, controlled_class = excluded.controlled_class, '
@@ -963,6 +973,7 @@ class LocalDatabase {
         data['max_discount'] == null ? null : ((data['max_discount'] as num) * 100).round(),
         data['max_discount_until'],
         data['discount_subject'] is Map ? jsonEncode(data['discount_subject']) : null,
+        data['cashback'] == null ? null : ((data['cashback'] as num) * 100).round(),
       ],
     );
     _db.execute('DELETE FROM product_search WHERE product_id = ?', [id]);
@@ -1423,6 +1434,7 @@ class LocalDatabase {
     barcodeId: row['barcode_id'] == null ? null : uuidText(row['barcode_id'] as List<int>),
     barcodeFractionMilli: row['barcode_fraction'] as int?,
     maxDiscountBp: row['max_discount_bp'] as int?,
+    cashbackBp: row['cashback_bp'] as int?,
     maxDiscountUntil: DateTime.tryParse(row['max_discount_until'] as String? ?? ''),
     discountSubject: _subject(row['discount_subject'] as String?, uuidText(row['id'] as List<int>)),
   );
@@ -1538,6 +1550,12 @@ class LocalDatabase {
       'code': sale['code'],
       'sold_at': sale['sold_at'],
       'total': (sale['total_cents'] as int) / 100,
+      'cashback_used': (_db.select(
+            "SELECT COALESCE(SUM(amount_cents), 0) AS c FROM sale_payment WHERE sale_id = ? AND method = 'cashback'", [saleId],
+          ).first['c'] as int) / 100,
+      'returned_total': (_db.select('SELECT COALESCE(SUM(total_cents), 0) AS c FROM sale_return WHERE sale_id = ?', [saleId]).first['c'] as int) / 100,
+      'cashback_refunded':
+          (_db.select('SELECT COALESCE(SUM(cashback_refund_cents), 0) AS c FROM sale_return WHERE sale_id = ?', [saleId]).first['c'] as int) / 100,
       'customer_id': sale['customer_id'] == null ? null : uuidText(sale['customer_id'] as List<int>),
       'customer_name': null,
       'late': today.difference(saleDay).inDays > returnDays,
@@ -1568,14 +1586,15 @@ class LocalDatabase {
     required String code,
     required String saleCode,
     required DateTime now,
+    int cashbackRefundCents = 0,
   }) => _transaction(() {
     final at = now.toUtc().toIso8601String();
     _db.execute(
-      'INSERT INTO sale_return (id, number, code, sale_id, sale_code, destination, total_cents, returned_at, created_at, updated_at) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO sale_return (id, number, code, sale_id, sale_code, destination, total_cents, returned_at, created_at, updated_at, '
+      'cashback_refund_cents) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         uuidBytes(payload['id']! as String), payload['number'], code, uuidBytes(payload['sale_id']! as String), saleCode,
-        payload['destination'], toCents(payload['total'])!, payload['returned_at'], at, at,
+        payload['destination'], toCents(payload['total'])!, payload['returned_at'], at, at, cashbackRefundCents,
       ],
     );
     for (final item in (payload['items']! as List).cast<Map<String, Object?>>()) {
@@ -1602,7 +1621,8 @@ class LocalDatabase {
     return {
       'id': uuidText(row['id'] as List<int>),
       'code': row['code'],
-      'total': (row['total_cents'] as int) / 100,
+      // O que vai para o cliente: o total sem a parte que voltou como cashback.
+      'total': ((row['total_cents'] as int) - (row['cashback_refund_cents'] as int)) / 100,
       'sale_code': row['sale_code'],
     };
   }
@@ -1616,7 +1636,7 @@ class LocalDatabase {
     );
     if (rows.isEmpty) return null;
     final row = rows.first;
-    final total = row['total_cents'] as int;
+    final total = (row['total_cents'] as int) - (row['cashback_refund_cents'] as int);
     final used = row['used'] as int;
     return {
       'id': uuidText(row['id'] as List<int>),

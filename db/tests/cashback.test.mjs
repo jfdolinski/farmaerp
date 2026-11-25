@@ -331,6 +331,25 @@ describe('cashback', () => {
     expect(parts).toEqual([3.33, 3.34, 3.33]);
   });
 
+  it('para o PDV: o produto desce com o percentual e a venda da devolução traz o cashback usado e o que voltou', async () => {
+    const product = (await ownerPool.query('SELECT data FROM app.pdv_product_data($1, ARRAY[$2]::uuid[])', [a.branch1.id, productId])).rows[0].data;
+    expect(product.cashback).toBe(5);
+    const customerId = await newCustomer();
+    await push([['sale', sale(customerId, 400)]]);
+    const held = await reserve(customerId, 10, 30);
+    const sold = sale(customerId, 30, { amount: 10, reservation: held.reservation_id });
+    sold.items[0] = { ...sold.items[0], quantity: 3, unit_price: 10 };
+    await push([['sale', sold]]);
+    await push([['sale_return', {
+      id: uuidV7(), number: 900, cash_session_id: session, sale_id: sold.id, operator_id: manager.id, authorized_by: null,
+      reason: 'Troca', destination: 'credit', returned_at: new Date().toISOString(),
+      items: [{ id: uuidV7(), sale_item_id: sold.items[0].id, quantity: 1, amount: 10 }], total: 10,
+    }]]);
+    const code = (await ownerPool.query('SELECT code FROM sale WHERE id = $1', [sold.id])).rows[0].code;
+    const found = (await asTerminal('SELECT app.pdv_sale_for_return($1) AS s', [code])).s;
+    expect(found).toMatchObject({ cashback_used: 10, returned_total: 10, cashback_refunded: 3.33, total: 30 });
+  });
+
   it('extrato para a retaguarda, só do próprio grupo', async () => {
     const customerId = await newCustomer();
     await push([['sale', sale(customerId, 100)]]);

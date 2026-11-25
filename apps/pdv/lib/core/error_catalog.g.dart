@@ -886,6 +886,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Tente de novo. Se continuar, avise o suporte com o código.',
     retryable: false,
   ),
+  'FA855': ErrorCatalogEntry(
+    code: 'FA855',
+    message: 'O cashback só pode ser usado com internet.',
+    action: 'Use outra forma de pagamento. O saldo continua guardado para a próxima compra.',
+    retryable: true,
+  ),
   'FA870': ErrorCatalogEntry(
     code: 'FA870',
     message: 'Informe o motivo da devolução.',
