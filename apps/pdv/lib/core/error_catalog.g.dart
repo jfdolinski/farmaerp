@@ -760,6 +760,42 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'A pessoa já tem um rosto mais novo ou revogou o consentimento depois. Se precisar, cadastre o rosto de novo no PDV.',
     retryable: false,
   ),
+  'FA834': ErrorCatalogEntry(
+    code: 'FA834',
+    message: 'Este cliente não tem crediário.',
+    action: 'Abra o crediário na ficha do cliente, na retaguarda.',
+    retryable: false,
+  ),
+  'FA835': ErrorCatalogEntry(
+    code: 'FA835',
+    message: 'Este cliente já tem crediário.',
+    action: 'Atualize a página para ver a conta.',
+    retryable: false,
+  ),
+  'FA836': ErrorCatalogEntry(
+    code: 'FA836',
+    message: 'Este crediário já está nesta situação.',
+    action: 'Atualize a página para ver a situação atual.',
+    retryable: false,
+  ),
+  'FA837': ErrorCatalogEntry(
+    code: 'FA837',
+    message: 'Confira os parâmetros do crediário.',
+    action: 'Multa até 2%, juros até 10% ao mês, de 1 a 24 parcelas, fechamento e vencimento entre os dias 1 e 28, intervalo de 7 a 90 dias, bloqueio de 1 a 365 dias e fator do limite de 0,1 a 10.',
+    retryable: false,
+  ),
+  'FA838': ErrorCatalogEntry(
+    code: 'FA838',
+    message: 'Informe um limite entre R\$ 0,00 e R\$ 9.999.999,99.',
+    action: 'O limite é o máximo que o cliente pode dever em compras no crediário.',
+    retryable: false,
+  ),
+  'FA839': ErrorCatalogEntry(
+    code: 'FA839',
+    message: 'Não foi possível registrar o histórico do crediário.',
+    action: 'O motivo aceita até 500 letras.',
+    retryable: false,
+  ),
   'FA870': ErrorCatalogEntry(
     code: 'FA870',
     message: 'Informe o motivo da devolução.',

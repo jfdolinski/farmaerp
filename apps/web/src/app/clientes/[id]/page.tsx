@@ -5,6 +5,7 @@ import { apiFetch, can, redirectIfNeeded, requireUser } from "@/lib/api";
 import { AppHeader } from "../../app-header";
 import { ErrorNotice } from "../../error-notice";
 import { CustomerGroupSelect } from "../../descontos/ui";
+import { CreditSection } from "../../crediario/section";
 import { CHANNELS, documentText, PURPOSES } from "../format";
 import {
   AgreementRow,
@@ -135,6 +136,8 @@ async function CustomerContent({ params }: { params: Params }) {
         ))}
         {canManage && <DependentForm customerId={customer.id} canManage={canManage} />}
       </section>
+
+      {can(user, "credit.view") && <CreditSection customerId={customer.id} />}
 
       <section className={styles.card}>
         <h2>Convênios</h2>

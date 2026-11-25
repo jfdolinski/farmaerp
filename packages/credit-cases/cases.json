@@ -1,0 +1,266 @@
+{
+  "about": "Casos do crediário: a função do banco (app.credit_schedule, app.credit_position, app.credit_allocate) e a do PDV precisam dar o mesmo resultado, centavo a centavo. Valores em reais; datas no fuso de São Paulo.",
+  "schedule": [
+    {
+      "name": "fechamento: compra antes do fechamento vence no dia 10 do mês seguinte",
+      "terms": { "due_mode": "closing", "closing_day": 25, "due_day": 10, "interval_days": 30 },
+      "sold_on": "2026-11-24", "amount": 100, "count": 1,
+      "expected": [{ "number": 1, "due_date": "2026-12-10", "amount": 100 }]
+    },
+    {
+      "name": "fechamento: compra no dia do fechamento entra na fatura que fecha",
+      "terms": { "due_mode": "closing", "closing_day": 25, "due_day": 10, "interval_days": 30 },
+      "sold_on": "2026-11-25", "amount": 50.01, "count": 2,
+      "expected": [
+        { "number": 1, "due_date": "2026-12-10", "amount": 25.01 },
+        { "number": 2, "due_date": "2027-01-10", "amount": 25 }
+      ]
+    },
+    {
+      "name": "fechamento: compra depois do fechamento vai para a fatura seguinte; sobra de centavo na primeira",
+      "terms": { "due_mode": "closing", "closing_day": 25, "due_day": 10, "interval_days": 30 },
+      "sold_on": "2026-11-26", "amount": 100, "count": 3,
+      "expected": [
+        { "number": 1, "due_date": "2027-01-10", "amount": 33.34 },
+        { "number": 2, "due_date": "2027-02-10", "amount": 33.33 },
+        { "number": 3, "due_date": "2027-03-10", "amount": 33.33 }
+      ]
+    },
+    {
+      "name": "fechamento: vencimento depois do fechamento cai no mesmo mês",
+      "terms": { "due_mode": "closing", "closing_day": 5, "due_day": 15, "interval_days": 30 },
+      "sold_on": "2026-12-03", "amount": 10, "count": 2,
+      "expected": [
+        { "number": 1, "due_date": "2026-12-15", "amount": 5 },
+        { "number": 2, "due_date": "2027-01-15", "amount": 5 }
+      ]
+    },
+    {
+      "name": "fechamento: depois do fechamento, com vencimento no mesmo mês do fechamento seguinte",
+      "terms": { "due_mode": "closing", "closing_day": 5, "due_day": 15, "interval_days": 30 },
+      "sold_on": "2026-12-06", "amount": 10, "count": 1,
+      "expected": [{ "number": 1, "due_date": "2027-01-15", "amount": 10 }]
+    },
+    {
+      "name": "fechamento: virada do ano",
+      "terms": { "due_mode": "closing", "closing_day": 25, "due_day": 10, "interval_days": 30 },
+      "sold_on": "2026-12-31", "amount": 20, "count": 2,
+      "expected": [
+        { "number": 1, "due_date": "2027-02-10", "amount": 10 },
+        { "number": 2, "due_date": "2027-03-10", "amount": 10 }
+      ]
+    },
+    {
+      "name": "fechamento e vencimento no dia 28, em fevereiro",
+      "terms": { "due_mode": "closing", "closing_day": 28, "due_day": 28, "interval_days": 30 },
+      "sold_on": "2027-01-29", "amount": 30, "count": 2,
+      "expected": [
+        { "number": 1, "due_date": "2027-03-28", "amount": 15 },
+        { "number": 2, "due_date": "2027-04-28", "amount": 15 }
+      ]
+    },
+    {
+      "name": "dias corridos: 30, 60 e 90 dias da compra",
+      "terms": { "due_mode": "days", "closing_day": 25, "due_day": 10, "interval_days": 30 },
+      "sold_on": "2026-11-24", "amount": 0.1, "count": 3,
+      "expected": [
+        { "number": 1, "due_date": "2026-12-24", "amount": 0.04 },
+        { "number": 2, "due_date": "2027-01-23", "amount": 0.03 },
+        { "number": 3, "due_date": "2027-02-22", "amount": 0.03 }
+      ]
+    },
+    {
+      "name": "dias corridos: intervalo de 15 dias passando por fevereiro",
+      "terms": { "due_mode": "days", "closing_day": 25, "due_day": 10, "interval_days": 15 },
+      "sold_on": "2027-02-20", "amount": 99.99, "count": 2,
+      "expected": [
+        { "number": 1, "due_date": "2027-03-07", "amount": 50 },
+        { "number": 2, "due_date": "2027-03-22", "amount": 49.99 }
+      ]
+    }
+  ],
+  "position": [
+    {
+      "name": "no dia do vencimento não há encargo",
+      "policy": { "late_fee_percent": 2, "monthly_interest_percent": 1 },
+      "state": { "due_date": "2026-12-10", "amount": 100, "principal_open": 100, "fee_base": 100, "fee_paid": 0, "interest_open": 0, "accrued_until": "2026-12-10" },
+      "at": "2026-12-10",
+      "expected": { "fee": 0, "interest": 0, "principal": 100 }
+    },
+    {
+      "name": "um dia de atraso: multa inteira e juros de um dia",
+      "policy": { "late_fee_percent": 2, "monthly_interest_percent": 1 },
+      "state": { "due_date": "2026-12-10", "amount": 100, "principal_open": 100, "fee_base": 100, "fee_paid": 0, "interest_open": 0, "accrued_until": "2026-12-10" },
+      "at": "2026-12-11",
+      "expected": { "fee": 2, "interest": 0.03, "principal": 100 }
+    },
+    {
+      "name": "trinta dias de atraso: um mês de juros",
+      "policy": { "late_fee_percent": 2, "monthly_interest_percent": 1 },
+      "state": { "due_date": "2026-12-10", "amount": 100, "principal_open": 100, "fee_base": 100, "fee_paid": 0, "interest_open": 0, "accrued_until": "2026-12-10" },
+      "at": "2027-01-09",
+      "expected": { "fee": 2, "interest": 1, "principal": 100 }
+    },
+    {
+      "name": "depois de um pagamento parcial: multa já paga, juros em aberto mais os novos dias",
+      "policy": { "late_fee_percent": 2, "monthly_interest_percent": 1 },
+      "state": { "due_date": "2026-12-10", "amount": 100, "principal_open": 40, "fee_base": 100, "fee_paid": 2, "interest_open": 0.5, "accrued_until": "2026-12-20" },
+      "at": "2026-12-30",
+      "expected": { "fee": 0, "interest": 0.63, "principal": 40 }
+    },
+    {
+      "name": "pagamento antes do vencimento reduz a base da multa",
+      "policy": { "late_fee_percent": 2, "monthly_interest_percent": 1 },
+      "state": { "due_date": "2026-12-10", "amount": 100, "principal_open": 60, "fee_base": 60, "fee_paid": 0, "interest_open": 0, "accrued_until": "2026-12-10" },
+      "at": "2026-12-25",
+      "expected": { "fee": 1.2, "interest": 0.3, "principal": 60 }
+    },
+    {
+      "name": "meio centavo arredonda para cima",
+      "policy": { "late_fee_percent": 2, "monthly_interest_percent": 1 },
+      "state": { "due_date": "2026-12-10", "amount": 15, "principal_open": 15, "fee_base": 15, "fee_paid": 0, "interest_open": 0, "accrued_until": "2026-12-10" },
+      "at": "2026-12-11",
+      "expected": { "fee": 0.3, "interest": 0.01, "principal": 15 }
+    },
+    {
+      "name": "valor pequeno: multa de meio centavo vira um centavo e os juros ficam em zero",
+      "policy": { "late_fee_percent": 2, "monthly_interest_percent": 1 },
+      "state": { "due_date": "2026-12-10", "amount": 0.25, "principal_open": 0.25, "fee_base": 0.25, "fee_paid": 0, "interest_open": 0, "accrued_until": "2026-12-10" },
+      "at": "2026-12-11",
+      "expected": { "fee": 0.01, "interest": 0, "principal": 0.25 }
+    },
+    {
+      "name": "outra política da filial",
+      "policy": { "late_fee_percent": 2, "monthly_interest_percent": 1.5 },
+      "state": { "due_date": "2026-12-10", "amount": 200, "principal_open": 200, "fee_base": 200, "fee_paid": 0, "interest_open": 0, "accrued_until": "2026-12-10" },
+      "at": "2027-01-24",
+      "expected": { "fee": 4, "interest": 4.5, "principal": 200 }
+    },
+    {
+      "name": "filial sem multa nem juros",
+      "policy": { "late_fee_percent": 0, "monthly_interest_percent": 0 },
+      "state": { "due_date": "2026-12-10", "amount": 200, "principal_open": 200, "fee_base": 200, "fee_paid": 0, "interest_open": 0, "accrued_until": "2026-12-10" },
+      "at": "2027-01-24",
+      "expected": { "fee": 0, "interest": 0, "principal": 200 }
+    },
+    {
+      "name": "parcela quitada não acumula nada",
+      "policy": { "late_fee_percent": 2, "monthly_interest_percent": 1 },
+      "state": { "due_date": "2026-12-10", "amount": 50, "principal_open": 0, "fee_base": 50, "fee_paid": 1, "interest_open": 0, "accrued_until": "2026-12-15" },
+      "at": "2027-03-01",
+      "expected": { "fee": 0, "interest": 0, "principal": 0 }
+    }
+  ],
+  "allocate": [
+    {
+      "name": "antes do vencimento: abate a parcela mais antiga e depois a seguinte",
+      "policy": { "late_fee_percent": 2, "monthly_interest_percent": 1 },
+      "states": [
+        { "id": "i1", "due_date": "2026-12-10", "amount": 50, "principal_open": 50, "fee_base": 50, "fee_paid": 0, "interest_open": 0, "accrued_until": "2026-12-10" },
+        { "id": "i2", "due_date": "2027-01-10", "amount": 50, "principal_open": 50, "fee_base": 50, "fee_paid": 0, "interest_open": 0, "accrued_until": "2027-01-10" }
+      ],
+      "amount": 70, "at": "2026-12-01",
+      "expected": {
+        "allocations": [
+          { "id": "i1", "fee": 0, "interest": 0, "principal": 50, "interest_open_after": 0 },
+          { "id": "i2", "fee": 0, "interest": 0, "principal": 20, "interest_open_after": 0 }
+        ],
+        "excess": 0
+      }
+    },
+    {
+      "name": "em atraso: multa e juros primeiro, depois o valor da parcela",
+      "policy": { "late_fee_percent": 2, "monthly_interest_percent": 1 },
+      "states": [
+        { "id": "i1", "due_date": "2026-12-10", "amount": 50, "principal_open": 50, "fee_base": 50, "fee_paid": 0, "interest_open": 0, "accrued_until": "2026-12-10" },
+        { "id": "i2", "due_date": "2027-01-10", "amount": 50, "principal_open": 50, "fee_base": 50, "fee_paid": 0, "interest_open": 0, "accrued_until": "2027-01-10" }
+      ],
+      "amount": 30, "at": "2027-01-09",
+      "expected": {
+        "allocations": [{ "id": "i1", "fee": 1, "interest": 0.5, "principal": 28.5, "interest_open_after": 0 }],
+        "excess": 0
+      }
+    },
+    {
+      "name": "pagamento que não cobre os juros: o resto dos juros fica em aberto",
+      "policy": { "late_fee_percent": 2, "monthly_interest_percent": 1 },
+      "states": [
+        { "id": "i1", "due_date": "2026-12-10", "amount": 50, "principal_open": 50, "fee_base": 50, "fee_paid": 0, "interest_open": 0, "accrued_until": "2026-12-10" }
+      ],
+      "amount": 1.2, "at": "2027-01-09",
+      "expected": {
+        "allocations": [{ "id": "i1", "fee": 1, "interest": 0.2, "principal": 0, "interest_open_after": 0.3 }],
+        "excess": 0
+      }
+    },
+    {
+      "name": "duas parcelas em atraso: os encargos das duas antes do valor da mais antiga",
+      "policy": { "late_fee_percent": 2, "monthly_interest_percent": 1 },
+      "states": [
+        { "id": "i1", "due_date": "2026-12-10", "amount": 50, "principal_open": 50, "fee_base": 50, "fee_paid": 0, "interest_open": 0, "accrued_until": "2026-12-10" },
+        { "id": "i2", "due_date": "2027-01-10", "amount": 50, "principal_open": 50, "fee_base": 50, "fee_paid": 0, "interest_open": 0, "accrued_until": "2027-01-10" }
+      ],
+      "amount": 3, "at": "2027-01-20",
+      "expected": {
+        "allocations": [
+          { "id": "i1", "fee": 1, "interest": 0.68, "principal": 0.15, "interest_open_after": 0 },
+          { "id": "i2", "fee": 1, "interest": 0.17, "principal": 0, "interest_open_after": 0 }
+        ],
+        "excess": 0
+      }
+    },
+    {
+      "name": "valor acima do devido sobra",
+      "policy": { "late_fee_percent": 2, "monthly_interest_percent": 1 },
+      "states": [
+        { "id": "i1", "due_date": "2026-12-10", "amount": 10, "principal_open": 10, "fee_base": 10, "fee_paid": 0, "interest_open": 0, "accrued_until": "2026-12-10" }
+      ],
+      "amount": 15, "at": "2026-12-01",
+      "expected": {
+        "allocations": [{ "id": "i1", "fee": 0, "interest": 0, "principal": 10, "interest_open_after": 0 }],
+        "excess": 5
+      }
+    },
+    {
+      "name": "continua de um pagamento anterior",
+      "policy": { "late_fee_percent": 2, "monthly_interest_percent": 1 },
+      "states": [
+        { "id": "i1", "due_date": "2026-12-10", "amount": 100, "principal_open": 40, "fee_base": 100, "fee_paid": 2, "interest_open": 0.5, "accrued_until": "2026-12-20" }
+      ],
+      "amount": 10, "at": "2026-12-30",
+      "expected": {
+        "allocations": [{ "id": "i1", "fee": 0, "interest": 0.63, "principal": 9.37, "interest_open_after": 0 }],
+        "excess": 0
+      }
+    },
+    {
+      "name": "parcela quitada fica de fora",
+      "policy": { "late_fee_percent": 2, "monthly_interest_percent": 1 },
+      "states": [
+        { "id": "i1", "due_date": "2026-12-10", "amount": 50, "principal_open": 0, "fee_base": 50, "fee_paid": 1, "interest_open": 0, "accrued_until": "2026-12-15" },
+        { "id": "i2", "due_date": "2027-01-10", "amount": 50, "principal_open": 50, "fee_base": 50, "fee_paid": 0, "interest_open": 0, "accrued_until": "2027-01-10" }
+      ],
+      "amount": 5, "at": "2027-01-02",
+      "expected": {
+        "allocations": [{ "id": "i2", "fee": 0, "interest": 0, "principal": 5, "interest_open_after": 0 }],
+        "excess": 0
+      }
+    },
+    {
+      "name": "a ordem é pelo vencimento, não pela ordem da lista",
+      "policy": { "late_fee_percent": 2, "monthly_interest_percent": 1 },
+      "states": [
+        { "id": "i2", "due_date": "2027-01-10", "amount": 50, "principal_open": 50, "fee_base": 50, "fee_paid": 0, "interest_open": 0, "accrued_until": "2027-01-10" },
+        { "id": "i1", "due_date": "2026-12-10", "amount": 50, "principal_open": 50, "fee_base": 50, "fee_paid": 0, "interest_open": 0, "accrued_until": "2026-12-10" }
+      ],
+      "amount": 60, "at": "2026-12-01",
+      "expected": {
+        "allocations": [
+          { "id": "i1", "fee": 0, "interest": 0, "principal": 50, "interest_open_after": 0 },
+          { "id": "i2", "fee": 0, "interest": 0, "principal": 10, "interest_open_after": 0 }
+        ],
+        "excess": 0
+      }
+    }
+  ]
+}

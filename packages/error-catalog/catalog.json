@@ -252,7 +252,13 @@
       "face_template_id_uuid_v7_check",
       "customer_group_id_uuid_v7_check",
       "discount_rule_id_uuid_v7_check",
-      "sale_item_discount_id_uuid_v7_check"
+      "sale_item_discount_id_uuid_v7_check",
+      "credit_policy_id_uuid_v7_check",
+      "credit_account_id_uuid_v7_check",
+      "credit_account_event_id_uuid_v7_check",
+      "credit_installment_id_uuid_v7_check",
+      "credit_payment_id_uuid_v7_check",
+      "credit_allocation_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -1980,7 +1986,19 @@
       "face_template_template_check",
       "sale_item_auto_discount_check",
       "sale_coupon_check",
-      "sale_item_discount_amount_check"
+      "sale_item_discount_amount_check",
+      "credit_installment_number_check",
+      "credit_installment_amount_check",
+      "credit_payment_method_check",
+      "credit_payment_amount_check",
+      "credit_payment_excess_check",
+      "credit_payment_card_brand_check",
+      "credit_payment_authorization_check",
+      "credit_allocation_fee_check",
+      "credit_allocation_interest_check",
+      "credit_allocation_principal_check",
+      "credit_allocation_open_check",
+      "credit_allocation_total_check"
     ]
   },
   "FA963": {
@@ -2669,5 +2687,78 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": []
+  },
+  "FA834": {
+    "message": "Este cliente não tem crediário.",
+    "action": "Abra o crediário na ficha do cliente, na retaguarda.",
+    "httpStatus": 404,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA835": {
+    "message": "Este cliente já tem crediário.",
+    "action": "Atualize a página para ver a conta.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "credit_account_customer_key"
+    ]
+  },
+  "FA836": {
+    "message": "Este crediário já está nesta situação.",
+    "action": "Atualize a página para ver a situação atual.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "credit_account_status_check"
+    ]
+  },
+  "FA837": {
+    "message": "Confira os parâmetros do crediário.",
+    "action": "Multa até 2%, juros até 10% ao mês, de 1 a 24 parcelas, fechamento e vencimento entre os dias 1 e 28, intervalo de 7 a 90 dias, bloqueio de 1 a 365 dias e fator do limite de 0,1 a 10.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "credit_policy_fee_check",
+      "credit_policy_interest_check",
+      "credit_policy_installments_check",
+      "credit_policy_factor_check",
+      "credit_policy_block_check",
+      "credit_policy_mode_check",
+      "credit_policy_closing_check",
+      "credit_policy_due_check",
+      "credit_policy_interval_check",
+      "credit_policy_branch_key",
+      "credit_account_mode_check",
+      "credit_account_closing_check",
+      "credit_account_due_check",
+      "credit_account_interval_check",
+      "credit_account_terms_check"
+    ]
+  },
+  "FA838": {
+    "message": "Informe um limite entre R$ 0,00 e R$ 9.999.999,99.",
+    "action": "O limite é o máximo que o cliente pode dever em compras no crediário.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "credit_account_limit_check"
+    ]
+  },
+  "FA839": {
+    "message": "Não foi possível registrar o histórico do crediário.",
+    "action": "O motivo aceita até 500 letras.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "credit_account_event_kind_check",
+      "credit_account_event_reason_check"
+    ]
   }
 }

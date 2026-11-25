@@ -314,6 +314,24 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - **Na central:** cada item traz a parte automática (`auto_discount`) e as regras com o valor de cada uma (`sale_item_discount`), e a venda traz o cupom. A central refaz a conta com as regras da hora da venda (inclusive as encerradas depois). Se o PDV deu mais que o esperado, a venda vale e fica o alerta "Desconto automático acima do que as regras davam". O detalhe da venda mostra as regras e o cupom.
 - **Formato 4 da descida:** os PDVs refazem a carga para receber as regras, a hierarquia dos produtos e o grupo dos clientes.
 
+**Crediário (Etapa 7, banco e retaguarda)**
+
+- **Conta:** uma por cliente (`credit_account`), aberta na ficha do cliente com `credit.manage` (perfil Gerente). Tem filial (os parâmetros dela valem), limite e situação. Abrir, mudar o limite, bloquear, liberar e mudar os vencimentos fica no histórico (`credit_account_event`), com quem, quando, o valor anterior, o sugerido e o motivo (obrigatório no limite e no bloqueio).
+- **Limite sugerido:** média mensal das compras dos últimos 6 meses vezes o fator da filial (`app.credit_suggested_limit`).
+- **Dependentes:** marcados na ficha ("pode comprar no crediário", `customer_dependent.credit_allowed`), compram na conta do titular, e a parcela guarda quem comprou.
+- **Parâmetros por filial** (`credit_policy`, em `/crediario`, só com `credit.policy`): multa (até 2%, teto do CDC), juros ao mês (até 10%), máximo de parcelas (padrão 3), dias de atraso até bloquear (padrão 30), fator do limite e vencimentos. Sem cadastro, valem os padrões: multa 2%, juros 1% ao mês e fatura mensal. **O contador confirma multa e juros antes de produção.**
+- **Vencimentos:** padrão da filial, com exceção por conta, valendo só para compras novas.
+  - **Fatura mensal (padrão):** fecha no dia 25 e vence no dia 10. A compra até o fechamento entra na fatura que fecha no mês; depois, na seguinte. As parcelas caem nas faturas seguintes.
+  - **Dias corridos:** a cada intervalo (padrão 30 dias) a partir da compra.
+  - O centavo que sobra da divisão fica na primeira parcela.
+- **Encargos:** multa uma vez por parcela, sobre o que estava em aberto no vencimento. Juros simples por dia (taxa mensal / 30) sobre o valor em aberto, contados desde o vencimento ou desde o último recebimento. Centavos arredondados metade para cima.
+- **Recebimento:** no caixa de qualquer loja, em dinheiro, cartão ou PIX (tipo de subida `credit_payment`). Abate primeiro multa e juros de todas as parcelas vencidas e depois o valor das parcelas, da que vence antes para a que vence depois (`credit_allocation`). Entra no esperado do caixa. Se o PDV recebeu mais que o devido (outro caixa recebeu antes), o dinheiro já entrou: o excesso fica no recebimento e vira alerta do caixa.
+- **Um cálculo, dois lugares:** `app.credit_schedule`, `app.credit_position` e `app.credit_allocate` são funções puras, conferidas pelos mesmos casos que o PDV vai usar (`packages/credit-cases/cases.json`). `app.credit_states` dá a situação de cada parcela em aberto no formato dessas funções.
+- **Venda no crediário** (forma `store_credit`): o PDV manda as parcelas que mostrou ao cliente, que viram `credit_installment` (não mudam). Fora do formato, sem conta ou dependente de outro grupo: conflito (FA962, FA834, FA004). Conta bloqueada, atraso além do prazo, acima do disponível, dependente sem autorização, parcelas acima do máximo ou vencimentos diferentes da conta da central: a venda vale (já aconteceu) e fica o alerta.
+- **Descida:** quem deve desce para todos os terminais da rede, com o limite, os parâmetros, as parcelas em aberto e os dependentes autorizados. Quando o débito acaba, sai dos terminais que não guardaram o cliente. Formato 5 da descida.
+- **Retaguarda:** `/crediario` lista as contas (com débito, em atraso, bloqueadas ou todas, e busca) e os parâmetros por filial. A ficha do cliente mostra o resumo, as parcelas com multa e juros de hoje, os recebimentos, os dependentes e o histórico. Erros: FA834 a FA839.
+- **O PDV (forma de pagamento, recebimento, comprovante) vem no PR seguinte (7B-2).**
+
 ## Estoque
 
 - **Fonte da verdade:** a tabela `stock_movement`, que nunca é alterada. Correção é uma movimentação contrária, com `reversal_of` apontando para a original.

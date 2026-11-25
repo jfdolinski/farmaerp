@@ -7,6 +7,7 @@ import { RolesController } from './auth/roles.controller.js';
 import { SessionGuard } from './auth/session.guard.js';
 import { UsersController } from './auth/users.controller.js';
 import { AgreementsController } from './customers/agreements.controller.js';
+import { CreditController } from './customers/credit.controller.js';
 import { CustomersController } from './customers/customers.controller.js';
 import { DatabaseService } from './database.service.js';
 import { FiscalController } from './fiscal/fiscal.controller.js';
@@ -57,6 +58,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     DiscountsController,
     StockController,
     CustomersController,
+    CreditController,
     AgreementsController,
     SuppliersController,
     PurchaseInvoicesController,
