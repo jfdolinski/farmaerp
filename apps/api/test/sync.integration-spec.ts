@@ -118,7 +118,7 @@ describe('descida para o PDV contra o banco real', () => {
     expect(response.headers['content-encoding']).toBe('gzip');
     expect(response.headers['cache-control']).toBe('no-store');
     const page = response.body as Json;
-    expect(page).toMatchObject({ format: 5, until: expect.stringMatching(/^\d+$/) });
+    expect(page).toMatchObject({ format: 6, until: expect.stringMatching(/^\d+$/) });
     expect(page.items[0]).toMatchObject({ type: 'fiscal', id: BRANCH_CENTRO });
     expect(page.items[0].data.series.map((s: Json) => s.model)).toEqual(['55', '65']);
 

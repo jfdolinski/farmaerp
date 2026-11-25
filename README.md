@@ -358,7 +358,11 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - **Lotes:** o uso tira do lote que vence antes (`cashback_allocation`). O vencido sai do saldo por um lançamento de expiração, gravado na próxima operação do cliente que der certo.
 - **Devolução:** o ganho da venda é estornado na proporção (do que sobrou do lote; o que o cliente já usou fica registrado como diferença). O cashback usado na venda volta como lote novo, na proporção acumulada das devoluções, para fechar no centavo (`sale_return.cashback_refund`). O destino da devolução (crédito, convênio, dinheiro ou crediário) recebe o resto (`sale_return.refund_amount`): a sangria de devolução, o crédito de devolução e o abatimento no crediário usam esse valor.
 - **Retaguarda:** extrato e saldo na ficha do cliente (quem vê clientes). Erros: FA849 a FA854.
-- **O PDV (saldo, forma de pagamento, ganho no comprovante, devolução) vem no PR seguinte (7C-2).**
+- **No PDV:**
+  - **Forma de pagamento "Cashback":** aparece com o cliente identificado. Ao escolher, o PDV busca na central o saldo, o consentimento e o máximo de uso, e sugere o que dá para usar. Lançar reserva o valor na central; tirar o pagamento, voltar aos itens, trocar ou tirar o cliente libera a reserva. Sem internet, não usa (FA855); sem consentimento, FA849; acima do saldo ou do máximo, FA850 e FA851.
+  - **Comprovante:** "Cashback ganho" estimado (percentual de cada item, que desce com o produto, sobre o que foi pago sem cashback), e a carência, se houver. A central confirma o valor.
+  - **Devolução:** a parte do cashback (a mesma conta acumulada da central, com os dados da venda: cashback usado, total já devolvido e cashback já devolvido) volta como cashback; o comprovante mostra "Volta como cashback" e "Para o destino". A sangria e o crédito de devolução feitos sem internet usam o valor para o destino.
+  - **Banco local versão 14:** o percentual de cashback do produto e a parte do cashback da devolução. Formato 6 da descida.
 
 ## Estoque
 

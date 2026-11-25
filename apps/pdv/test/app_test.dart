@@ -186,6 +186,41 @@ class FakeApi implements TerminalApi {
     throw response;
   }
 
+  /// Cashback por cliente; [cashbackFailure] simula a falta de internet.
+  final cashbackBalances = <String, Map<String, dynamic>>{};
+  Object? cashbackFailure;
+  final reservations = <String, double>{};
+  final released = <String>[];
+
+  @override
+  Future<Map<String, dynamic>> cashback({required String accessToken, required String customerId}) async {
+    if (cashbackFailure != null) throw cashbackFailure!;
+    return cashbackBalances[customerId] ?? (throw const ApiException('FA006'));
+  }
+
+  @override
+  Future<Map<String, dynamic>> cashbackReserve({
+    required String accessToken,
+    required String customerId,
+    required double amount,
+    required double saleTotal,
+  }) async {
+    if (cashbackFailure != null) throw cashbackFailure!;
+    final balance = cashbackBalances[customerId];
+    if (balance == null) throw const ApiException('FA006');
+    if (amount > (balance['available'] as num)) throw const ApiException('FA850');
+    final id = '019a0000-0000-7000-8000-0000000${(900 + reservations.length).toString().padLeft(5, '0')}';
+    reservations[id] = amount;
+    balance['available'] = (balance['available'] as num) - amount;
+    return {'reservation_id': id, 'balance': balance['available']};
+  }
+
+  @override
+  Future<void> cashbackRelease({required String accessToken, required String reservationId}) async {
+    if (cashbackFailure != null) throw cashbackFailure!;
+    released.add(reservationId);
+  }
+
   /// Orçamentos da loja: lista e busca; [quoteResponse] por chave, ou exceção.
   List<Map<String, dynamic>> openQuoteList = const [];
   final quoteResponse = <String, Object>{};

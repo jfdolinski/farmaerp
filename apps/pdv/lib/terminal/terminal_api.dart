@@ -107,6 +107,20 @@ abstract class TerminalApi {
   /// Crédito de devolução com saldo, para pagar uma compra (com internet).
   Future<Map<String, dynamic>> returnCredit({required String accessToken, required String code});
 
+  /// Cashback do cliente: saldo, consentimento e parâmetros (com internet).
+  Future<Map<String, dynamic>> cashback({required String accessToken, required String customerId});
+
+  /// Reserva o uso do cashback (a venda confirma). Devolve o id da reserva e o saldo que sobra.
+  Future<Map<String, dynamic>> cashbackReserve({
+    required String accessToken,
+    required String customerId,
+    required double amount,
+    required double saleTotal,
+  });
+
+  /// Libera a reserva quando a venda não acontece.
+  Future<void> cashbackRelease({required String accessToken, required String reservationId});
+
   /// Orçamentos abertos e válidos da loja (com internet).
   Future<List<Map<String, dynamic>>> openQuotes({required String accessToken});
 
@@ -358,6 +372,34 @@ class HttpTerminalApi implements TerminalApi {
     final json = await _request('/terminals/return-credits/${Uri.encodeComponent(code)}', accessToken: accessToken);
     if (json is! Map<String, dynamic>) throw const ApiException('FA000');
     return json;
+  }
+
+  @override
+  Future<Map<String, dynamic>> cashback({required String accessToken, required String customerId}) async {
+    final json = await _request('/terminals/cashback/${Uri.encodeComponent(customerId)}', accessToken: accessToken);
+    if (json is! Map<String, dynamic>) throw const ApiException('FA000');
+    return json;
+  }
+
+  @override
+  Future<Map<String, dynamic>> cashbackReserve({
+    required String accessToken,
+    required String customerId,
+    required double amount,
+    required double saleTotal,
+  }) async {
+    final json = await _request(
+      '/terminals/cashback/reserve',
+      accessToken: accessToken,
+      body: {'customerId': customerId, 'amount': amount, 'saleTotal': saleTotal},
+    );
+    if (json is! Map<String, dynamic>) throw const ApiException('FA000');
+    return json;
+  }
+
+  @override
+  Future<void> cashbackRelease({required String accessToken, required String reservationId}) async {
+    await _request('/terminals/cashback/release', accessToken: accessToken, body: {'reservationId': reservationId});
   }
 
   @override

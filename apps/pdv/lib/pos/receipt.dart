@@ -55,6 +55,8 @@ List<ReceiptLine> buildReceipt({
   required Cart cart,
   required int terminalNumber,
   SaleCustomer? customer,
+  int cashbackEarnedCents = 0,
+  int cashbackWaitingDays = 0,
 }) {
   final branch = (fiscal?['branch'] as Map?) ?? const {};
   final company = (fiscal?['company'] as Map?) ?? const {};
@@ -129,6 +131,10 @@ List<ReceiptLine> buildReceipt({
     ],
     if (cart.changeCents > 0) ReceiptLine(_twoColumns('Troco', formatCents(cart.changeCents))),
     const ReceiptLine(''),
+    if (cashbackEarnedCents > 0) ...[
+      ReceiptLine(_twoColumns('Cashback ganho', formatCents(cashbackEarnedCents)), bold: true),
+      if (cashbackWaitingDays > 0) ReceiptLine('  Pode ser usado daqui a $cashbackWaitingDays dias.'),
+    ],
     if (cart.payments.any((payment) => payment.method == PaymentMethod.storeCredit)) ...[
       const ReceiptLine(''),
       const ReceiptLine(''),
@@ -205,6 +211,7 @@ List<ReceiptLine> buildReturnReceipt({
   required int totalCents,
   required String destination,
   required String reason,
+  int cashbackRefundCents = 0,
   required String operatorName,
   String? authorizerName,
   required DateTime at,
@@ -218,10 +225,15 @@ List<ReceiptLine> buildReturnReceipt({
   ],
   ReceiptLine('-' * receiptWidth),
   ReceiptLine(_twoColumns('TOTAL DEVOLVIDO', formatCents(totalCents)), bold: true),
+  if (cashbackRefundCents > 0) ...[
+    ReceiptLine(_twoColumns('Volta como cashback', formatCents(cashbackRefundCents))),
+    ReceiptLine(_twoColumns('Para o destino', formatCents(totalCents - cashbackRefundCents)), bold: true),
+  ],
   ReceiptLine('Destino: ${returnDestinationLabels[destination] ?? destination}'),
   for (final text in _wrap(switch (destination) {
     'cash' => 'O valor sai do caixa por uma sangria de devolução com este documento.',
     'credit' => 'Apresente este documento na próxima compra nesta loja.',
+    'store_credit' => 'O valor abate o que o cliente deve no crediário.',
     _ => 'O valor é abatido na próxima fatura do convênio.',
   })) ReceiptLine(text),
   for (final text in _wrap('Motivo: $reason')) ReceiptLine(text),

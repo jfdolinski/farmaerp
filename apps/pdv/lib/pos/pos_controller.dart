@@ -67,6 +67,9 @@ class PosController extends ChangeNotifier {
     this.saleForReturn,
     this.returnDocument,
     this.returnCredit,
+    this.cashbackBalance,
+    this.cashbackReserve,
+    this.cashbackRelease,
     this.logger,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now;
@@ -90,6 +93,11 @@ class PosController extends ChangeNotifier {
 
   /// Crédito de devolução pelo código D (com internet; sem internet, os créditos deste terminal).
   final Future<Map<String, dynamic>> Function(String code)? returnCredit;
+
+  /// Cashback na central (só com internet): saldo, reserva do uso e liberação.
+  final Future<Map<String, dynamic>> Function(String customerId)? cashbackBalance;
+  final Future<Map<String, dynamic>> Function(String customerId, double amount, double saleTotal)? cashbackReserve;
+  final Future<void> Function(String reservationId)? cashbackRelease;
 
   /// Controlados do orçamento esperando a receita, um por vez.
   final controlledQueue = <PendingControlled>[];
@@ -308,6 +316,8 @@ class PosController extends ChangeNotifier {
     pendingControlled = null;
     controlledQueue.clear();
     pendingZeroStock = null;
+    _releaseCashback(cart.payments.where((payment) => payment.method == PaymentMethod.cashback));
+    saleCashback = null;
     cart.clear();
     paying = false;
     results = const [];
@@ -540,7 +550,7 @@ class PosController extends ChangeNotifier {
     }
     applyAutoDiscounts();
     if (cart.totalCents != before && cart.payments.isNotEmpty) {
-      cart.payments.clear();
+      _clearPayments();
       info = 'O total mudou: refaça o pagamento.';
     }
   }
@@ -734,7 +744,7 @@ class PosController extends ChangeNotifier {
         today: today,
       );
       cart.add(pending.product, quantityMilli: quantityMilli, controlled: release);
-      cart.payments.clear();
+      _clearPayments();
       pendingControlled = null;
       _nextControlled();
       reprice();
@@ -775,7 +785,7 @@ class PosController extends ChangeNotifier {
       final pharmacist = await _pharmacist(code, pin);
       final release = ControlledRelease.pending(reason: reason, pharmacist: (id: pharmacist.id, name: pharmacist.name));
       cart.add(pending.product, quantityMilli: quantityMilli, controlled: release);
-      cart.payments.clear();
+      _clearPayments();
       pendingControlled = null;
       _nextControlled();
       reprice();
@@ -973,6 +983,7 @@ class PosController extends ChangeNotifier {
         authorizer = await auth.verify(code, pin);
         if (authorizer.id == current.id || !authorizer.can('sales.return')) throw const PosException('FA895');
       }
+      final cashbackRefundCents = returnCashbackRefundCents(sale, totalCents);
       final now = _clock();
       final number = database.nextReturnNumber;
       final documentCode = 'D${terminalNumber() ?? 0}-${number.toString().padLeft(6, '0')}';
@@ -989,14 +1000,15 @@ class PosController extends ChangeNotifier {
         'returned_at': now.toUtc().toIso8601String(),
         'items': items,
         'total': totalCents / 100,
-      }, code: documentCode, saleCode: sale['code'] as String, now: now);
+      }, code: documentCode, saleCode: sale['code'] as String, now: now, cashbackRefundCents: cashbackRefundCents);
       logger?.info('Devolução registrada', fields: {
         'return_code': documentCode,
         'destination': destination,
         'items': items.length,
         if (authorizer != null) 'authorizer_code': authorizer.code,
       });
-      info = 'Devolução $documentCode registrada: ${formatCents(totalCents)}, ${returnDestinationLabels[destination]!.toLowerCase()}.';
+      info = 'Devolução $documentCode registrada: ${formatCents(totalCents - cashbackRefundCents)}, ${returnDestinationLabels[destination]!.toLowerCase()}'
+          '${cashbackRefundCents > 0 ? ', e ${formatCents(cashbackRefundCents)} volta como cashback' : ''}.';
       onSaleSaved?.call();
       final lines = buildReturnReceipt(
         fiscal: database.fiscal,
@@ -1006,6 +1018,7 @@ class PosController extends ChangeNotifier {
         totalCents: totalCents,
         destination: destination,
         reason: reason.trim(),
+        cashbackRefundCents: cashbackRefundCents,
         operatorName: current.name,
         authorizerName: authorizer?.name,
         at: now,
@@ -1013,7 +1026,7 @@ class PosController extends ChangeNotifier {
       );
       busy = false;
       await _printLines(documentCode, lines);
-      return (id: id, code: documentCode, totalCents: totalCents, destination: destination);
+      return (id: id, code: documentCode, totalCents: totalCents - cashbackRefundCents, destination: destination);
     } on PosException catch (error) {
       notice = ErrorDisplay.fromCode(error.code);
       return null;
@@ -1021,6 +1034,152 @@ class PosController extends ChangeNotifier {
       busy = false;
       notifyListeners();
     }
+  }
+
+  // ---- Cashback ----
+
+  /// Cashback do cliente da venda, buscado na central (só com internet). Vazio: sem cliente, ainda
+  /// não buscado ou sem internet ([cashbackOffline]).
+  ({int availableCents, int waitingCents, bool consent, int maxUseBp, int waitingDays})? saleCashback;
+  bool cashbackOffline = false;
+
+  Future<void> loadCashback() async {
+    final customer = cart.customer;
+    final lookup = cashbackBalance;
+    saleCashback = null;
+    cashbackOffline = false;
+    if (customer == null || lookup == null) return notifyListeners();
+    try {
+      final data = await lookup(customer.id);
+      final policy = (data['policy'] as Map?)?.cast<String, dynamic>() ?? const {};
+      saleCashback = (
+        availableCents: (((data['available'] as num?) ?? 0) * 100).round(),
+        waitingCents: (((data['waiting'] as num?) ?? 0) * 100).round(),
+        consent: data['consent'] == true,
+        maxUseBp: (((policy['max_use_percent'] as num?) ?? 50) * 100).round(),
+        waitingDays: (policy['waiting_days'] as num?)?.toInt() ?? 0,
+      );
+    } on ApiException catch (error) {
+      cashbackOffline = const {'FA001', 'FA008', 'FA009'}.contains(error.code);
+    }
+    notifyListeners();
+  }
+
+  int get cashbackInCartCents =>
+      cart.payments.where((p) => p.method == PaymentMethod.cashback).fold(0, (sum, p) => sum + p.amountCents);
+
+  /// Quanto ainda dá para pagar com cashback nesta venda: o saldo e o máximo da rede.
+  int get cashbackUsableCents {
+    final info = saleCashback;
+    if (info == null || !info.consent) return 0;
+    final max = (cart.totalCents * info.maxUseBp * 2 + 10000) ~/ 20000 - cashbackInCartCents;
+    final balance = info.availableCents;
+    final usable = max < balance ? max : balance;
+    return usable > 0 ? usable : 0;
+  }
+
+  /// Ganho estimado nesta venda (a central confirma): percentual de cada item sobre o que foi pago
+  /// sem cashback, arredondado no centavo como na central.
+  int get cashbackEarnEstimateCents {
+    final info = saleCashback;
+    final total = cart.totalCents;
+    if (info == null || !info.consent || total <= 0) return 0;
+    var weighted = 0;
+    for (final line in cart.lines) {
+      weighted += line.totalCents * (line.product.cashbackBp ?? 0);
+    }
+    final paid = total - cashbackInCartCents;
+    if (weighted <= 0 || paid <= 0) return 0;
+    final numerator = weighted * paid;
+    final denominator = 10000 * total;
+    return (2 * numerator + denominator) ~/ (2 * denominator);
+  }
+
+  /// Reserva o cashback na central e lança o pagamento. Sem internet, não dá (FA855).
+  Future<bool> addCashback(int amountCents) async {
+    final customer = cart.customer;
+    final reserve = cashbackReserve;
+    if (busy) return false;
+    try {
+      if (customer == null) throw const PosException('FA983');
+      if (reserve == null || cashbackOffline) throw const PosException('FA855');
+      final info = saleCashback;
+      if (info != null && !info.consent) throw const PosException('FA849');
+      if (amountCents <= 0) throw const PosException('FA972');
+      if (info != null && amountCents > cashbackUsableCents) {
+        throw PosException(amountCents > info.availableCents ? 'FA850' : 'FA851');
+      }
+    } on PosException catch (error) {
+      _fail(error.code);
+      return false;
+    }
+    busy = true;
+    notice = null;
+    notifyListeners();
+    try {
+      final result = await reserve(customer.id, amountCents / 100, cart.totalCents / 100);
+      busy = false;
+      addPayment(Payment(method: PaymentMethod.cashback, amountCents: amountCents, reservationId: '${result['reservation_id']}'));
+      final info = saleCashback;
+      if (info != null) {
+        saleCashback = (
+          availableCents: (((result['balance'] as num?) ?? 0) * 100).round(),
+          waitingCents: info.waitingCents,
+          consent: info.consent,
+          maxUseBp: info.maxUseBp,
+          waitingDays: info.waitingDays,
+        );
+      }
+      return true;
+    } on ApiException catch (error) {
+      final offline = const {'FA001', 'FA008', 'FA009'}.contains(error.code);
+      if (offline) cashbackOffline = true;
+      notice = ErrorDisplay.fromCode(offline ? 'FA855' : error.code, traceId: error.traceId);
+      return false;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  /// Libera reservas de cashback (venda desistida). Sem internet, a central libera sozinha em 2 horas.
+  void _releaseCashback(Iterable<Payment> payments) {
+    final release = cashbackRelease;
+    if (release == null) return;
+    for (final payment in payments.toList()) {
+      final id = payment.reservationId;
+      if (id == null) continue;
+      unawaited(release(id).catchError((Object error) {
+        logger?.warn('Reserva de cashback não liberada', fields: {'error': '$error'});
+      }));
+      if (saleCashback case final info?) {
+        saleCashback = (
+          availableCents: info.availableCents + payment.amountCents,
+          waitingCents: info.waitingCents,
+          consent: info.consent,
+          maxUseBp: info.maxUseBp,
+          waitingDays: info.waitingDays,
+        );
+      }
+    }
+  }
+
+  void _clearPayments() {
+    _releaseCashback(cart.payments.where((payment) => payment.method == PaymentMethod.cashback));
+    cart.payments.clear();
+  }
+
+  /// Parte do cashback numa devolução: a proporção acumulada do que já voltou da venda, para a soma
+  /// das devoluções fechar no centavo com o que foi usado (a mesma conta da central).
+  int returnCashbackRefundCents(Map<String, dynamic> sale, int returnCents) {
+    int cents(Object? value) => (((value as num?) ?? 0) * 100).round();
+    final used = cents(sale['cashback_used']);
+    final total = cents(sale['total']);
+    if (used <= 0 || total <= 0) return 0;
+    final numerator = used * (cents(sale['returned_total']) + returnCents);
+    final cumulative = (2 * numerator + total) ~/ (2 * total);
+    final refund = cumulative - cents(sale['cashback_refunded']);
+    return refund < 0 ? 0 : (refund > returnCents ? returnCents : refund);
   }
 
   // ---- Crediário ----
@@ -1310,7 +1469,7 @@ class PosController extends ChangeNotifier {
       if (need == DiscountNeed.none) {
         line.setDiscount(discountCents);
         line.release = null;
-        cart.payments.clear();
+        _clearPayments();
         notice = null;
       }
       notifyListeners();
@@ -1334,7 +1493,7 @@ class PosController extends ChangeNotifier {
       checkSupervisor(line: line, discountCents: discountCents, operator: current, supervisor: supervisor, now: _clock());
       line.setDiscount(discountCents);
       line.release = (supervisorId: supervisor.id, supervisorName: supervisor.name, reason: reason.trim());
-      cart.payments.clear();
+      _clearPayments();
       logger?.info('Desconto liberado por supervisor', fields: {'product_code': line.product.code, 'supervisor_code': supervisor.code});
       return true;
     } on PosException catch (error) {
@@ -1365,6 +1524,10 @@ class PosController extends ChangeNotifier {
         birthDate: data['birth_date'] as String?,
         credit: CreditAccount.fromJson(data['credit']),
       );
+      // Cliente novo: o cashback do anterior não vale; reservas dele são liberadas.
+      _releaseCashback(cart.payments.where((payment) => payment.method == PaymentMethod.cashback));
+      cart.payments.removeWhere((payment) => payment.method == PaymentMethod.cashback);
+      saleCashback = null;
       reprice();
     } on ApiException catch (error) {
       notice = ErrorDisplay.fromCode(error.code, traceId: error.traceId);
@@ -1376,7 +1539,10 @@ class PosController extends ChangeNotifier {
 
   void clearCustomer() {
     cart.customer = null;
-    cart.payments.removeWhere((payment) => payment.method == PaymentMethod.agreement || payment.method == PaymentMethod.storeCredit);
+    saleCashback = null;
+    _releaseCashback(cart.payments.where((payment) => payment.method == PaymentMethod.cashback));
+    cart.payments.removeWhere((payment) =>
+        payment.method == PaymentMethod.agreement || payment.method == PaymentMethod.storeCredit || payment.method == PaymentMethod.cashback);
     reprice();
     notifyListeners();
   }
@@ -1409,7 +1575,7 @@ class PosController extends ChangeNotifier {
 
   void remove(CartLine line) {
     cart.lines.remove(line);
-    cart.payments.clear();
+    _clearPayments();
     reprice();
     notifyListeners();
   }
@@ -1423,7 +1589,7 @@ class PosController extends ChangeNotifier {
 
   void backToItems() {
     paying = false;
-    cart.payments.clear();
+    _clearPayments();
     notifyListeners();
   }
 
@@ -1453,6 +1619,7 @@ class PosController extends ChangeNotifier {
   }
 
   void removePayment(Payment payment) {
+    if (payment.method == PaymentMethod.cashback) _releaseCashback([payment]);
     cart.payments.remove(payment);
     reprice();
     notifyListeners();
@@ -1484,7 +1651,10 @@ class PosController extends ChangeNotifier {
         operatorName: current.name,
         cart: cart,
         terminalNumber: terminalNumber() ?? 0,
+        cashbackEarnedCents: cashbackEarnEstimateCents,
+        cashbackWaitingDays: saleCashback?.waitingDays ?? 0,
       );
+      saleCashback = null;
       lastSale = CompletedSale(code: draft.code, totalCents: cart.totalCents, changeCents: cart.changeCents, lines: lines);
       logger?.info('Venda concluída', fields: {'sale_code': draft.code, 'items': cart.lines.length});
       cart.clear();
