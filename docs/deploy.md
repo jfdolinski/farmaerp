@@ -144,6 +144,18 @@ Fora de desenvolvimento, o PDV recusa um endereço que não seja HTTPS.
 
 Os terminais já aprovados continuam funcionando.
 
+## Zerar a homologação e recriar o acesso
+
+Só na homologação, e só com o pedido do responsável. Os dados de teste são apagados de vez.
+
+1. No console do Postgres (ícone `>_`, **Postgres Client**), conecte com `\c farmaerp` e confira o nome do banco e do projeto.
+2. Rode, numa linha só:
+   `BEGIN; DROP SCHEMA app, db_migrations, ext, public CASCADE; CREATE SCHEMA public; GRANT CREATE, USAGE ON SCHEMA public TO farmaerp_migrator; GRANT USAGE ON SCHEMA public TO farmaerp_app; COMMIT;`
+3. Em **api > Ambiente**, acrescente `BOOTSTRAP_ADMIN_EMAIL` e `BOOTSTRAP_ADMIN_PASSWORD` (a senha que você vai usar, com ao menos 10 caracteres). O seed da homologação não cria senha: a de exemplo é pública e só existe em desenvolvimento.
+4. Clique em **Implantar** na API: as migrations e o seed recriam tudo, e o administrador do deploy entra no grupo de demonstração e administra a plataforma.
+5. Entre na retaguarda com esse e-mail, defina a senha definitiva, apague as variáveis `BOOTSTRAP_` e implante a API de novo.
+6. Cadastre as empresas em **Plataforma** e pareie os terminais de novo (no PDV, se preciso, apague a pasta `%APPDATA%\br.com.farmaerp\farmaerp_pdv`).
+
 ## Atualizar para perfis e permissões
 
 Nenhuma variável muda. Clique em **Implantar** na API e, depois, na retaguarda. A migration dá o perfil Administrador a quem era administrador, e os demais usuários ficam sem perfil, até um administrador atribuir.

@@ -157,6 +157,10 @@ describe('primeiro administrador', () => {
       )).rows,
     }));
 
+  const platformAdmins = () => withClient(owner(), async (client) => (await client.query(
+    'SELECT u.email FROM platform_admin p JOIN user_account u ON u.id = p.user_id WHERE p.deleted_at IS NULL ORDER BY u.email',
+  )).rows.map((r) => r.email));
+
   it('exige o nome do grupo quando ainda não existe nenhum', async () => {
     await expect(bootstrapAdmin(owner(), { ...values, groupName: undefined })).rejects.toThrow(/BOOTSTRAP_GROUP_NAME/);
   });
@@ -175,6 +179,7 @@ describe('primeiro administrador', () => {
     });
     expect(users[0].password_hash).toMatch(/^\$argon2id\$/);
     expect(users[0].password_hash).not.toContain(values.password);
+    expect(await platformAdmins()).toEqual(['dono@exemplo.com.br']);
   });
 
   it('rodar de novo não muda nada, nem a senha', async () => {
@@ -188,6 +193,14 @@ describe('primeiro administrador', () => {
     const { groups, users } = await state();
     expect(groups).toHaveLength(1);
     expect(users).toHaveLength(2);
+    // O administrador do deploy administra a plataforma, mesmo que já exista outro.
+    expect(await platformAdmins()).toEqual(['dono@exemplo.com.br', 'outro@exemplo.com.br']);
+  });
+
+  it('quem já tinha acesso volta a administrar a plataforma, sem mudar a senha', async () => {
+    await withClient(owner(), (client) => client.query("UPDATE platform_admin SET deleted_at = now() WHERE user_id = (SELECT id FROM user_account WHERE email = 'outro@exemplo.com.br')"));
+    expect(await bootstrapAdmin(owner(), { email: 'outro@exemplo.com.br', password: 'mais-uma-senha-de-teste' })).toBe('skipped');
+    expect(await platformAdmins()).toEqual(['dono@exemplo.com.br', 'outro@exemplo.com.br']);
   });
 });
 

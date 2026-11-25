@@ -142,6 +142,8 @@ export async function bootstrapAdmin(config, { email, password, groupName }) {
       [normalized],
     );
     if (existing.rowCount > 0) {
+      // Já tinha acesso: a senha fica como está, mas ele continua administrando a plataforma.
+      await ensurePlatformAdmin(client, normalized);
       return 'skipped';
     }
 
@@ -173,13 +175,9 @@ export async function bootstrapAdmin(config, { email, password, groupName }) {
         'INSERT INTO user_credential (user_id, password_hash, must_change_password) VALUES ($1, $2, true)',
         [user.id, hash],
       );
-      // O primeiro administrador também administra a plataforma: é quem cadastra as empresas
+      // O administrador do deploy também administra a plataforma: é quem cadastra as empresas
       // (cada uma como cliente separado).
-      await client.query(
-        `INSERT INTO platform_admin (user_id)
-         SELECT $1 WHERE NOT EXISTS (SELECT 1 FROM platform_admin WHERE deleted_at IS NULL)`,
-        [user.id],
-      );
+      await ensurePlatformAdmin(client, normalized);
       await client.query('COMMIT');
       return 'created';
     } catch (error) {
@@ -187,6 +185,17 @@ export async function bootstrapAdmin(config, { email, password, groupName }) {
       throw error;
     }
   });
+}
+
+/** Marca a pessoa do e-mail como administradora da plataforma (se ainda não for). */
+async function ensurePlatformAdmin(client, email) {
+  await client.query(
+    `INSERT INTO platform_admin (user_id)
+     SELECT u.id FROM user_account u
+      WHERE u.email = $1 AND u.deleted_at IS NULL
+        AND NOT EXISTS (SELECT 1 FROM platform_admin p WHERE p.user_id = u.id AND p.deleted_at IS NULL)`,
+    [email],
+  );
 }
 
 /** Espera o banco aceitar conexões: no deploy, ele pode subir depois da API. */
