@@ -5,7 +5,7 @@ import { asOwner, closePools, connectionConfig, ownerPool } from './helpers.mjs'
 afterAll(closePools);
 
 const EXPECTED_TABLES = [
-  'agreement', 'auth_event', 'biometric_consent', 'branch', 'branch_certificate', 'branch_company_event', 'branch_csc', 'branch_dfe_sync', 'branch_group', 'cash_alert', 'cash_movement', 'cash_session',
+  'agreement', 'agreement_invoice', 'agreement_invoice_item', 'auth_event', 'biometric_consent', 'branch', 'branch_certificate', 'branch_company_event', 'branch_csc', 'branch_dfe_sync', 'branch_group', 'cash_alert', 'cash_movement', 'cash_session',
   'cash_session_count', 'cashback_allocation', 'cashback_entry', 'cashback_policy', 'catalog_manufacturer', 'catalog_product', 'catalog_product_barcode', 'catalog_product_image', 'catalog_product_pmc', 'catalog_product_tax', 'code_counter', 'company',
   'controlled_dispensing', 'credit_account', 'credit_account_event', 'credit_allocation', 'credit_installment', 'credit_payment', 'credit_policy', 'customer', 'customer_agreement', 'customer_consent_event', 'customer_dependent', 'customer_group', 'dfe_document', 'discount_rule', 'economic_group', 'face_template', 'limit_type', 'pdv_auth_event', 'pdv_customer_cache', 'permission', 'platform_admin',
   'product', 'product_barcode', 'product_barcode_channel', 'product_batch', 'product_batch_event', 'product_branch_status', 'product_category', 'product_cost', 'product_group', 'product_pmc',
@@ -76,7 +76,7 @@ describe('migrations', () => {
       '0037_quotes',
       '0038_quote_checkout',
       '0039_sale_returns',
-      '0040_return_credit', '0041_pdv_auth', '0042_face', '0043_discounts', '0044_sale_discounts', '0045_sync_retry', '0046_store_credit', '0047_store_credit_pdv', '0048_platform', '0049_cashback', '0050_cashback_pdv',
+      '0040_return_credit', '0041_pdv_auth', '0042_face', '0043_discounts', '0044_sale_discounts', '0045_sync_retry', '0046_store_credit', '0047_store_credit_pdv', '0048_platform', '0049_cashback', '0050_cashback_pdv', '0051_agreement_invoice',
     ]);
   });
 });

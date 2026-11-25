@@ -7,7 +7,7 @@ import { PlatformController } from './auth/platform.controller.js';
 import { RolesController } from './auth/roles.controller.js';
 import { SessionGuard } from './auth/session.guard.js';
 import { UsersController } from './auth/users.controller.js';
-import { AgreementsController } from './customers/agreements.controller.js';
+import { AgreementInvoicesController, AgreementsController } from './customers/agreements.controller.js';
 import { CashbackController } from './customers/cashback.controller.js';
 import { CreditController } from './customers/credit.controller.js';
 import { CustomersController } from './customers/customers.controller.js';
@@ -65,6 +65,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     CashbackController,
     PlatformController,
     AgreementsController,
+    AgreementInvoicesController,
     SuppliersController,
     PurchaseInvoicesController,
     ServiceInvoicesController,

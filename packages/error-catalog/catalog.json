@@ -262,7 +262,9 @@
       "platform_admin_id_uuid_v7_check",
       "cashback_policy_id_uuid_v7_check",
       "cashback_entry_id_uuid_v7_check",
-      "cashback_allocation_id_uuid_v7_check"
+      "cashback_allocation_id_uuid_v7_check",
+      "agreement_invoice_id_uuid_v7_check",
+      "agreement_invoice_item_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -2908,5 +2910,57 @@
     "severity": "warning",
     "retryable": true,
     "dbConstraints": []
+  },
+  "FA856": {
+    "message": "Não há vendas do convênio para faturar até esta data.",
+    "action": "Confira a data de fechamento: as vendas e devoluções já faturadas não entram de novo.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA857": {
+    "message": "Confira a data de fechamento da fatura.",
+    "action": "A fatura fecha até hoje e depois da fatura anterior; o pagamento não pode ser no futuro.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA858": {
+    "message": "Esta fatura não pode mais ser alterada.",
+    "action": "Fatura paga não muda. Para cancelar, só a última fatura fechada do convênio.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "agreement_invoice_status_check",
+      "agreement_invoice_paid_note_check",
+      "agreement_invoice_cancel_reason_check",
+      "agreement_invoice_period_check",
+      "agreement_invoice_state_check",
+      "agreement_invoice_item_kind_check",
+      "agreement_invoice_item_source_check",
+      "agreement_invoice_item_payment_key",
+      "agreement_invoice_item_return_key"
+    ]
+  },
+  "FA859": {
+    "message": "O valor passa do limite do convênio do cliente.",
+    "action": "Lance no convênio só o disponível e o resto em outra forma de pagamento.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA860": {
+    "message": "O dia de fechamento vai de 1 a 28.",
+    "action": "É o dia do mês em que a fatura do convênio fecha.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "agreement_closing_day_check"
+    ]
   }
 }

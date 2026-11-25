@@ -170,7 +170,7 @@ describe('o que desce para a venda', () => {
     );
     const step = await pull(a.terminal1, start.until);
     expect(step.get('customer', customerId).agreements).toEqual([
-      { agreement_id: agreement.id, name: agreement.name, registration: 'M-77', credit_limit: 300 },
+      { agreement_id: agreement.id, name: agreement.name, registration: 'M-77', credit_limit: 300, used: 0 },
     ]);
   });
 });

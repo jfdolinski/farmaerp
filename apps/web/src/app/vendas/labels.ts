@@ -42,6 +42,7 @@ export const ALERT_LABELS: Record<string, string> = {
   credit_dependent: "Dependente sem autorização no crediário",
   credit_release: "Crediário acima do limite do operador, sem liberação válida",
   cashback_use: "Cashback usado sem reserva válida ou acima do máximo",
+  agreement_limit: "Convênio acima do limite do cliente",
 };
 
 export const brl = (value: number | string | null) =>

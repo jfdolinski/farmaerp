@@ -229,6 +229,39 @@ void main() {
       expect(text, contains('Matrícula M-1'));
       expect(controller.cart.customer, isNull);
     });
+
+    test('limite do convênio: usado da central, vendas ainda não enviadas e o carrinho', () async {
+      await ready();
+      api.customerData[customerId] = {
+        'code': 7, 'person_type': 'individual', 'name': 'Cliente Demonstração', 'document': '11144477735',
+        'agreements': [
+          {'agreement_id': agreementId, 'name': 'Convênio Prefeitura', 'registration': 'M-1', 'credit_limit': 30, 'used': 15},
+        ],
+      };
+      Payment agreement(int cents) =>
+          Payment(method: PaymentMethod.agreement, amountCents: cents, agreementId: agreementId, agreementName: 'Convênio Prefeitura', agreementRegistration: 'M-1');
+      controller.scan('7890000000017');
+      controller.scan('7890000000017');
+      await controller.selectCustomer(customerId);
+      expect(controller.agreementAvailableCents(agreementId), 1500);
+      expect(controller.agreementAvailableCents('019a0000-0000-7000-8000-0000000000ff'), isNull);
+      controller.startPayment();
+      controller.addPayment(agreement(1600));
+      expect(controller.notice?.message, 'O valor passa do limite do convênio do cliente.');
+      expect(controller.cart.payments, isEmpty);
+      controller.addPayment(agreement(1000));
+      expect(controller.agreementAvailableCents(agreementId), 500);
+      controller.addPayment(agreement(600));
+      expect(controller.notice?.message, 'O valor passa do limite do convênio do cliente.');
+      controller.addPayment(Payment(method: PaymentMethod.cash, amountCents: 1000));
+      await controller.finish();
+      expect(controller.cart.customer, isNull);
+
+      // A venda ainda não subiu: o disponível já desconta os R$ 10 dela.
+      controller.scan('7890000000017');
+      await controller.selectCustomer(customerId);
+      expect(controller.agreementAvailableCents(agreementId), 500);
+    });
   });
 
   group('estoque nas filiais', () {

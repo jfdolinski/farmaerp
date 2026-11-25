@@ -1,0 +1,6 @@
+/* Na impressão da fatura, some o que é da tela (menu, botões e formulários). */
+@media print {
+  .noPrint {
+    display: none !important;
+  }
+}

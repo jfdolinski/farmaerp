@@ -364,6 +364,17 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - **Devolução:** a parte do cashback (a mesma conta acumulada da central, com os dados da venda: cashback usado, total já devolvido e cashback já devolvido) volta como cashback; o comprovante mostra "Volta como cashback" e "Para o destino". A sangria e o crédito de devolução feitos sem internet usam o valor para o destino.
   - **Banco local versão 14:** o percentual de cashback do produto e a parte do cashback da devolução. Formato 6 da descida.
 
+**Fatura do convênio (Etapa 7)**
+
+- **Dia de fechamento** por convênio (`agreement.closing_day`, de 1 a 28, padrão 25; FA860). A prévia sugere fechar no último dia de fechamento que já passou; dá para escolher outra data, até hoje.
+- **O que entra:** vendas pagas no convênio e devoluções dessas vendas com destino convênio, como abatimento negativo pelo valor que vai para o destino (`refund_amount`, sem a parte que volta como cashback), até a data e que ainda não estão em fatura (`app.agreement_open_items`). Venda ou devolução atrasada, de PDV que ficou sem internet, entra na próxima fatura.
+- **Fechar** (`app.close_agreement_invoice`): grava `agreement_invoice` (período, total, quem fechou) e `agreement_invoice_item` (cada venda ou devolução, com a matrícula). Um item só entra numa fatura ativa (índice único). Data no futuro ou não depois da fatura anterior: FA857. Nada a faturar: FA856.
+- **Pagar** (`app.pay_agreement_invoice`, data até hoje e observação): a fatura fica paga e não muda mais (FA858). O limite usado do cliente deixa de contar as compras dela, e o cliente desce de novo para os PDVs.
+- **Cancelar** (`app.cancel_agreement_invoice`, com motivo, FA302): só a última fatura fechada e não paga do convênio (FA858). As vendas voltam para o próximo fechamento; a fatura cancelada continua com os itens para consulta.
+- **Limite usado** (`app.agreement_used`): compras no convênio menos devoluções, que não estão em fatura paga. Desce para o PDV com os convênios do cliente (`used`). Venda que chega acima do limite (PDV sem internet) vale e vira alerta "Convênio acima do limite do cliente" (`agreement_limit`). Formato 7 da descida.
+- **Retaguarda:** `/convenios` mostra o dia de fechamento e o link "Faturas" de cada convênio. `/convenios/{id}`: dia de fechamento, prévia (por cliente e por lançamento) com "Fechar a fatura" e a lista das faturas. `/convenios/faturas/{id}`: detalhe por cliente e por lançamento, "Imprimir" (sem menu nem formulários), "Baixar CSV" (ponto e vírgula, vírgula decimal, UTF-8 para planilha), pagamento e cancelamento. Tudo com `agreements.manage` em todas as filiais.
+- **PDV:** a forma "Convênio" mostra o disponível de cada convênio do cliente: limite menos o usado da central, as vendas no convênio deste terminal que a central ainda não devolveu e o que já está no carrinho. Acima disso, FA859.
+
 ## Estoque
 
 - **Fonte da verdade:** a tabela `stock_movement`, que nunca é alterada. Correção é uma movimentação contrária, com `reversal_of` apontando para a original.
@@ -465,7 +476,7 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - **Cliente e convênio:**
   - O cliente identificado vai na venda e no comprovante, com o documento mascarado.
   - Os convênios dele descem com o cadastro.
-  - O pagamento em convênio aparece só com cliente que tenha convênio, com a matrícula. O saldo do convênio chega com o financeiro do cliente (Etapa 7).
+  - O pagamento em convênio aparece só com cliente que tenha convênio, com a matrícula e o disponível do limite (veja "Fatura do convênio").
 
 **Vendedor e orçamento**
 
@@ -498,7 +509,7 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - Escolhe quanto volta de cada item. O valor é a parte do total do item; a última devolução do item fecha no centavo.
   - Informa o motivo e o destino do valor:
     - crédito para nova compra (veja "Crédito de devolução" abaixo);
-    - abatimento na fatura do convênio (só se a venda teve convênio; o faturamento é da Etapa 7);
+    - abatimento na fatura do convênio (só se a venda teve convênio; entra na próxima fatura);
     - dinheiro ao cliente.
   - Sai o comprovante com o documento `D<terminal>-<número>` em código de barras.
 - **Quem faz:** quem tem "Fazer devolução" (`sales.return`, perfil Gerente). Sem ela, outra pessoa com a permissão libera com código e PIN (FA895).
@@ -512,7 +523,7 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - O estoque volta para os lotes que saíram na venda.
   - Sem a permissão (ou fora do prazo sem a liberação de outra pessoa), a devolução vale e fica o alerta na venda.
 - **Retaguarda:** `/devolucoes` lista por período, filial e destino, com a situação do pagamento, o saldo do crédito, o cliente, o convênio a abater e quem liberou. O detalhe da venda mostra as devoluções dela.
-  - O filtro "Abatimento no convênio" é a lista dos abatimentos a fazer na próxima fatura de cada convênio. O faturamento em si chega na Etapa 7.
+  - O filtro "Abatimento no convênio" lista as devoluções que abatem na fatura de cada convênio (veja "Fatura do convênio").
 
 **Crédito de devolução**
 
@@ -568,7 +579,7 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - **Reconhecimento facial:** só a decisão é registrada. O sistema não guarda imagem nem biometria.
 - **Consulta de CNPJ:** em cascata, BrasilAPI, ReceitaWS e CNPJá, com 5 segundos por serviço. Só preenche a tela, e a pessoa confere antes de salvar. Os serviços devolvem também os sócios, e isso nunca é repassado nem gravado em log.
 - **Inscrição estadual:** confere o tamanho esperado em cada estado, ou ISENTO. O dígito verificador entra com o Fiscal.
-- **Convênios:** cadastro e vínculo com matrícula e limite, com `agreements.manage` em todas as filiais, porque o limite é crédito da rede.
+- **Convênios:** cadastro e vínculo com matrícula e limite, com `agreements.manage` em todas as filiais, porque o limite é crédito da rede. Faturas: veja "Fatura do convênio".
 - **Exclusão a pedido do titular:** ainda não existe. A proposta é anonimizar, mantendo só o que a lei fiscal exige.
 
 ## Fornecedores
