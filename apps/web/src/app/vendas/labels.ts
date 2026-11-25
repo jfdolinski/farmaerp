@@ -7,6 +7,7 @@ export const PAYMENT_LABELS: Record<string, string> = {
   pix: "PIX",
   agreement: "Convênio",
   return_credit: "Crédito de devolução",
+  store_credit: "Crediário",
 };
 
 export const FISCAL_LABELS: Record<string, string> = {
@@ -32,6 +33,11 @@ export const ALERT_LABELS: Record<string, string> = {
   return_permission: "Devolução feita sem a permissão",
   return_credit: "Crédito de devolução usado sem saldo ou fora das regras",
   auto_discount: "Desconto automático acima do que as regras davam",
+  credit_limit: "Crediário acima do limite disponível",
+  credit_blocked: "Crediário bloqueado",
+  credit_overdue: "Crediário com parcela em atraso além do prazo",
+  credit_schedule: "Parcelas do crediário diferentes do cálculo da central",
+  credit_dependent: "Dependente sem autorização no crediário",
 };
 
 export const brl = (value: number | string | null) =>
@@ -78,6 +84,10 @@ export function alertText(kind: string, detail: Record<string, unknown>): string
       };
       return `${label}: ${detail.return_code}, ${problems[detail.problem as string] ?? detail.problem}.`;
     }
+    case "credit_limit":
+      return `${label}: ${brl(detail.amount as number)} com ${brl(detail.available as number)} disponível (limite ${brl(detail.credit_limit as number)}).`;
+    case "credit_overdue":
+      return `${label}: ${detail.overdue_days} dias de atraso, bloqueio depois de ${detail.block_after_days}.`;
     case "negative_stock":
       return `${label}: saldo ${Number(detail.balance).toLocaleString("pt-BR")}.`;
     default:

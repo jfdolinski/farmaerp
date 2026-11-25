@@ -57,6 +57,9 @@ function alertText(alert: SessionDetail["alerts"][number]): string {
     };
     return `Sangria de devolução ${alert.detail.return_code}: ${problems[alert.detail.problem as string] ?? alert.detail.problem}`;
   }
+  if (alert.kind === "credit_overpayment") {
+    return `Recebimento do crediário de ${brl(alert.detail.amount as number)} acima do que o cliente devia: ${brl(alert.detail.excess as number)} a mais`;
+  }
   if (alert.kind === "withdrawal_above_limit") {
     const limit = alert.detail.operator_limit as number;
     return alert.detail.released_by
