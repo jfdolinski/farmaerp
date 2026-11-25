@@ -1593,9 +1593,29 @@ class PosController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Quanto do limite do convênio o cliente ainda tem neste terminal: limite menos o usado que a
+  /// central mandou, as vendas no convênio que ela ainda não conhece e o que já está no carrinho.
+  /// Null quando o cliente não tem este convênio.
+  int? agreementAvailableCents(String agreementId) {
+    final customer = cart.customer;
+    if (customer == null) return null;
+    final agreement = customer.agreements.where((a) => a['agreement_id'] == agreementId).firstOrNull;
+    if (agreement == null) return null;
+    final limit = (((agreement['credit_limit'] as num?) ?? 0) * 100).round();
+    final used = (((agreement['used'] as num?) ?? 0) * 100).round();
+    final inCart = cart.payments
+        .where((p) => p.method == PaymentMethod.agreement && p.agreementId == agreementId)
+        .fold(0, (sum, p) => sum + p.amountCents);
+    return limit - used - database.pendingAgreementCents(customer.id, agreementId) - inCart;
+  }
+
   void addPayment(Payment payment) {
     if (payment.amountCents <= 0) return _fail('FA972');
     if (payment.method == PaymentMethod.agreement && cart.customer == null) return _fail('FA983');
+    if (payment.method == PaymentMethod.agreement) {
+      final available = agreementAvailableCents(payment.agreementId ?? '');
+      if (available != null && payment.amountCents > available) return _fail('FA859');
+    }
     if (payment.method == PaymentMethod.storeCredit) {
       try {
         if (creditNeedsRelease(payment.amountCents) && payment.creditRelease == null) throw const PosException('FA845');

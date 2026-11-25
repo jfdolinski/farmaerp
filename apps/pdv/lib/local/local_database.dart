@@ -1797,6 +1797,29 @@ class LocalDatabase {
     return [for (final row in rows) (id: uuidText(row['id'] as List<int>), name: row['name'] as String, code: row['code'] as int)];
   }
 
+  /// Vendas no convênio deste cliente que a central ainda não devolveu no "usado": na fila, ou já
+  /// aplicadas depois da última vez que o cliente desceu. Devoluções não entram (fica mais rígido
+  /// até a central devolver o cliente atualizado).
+  int pendingAgreementCents(String customerId, String agreementId) {
+    final saved = _db.select('SELECT saved_at FROM customer WHERE id = ?', [uuidBytes(customerId)]);
+    final savedAt = saved.isEmpty ? '' : saved.first['saved_at'] as String;
+    var cents = 0;
+    final rows = _db.select(
+      "SELECT payload FROM outbox WHERE kind = 'sale' AND (sent_at IS NULL OR (sent_at > ? AND result = 'applied'))",
+      [savedAt],
+    );
+    for (final row in rows) {
+      final payload = jsonDecode(row['payload'] as String) as Map<String, dynamic>;
+      if (payload['customer_id'] != customerId) continue;
+      for (final payment in (payload['payments'] as List? ?? const []).cast<Map<String, dynamic>>()) {
+        if (payment['method'] == 'agreement' && payment['agreement_id'] == agreementId) {
+          cents += ((payment['amount'] as num) * 100).round();
+        }
+      }
+    }
+    return cents;
+  }
+
   /// Recebimento do crediário: só a outbox (a central abate e devolve o cliente atualizado).
   void saveCreditPayment(Map<String, Object?> payload, {required DateTime now}) => enqueue('credit_payment', payload, now: now);
 

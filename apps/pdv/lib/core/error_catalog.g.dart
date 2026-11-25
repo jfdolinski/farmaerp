@@ -892,6 +892,36 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Use outra forma de pagamento. O saldo continua guardado para a próxima compra.',
     retryable: true,
   ),
+  'FA856': ErrorCatalogEntry(
+    code: 'FA856',
+    message: 'Não há vendas do convênio para faturar até esta data.',
+    action: 'Confira a data de fechamento: as vendas e devoluções já faturadas não entram de novo.',
+    retryable: false,
+  ),
+  'FA857': ErrorCatalogEntry(
+    code: 'FA857',
+    message: 'Confira a data de fechamento da fatura.',
+    action: 'A fatura fecha até hoje e depois da fatura anterior; o pagamento não pode ser no futuro.',
+    retryable: false,
+  ),
+  'FA858': ErrorCatalogEntry(
+    code: 'FA858',
+    message: 'Esta fatura não pode mais ser alterada.',
+    action: 'Fatura paga não muda. Para cancelar, só a última fatura fechada do convênio.',
+    retryable: false,
+  ),
+  'FA859': ErrorCatalogEntry(
+    code: 'FA859',
+    message: 'O valor passa do limite do convênio do cliente.',
+    action: 'Lance no convênio só o disponível e o resto em outra forma de pagamento.',
+    retryable: false,
+  ),
+  'FA860': ErrorCatalogEntry(
+    code: 'FA860',
+    message: 'O dia de fechamento vai de 1 a 28.',
+    action: 'É o dia do mês em que a fatura do convênio fecha.',
+    retryable: false,
+  ),
   'FA870': ErrorCatalogEntry(
     code: 'FA870',
     message: 'Informe o motivo da devolução.',

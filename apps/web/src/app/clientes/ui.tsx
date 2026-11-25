@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { ErrorNotice } from "../error-notice";
 import { keepValues } from "../produtos/ui";
@@ -42,6 +43,7 @@ export interface AgreementRow {
   id: string;
   name: string;
   cnpj: string | null;
+  closing_day?: number;
   customers?: number;
 }
 
@@ -511,7 +513,12 @@ export function AgreementForm({ agreement }: { agreement?: AgreementRow }) {
         {agreement && (
           <span className={styles.hint}>
             {agreement.customers ?? 0} cliente(s)
+            {agreement.closing_day !== undefined &&
+              ` · fecha dia ${agreement.closing_day}`}
           </span>
+        )}
+        {agreement && (
+          <Link href={`/convenios/${agreement.id}`}>Faturas</Link>
         )}
         {!agreement && (
           <button type="submit" name="intent" value="add" disabled={pending}>

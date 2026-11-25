@@ -70,7 +70,7 @@ describe('PIN do PDV', () => {
   it('quem pode gerar senha temporária define o PIN; o hash desce para o PDV da filial', async () => {
     const operator = await person(a, ['sales.sell']);
     const before = await pull(a.terminal1);
-    expect(before.format).toBe(6);
+    expect(before.format).toBe(7);
     expect(before.get('user', operator.id)).toMatchObject({ pin_hash: null });
 
     const hash = pinHash('2580');

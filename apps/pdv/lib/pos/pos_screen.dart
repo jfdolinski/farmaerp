@@ -1380,7 +1380,8 @@ class _PaymentPanelState extends State<_PaymentPanel> {
                     DropdownMenuItem(
                       value: agreement,
                       child: Text(
-                        '${agreement['name']} · matrícula ${agreement['registration']}',
+                        '${agreement['name']} · matrícula ${agreement['registration']}'
+                        ' · disponível ${formatCents(controller.agreementAvailableCents(agreement['agreement_id'] as String) ?? 0)}',
                       ),
                     ),
                 ],
