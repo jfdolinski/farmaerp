@@ -105,7 +105,7 @@ const receive = (customerId, amount, extra = {}) => ({
 });
 // Só os alertas do crediário (o preço do teste varia e dá o alerta de divergência de preço).
 const alertsOf = async (saleId) => (await ownerPool.query(
-  "SELECT kind, detail FROM sale_alert WHERE sale_id = $1 AND kind LIKE 'credit%' ORDER BY kind", [saleId],
+  "SELECT kind, detail FROM sale_alert WHERE sale_id = $1 AND kind LIKE 'credit%' AND kind <> 'credit_release' ORDER BY kind", [saleId],
 )).rows;
 const installmentsOf = async (saleId) => (await ownerPool.query(
   'SELECT number, due_date::text, amount::float AS amount, dependent_id FROM credit_installment WHERE sale_id = $1 ORDER BY number', [saleId],
@@ -421,6 +421,99 @@ describe('venda e recebimento vindos do PDV', () => {
       ['conflict', 'FA995'], ['conflict', 'FA834'],
     ]);
     await expect(ownerPool.query('UPDATE credit_payment SET amount = 2 WHERE id = $1', [ok.id])).rejects.toSatisfy(hasCode('FA104'));
+  });
+
+  it('acima do limite do operador: precisa da liberação de quem tem limite; sem ela, alerta', async () => {
+    const customerId = await newCustomer();
+    currentCustomer = customerId;
+    await openAccount(customerId, 5000);
+    const releaseAlert = async (saleId) => (await ownerPool.query(
+      "SELECT detail FROM sale_alert WHERE sale_id = $1 AND kind = 'credit_release'", [saleId],
+    )).rows.map((r) => r.detail);
+    const sell = async (amount, release) => {
+      const installments = await schedule(amount, 1);
+      saleNumber += 1;
+      const payload = {
+        id: uuidV7(), number: saleNumber, cash_session_id: session, operator_id: operator.id, customer_id: customerId,
+        sold_at: new Date().toISOString(), fiscal_model: '65',
+        items: [{ id: uuidV7(), line: 1, product_id: productId, barcode_id: null, quantity: 1, unit_price: amount, discount: 0, total: amount, batch_id: null }],
+        payments: [{ id: uuidV7(), method: 'store_credit', amount, installments, ...(release === undefined ? {} : { release }) }],
+        subtotal: amount, discount_total: 0, total: amount,
+      };
+      const [result] = await push([['sale', payload]]);
+      return { payload, result };
+    };
+    // O operador de caixa não tem limite de crediário (zero): sem liberação, a venda vale e fica o alerta.
+    const alone = await sell(100);
+    expect(alone.result.status).toBe('applied');
+    expect(await releaseAlert(alone.payload.id)).toEqual([{ amount: 100, operator_limit: 0, released_by: null, releaser_limit: null }]);
+    // O Gerente libera até R$ 500 (limite de exemplo do perfil).
+    const released = await sell(100, { supervisor_id: manager.id, reason: 'Cliente conhecido' });
+    expect(await releaseAlert(released.payload.id)).toEqual([]);
+    const row = (await ownerPool.query('SELECT * FROM supervisor_release WHERE reference_id = $1', [released.payload.payments[0].id])).rows[0];
+    expect(row).toMatchObject({ action: 'sales.store_credit', requested_by: operator.id, released_by: manager.id, reason: 'Cliente conhecido' });
+    const tooMuch = await sell(600, { supervisor_id: manager.id });
+    expect(await releaseAlert(tooMuch.payload.id)).toEqual([{ amount: 600, operator_limit: 0, released_by: manager.id, releaser_limit: 500 }]);
+    const self = await sell(50, { supervisor_id: operator.id });
+    expect((await releaseAlert(self.payload.id))[0]).toMatchObject({ released_by: null });
+    // Liberação fora do formato, ou em outra forma de pagamento: conflito.
+    expect((await sell(10, { supervisor_id: 'nada' })).result.code).toBe('FA962');
+  });
+
+  it('devolução de venda no crediário abate o débito; de outra venda, conflito', async () => {
+    const customerId = await newCustomer();
+    currentCustomer = customerId;
+    const accountId = await openAccount(customerId, 500);
+    const { payload } = await creditSale(customerId, 80, await schedule(80, 2));
+    let returnNumber = 0;
+    const refund = (sale, amount, destination = 'store_credit') => {
+      returnNumber += 1;
+      return {
+        id: uuidV7(), number: returnNumber, cash_session_id: session, sale_id: sale.id, operator_id: manager.id, authorized_by: null,
+        reason: 'Cliente desistiu', destination, returned_at: new Date().toISOString(),
+        items: [{ id: uuidV7(), sale_item_id: sale.items[0].id, quantity: 1, amount }], total: amount,
+      };
+    };
+    // A busca da venda para a devolução diz se foi no crediário.
+    const lookup = async (code) => {
+      const client = await appPool.connect();
+      try {
+        await client.query('BEGIN');
+        await setTerminal(client, a.terminal1.id);
+        return (await client.query('SELECT app.pdv_sale_for_return($1) AS s', [code])).rows[0].s;
+      } finally {
+        await client.query('ROLLBACK');
+        client.release();
+      }
+    };
+    const saleCode = (await ownerPool.query('SELECT code FROM sale WHERE id = $1', [payload.id])).rows[0].code;
+    expect(await lookup(saleCode)).toMatchObject({ has_store_credit: true, has_agreement: false });
+    const back = refund(payload, 80);
+    expect(codes(await push([['sale_return', back]]))).toEqual([['applied', null]]);
+    const payment = (await ownerPool.query('SELECT * FROM credit_payment WHERE return_id = $1', [back.id])).rows[0];
+    expect(payment).toMatchObject({ method: 'return', account_id: accountId, received_by: manager.id, cash_session_id: session });
+    expect(Number(payment.amount)).toBe(80);
+    expect((await ownerPool.query('SELECT app.credit_states($1) AS s', [accountId])).rows[0].s).toEqual([]);
+    // Devolução não entra no caixa.
+    const cashBefore = (await ownerPool.query('SELECT expected FROM app.cash_expected($1) WHERE method = $2', [session, 'cash'])).rows[0].expected;
+    expect((await detail(customerId)).payments.map((p) => [p.method, p.principal])).toEqual([['return', 80]]);
+    // Venda paga em dinheiro não abate o crediário.
+    const plain = await creditSale(customerId, 0.01, await schedule(0.01, 1), {
+      overrides: { payments: [{ id: uuidV7(), method: 'cash', amount: 0.01 }] },
+    });
+    expect(codes(await push([['sale_return', refund(plain.payload, 0.01)]]))).toEqual([['conflict', 'FA846']]);
+    const cashAfter = (await ownerPool.query('SELECT expected FROM app.cash_expected($1) WHERE method = $2', [session, 'cash'])).rows[0].expected;
+    expect(Number(cashAfter) - Number(cashBefore)).toBeCloseTo(0.01, 2);
+    // Devolução maior que o débito: o excesso fica registrado e vira alerta do caixa.
+    const small = await creditSale(customerId, 20, await schedule(20, 1));
+    await push([['credit_payment', receive(customerId, 15)]]);
+    const late = refund(small.payload, 20);
+    await push([['sale_return', late]]);
+    const excess = (await ownerPool.query('SELECT excess FROM credit_payment WHERE return_id = $1', [late.id])).rows[0].excess;
+    expect(Number(excess)).toBe(15);
+    const code = (await ownerPool.query('SELECT code FROM sale_return WHERE id = $1', [late.id])).rows[0].code;
+    expect((await ownerPool.query("SELECT detail FROM cash_alert WHERE kind = 'credit_overpayment' AND detail ->> 'return_code' = $1", [code])).rows[0].detail)
+      .toMatchObject({ amount: 20, excess: 15 });
   });
 
   it('lista das contas para a retaguarda, com filtro', async () => {

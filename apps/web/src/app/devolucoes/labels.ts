@@ -4,10 +4,17 @@ export const DESTINATION_LABELS: Record<string, string> = {
   credit: "Crédito para nova compra",
   agreement: "Abatimento na fatura do convênio",
   cash: "Dinheiro ao cliente",
+  store_credit: "Abatimento no crediário",
 };
 
 /** Filtro da URL (em português) para o destino da API. */
-export const DESTINATION_FILTERS = { todos: "all", credito: "credit", convenio: "agreement", dinheiro: "cash" } as const;
+export const DESTINATION_FILTERS = {
+  todos: "all",
+  credito: "credit",
+  convenio: "agreement",
+  dinheiro: "cash",
+  crediario: "store_credit",
+} as const;
 export type DestinationFilter = keyof typeof DESTINATION_FILTERS;
 
 const money = (value: number) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });

@@ -30,3 +30,12 @@ void checkWithdrawalReleaser({required LocalUser operator, required LocalUser re
   final limit = withdrawalLimitCents(releaser);
   if (limit != null && amountCents > limit) throw const PosException('FA992');
 }
+
+/// Limite de venda no crediário da pessoa em centavos: vazio é sem teto (administrador); sem perfil
+/// com limite, zero.
+int? creditSaleLimitCents(LocalUser user) {
+  if (user.isAdmin) return null;
+  if (!user.limits.containsKey('credit_sale')) return 0;
+  final value = user.limits['credit_sale'];
+  return value == null ? null : (value * 100).round();
+}

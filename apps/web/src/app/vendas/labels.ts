@@ -8,6 +8,7 @@ export const PAYMENT_LABELS: Record<string, string> = {
   agreement: "Convênio",
   return_credit: "Crédito de devolução",
   store_credit: "Crediário",
+  return: "Devolução",
 };
 
 export const FISCAL_LABELS: Record<string, string> = {
@@ -38,6 +39,7 @@ export const ALERT_LABELS: Record<string, string> = {
   credit_overdue: "Crediário com parcela em atraso além do prazo",
   credit_schedule: "Parcelas do crediário diferentes do cálculo da central",
   credit_dependent: "Dependente sem autorização no crediário",
+  credit_release: "Crediário acima do limite do operador, sem liberação válida",
 };
 
 export const brl = (value: number | string | null) =>
@@ -86,6 +88,8 @@ export function alertText(kind: string, detail: Record<string, unknown>): string
     }
     case "credit_limit":
       return `${label}: ${brl(detail.amount as number)} com ${brl(detail.available as number)} disponível (limite ${brl(detail.credit_limit as number)}).`;
+    case "credit_release":
+      return `${label}: ${brl(detail.amount as number)}, limite do operador ${brl(detail.operator_limit as number)}${detail.released_by ? `, quem liberou tinha ${brl((detail.releaser_limit as number) ?? null)}` : ""}.`;
     case "credit_overdue":
       return `${label}: ${detail.overdue_days} dias de atraso, bloqueio depois de ${detail.block_after_days}.`;
     case "negative_stock":

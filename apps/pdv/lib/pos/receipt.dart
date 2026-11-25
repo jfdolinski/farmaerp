@@ -5,6 +5,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import 'cart.dart';
+import 'credit_engine.dart';
 import 'money.dart';
 
 /// Colunas da bobina de 80 mm em fonte normal.
@@ -112,14 +113,30 @@ List<ReceiptLine> buildReceipt({
         switch (payment.method) {
           PaymentMethod.agreement => 'Convênio ${payment.agreementName ?? ''}',
           PaymentMethod.returnCredit => 'Crédito ${payment.returnCode ?? ''}',
+          PaymentMethod.storeCredit => 'Crediário ${payment.installments?.length ?? 1}x',
           _ => payment.method.label,
         },
         formatCents(payment.amountCents),
       )),
       if (payment.agreementRegistration != null) ReceiptLine('  Matrícula ${payment.agreementRegistration}'),
+      for (final installment in payment.installments ?? const <ScheduledInstallment>[])
+        ReceiptLine(_twoColumns(
+          '  ${installment.number}/${payment.installments!.length} vence ${_brDay(installment.dueDate)}',
+          formatCents(installment.amountCents),
+        )),
+      if (payment.dependentName != null) ReceiptLine('  Comprado por ${payment.dependentName}'),
+      if (payment.creditRelease != null) ReceiptLine('  Liberado por ${payment.creditRelease!.supervisorName}'),
     ],
     if (cart.changeCents > 0) ReceiptLine(_twoColumns('Troco', formatCents(cart.changeCents))),
     const ReceiptLine(''),
+    if (cart.payments.any((payment) => payment.method == PaymentMethod.storeCredit)) ...[
+      const ReceiptLine(''),
+      const ReceiptLine(''),
+      const ReceiptLine('______________________________', center: true),
+      ReceiptLine(customer?.name ?? 'Cliente', center: true),
+      const ReceiptLine('Reconheço a compra no crediário.', center: true),
+      const ReceiptLine(''),
+    ],
     const ReceiptLine('Nota fiscal pendente de emissão.', center: true),
     const ReceiptLine('Obrigado pela preferência!', center: true),
   ];
@@ -175,6 +192,7 @@ const returnDestinationLabels = {
   'credit': 'Crédito para nova compra',
   'agreement': 'Abatimento na fatura do convênio',
   'cash': 'Dinheiro ao cliente',
+  'store_credit': 'Abatimento no crediário',
 };
 
 /// Comprovante da devolução: o documento (com código de barras) que a sangria pede quando o valor
@@ -389,3 +407,34 @@ class PdfReceiptPrinter implements ReceiptPrinter {
 
 /// Corta o texto no tamanho da coluna do papel.
 String _cut(String text, int max) => text.length <= max ? text : text.substring(0, max);
+
+String _brDay(String day) => day.split('-').reversed.join('/');
+
+/// Comprovante do recebimento do crediário: valor, quanto foi para multa e juros e o que ficou em
+/// aberto (conta deste terminal; a central confirma na próxima sincronização).
+List<ReceiptLine> buildCreditPaymentReceipt({
+  required Map<String, dynamic>? fiscal,
+  required String customerName,
+  required int customerCode,
+  required int amountCents,
+  required String methodLabel,
+  required int chargesCents,
+  required int principalCents,
+  required int remainingCents,
+  required List<({String dueDate, int openCents})> nextDue,
+  required String operatorName,
+  required DateTime at,
+  required int terminalNumber,
+}) => [
+  ..._cashHeader(fiscal, 'RECEBIMENTO DO CREDIÁRIO', at, terminalNumber),
+  ReceiptLine('Cliente: $customerCode $customerName'),
+  ReceiptLine(_twoColumns('Valor recebido', formatCents(amountCents)), bold: true),
+  ReceiptLine(_twoColumns('Forma', methodLabel)),
+  if (chargesCents > 0) ReceiptLine(_twoColumns('Multa e juros', formatCents(chargesCents))),
+  ReceiptLine(_twoColumns('Parcelas', formatCents(principalCents))),
+  ReceiptLine(_twoColumns('Fica em aberto', formatCents(remainingCents))),
+  for (final due in nextDue) ReceiptLine(_twoColumns('  Vence ${_brDay(due.dueDate)}', formatCents(due.openCents))),
+  ReceiptLine('Operador: $operatorName'),
+  const ReceiptLine(''),
+  const ReceiptLine('Guarde este comprovante.', center: true),
+];

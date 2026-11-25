@@ -456,6 +456,33 @@ const _migrations = <String>[
   ALTER TABLE product ADD COLUMN discount_subject TEXT;
   ALTER TABLE customer ADD COLUMN customer_group_id TEXT;
   ''',
+  // Crediário do cliente (limite, parâmetros e parcelas em aberto), para vender e receber sem internet.
+  '''
+  ALTER TABLE customer ADD COLUMN credit TEXT;
+  -- Devolução que abate o crediário: o destino novo pede refazer a tabela (o SQLite não muda CHECK).
+  -- As chaves estrangeiras só são conferidas no fim da transação, com a tabela já no lugar.
+  PRAGMA defer_foreign_keys = ON;
+  CREATE TABLE sale_return_new (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    number INTEGER NOT NULL UNIQUE CHECK (number > 0),
+    code TEXT NOT NULL,
+    sale_id BLOB NOT NULL,
+    sale_code TEXT NOT NULL,
+    destination TEXT NOT NULL CHECK (destination IN ('credit', 'agreement', 'cash', 'store_credit')),
+    total_cents INTEGER NOT NULL CHECK (total_cents > 0),
+    paid INTEGER NOT NULL DEFAULT 0,
+    returned_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT,
+    version INTEGER NOT NULL DEFAULT 1,
+    updated_by BLOB,
+    trace_id BLOB
+  ) STRICT;
+  INSERT INTO sale_return_new SELECT * FROM sale_return;
+  DROP TABLE sale_return;
+  ALTER TABLE sale_return_new RENAME TO sale_return;
+  ''',
 ];
 
 /// Pessoa que pode entrar no PDV, com o que veio da central.
@@ -1135,7 +1162,7 @@ class LocalDatabase {
     const columns = [
       'code', 'person_type', 'name', 'trade_name', 'document', 'birth_date', 'phone', 'email', 'postal_code',
       'street', 'street_number', 'complement', 'district', 'city', 'city_code', 'state', 'agreements',
-      'customer_group_id',
+      'customer_group_id', 'credit',
     ];
     final search = normalizeSearch('${data['name'] ?? ''} ${data['trade_name'] ?? ''}');
     _db.execute(
@@ -1144,7 +1171,12 @@ class LocalDatabase {
       '${columns.map((c) => '$c = excluded.$c').join(', ')}, search_text = excluded.search_text, saved_at = excluded.saved_at',
       [
         id,
-        for (final c in columns) c == 'agreements' ? jsonEncode(data[c] ?? const []) : data[c],
+        for (final c in columns)
+          c == 'agreements'
+              ? jsonEncode(data[c] ?? const [])
+              : c == 'credit'
+              ? (data[c] == null ? null : jsonEncode(data[c]))
+              : data[c],
         search,
         DateTime.now().toUtc().toIso8601String(),
       ],
@@ -1161,6 +1193,7 @@ class LocalDatabase {
     final row = Map<String, Object?>.from(rows.first)..remove('search_text');
     row['id'] = id;
     row['agreements'] = jsonDecode(row['agreements'] as String? ?? '[]');
+    row['credit'] = row['credit'] == null ? null : jsonDecode(row['credit']! as String);
     return row;
   }
 
@@ -1510,6 +1543,7 @@ class LocalDatabase {
       'late': today.difference(saleDay).inDays > returnDays,
       'return_days': returnDays,
       'has_agreement': _db.select("SELECT 1 FROM sale_payment WHERE sale_id = ? AND method = 'agreement' LIMIT 1", [saleId]).isNotEmpty,
+      'has_store_credit': _db.select("SELECT 1 FROM sale_payment WHERE sale_id = ? AND method = 'store_credit' LIMIT 1", [saleId]).isNotEmpty,
       'items': [
         for (final item in items)
           {
@@ -1718,10 +1752,63 @@ class LocalDatabase {
       "+ COALESCE((SELECT SUM(p.amount_cents - p.change_cents) FROM sale_payment p JOIN sale s ON s.id = p.sale_id "
       "WHERE s.cash_session_id = ? AND p.method = 'cash'), 0) "
       "+ COALESCE((SELECT SUM(amount_cents) FROM cash_movement WHERE cash_session_id = ? AND kind = 'supply'), 0) "
-      "- COALESCE((SELECT SUM(amount_cents) FROM cash_movement WHERE cash_session_id = ? AND kind = 'withdrawal'), 0) AS cents",
-      [id, id, id, id],
+      "- COALESCE((SELECT SUM(amount_cents) FROM cash_movement WHERE cash_session_id = ? AND kind = 'withdrawal'), 0) "
+      r"+ COALESCE((SELECT SUM(CAST(round(json_extract(payload, '$.amount') * 100) AS INTEGER)) FROM outbox "
+      r"WHERE kind = 'credit_payment' AND json_extract(payload, '$.cash_session_id') = ? AND json_extract(payload, '$.method') = 'cash'), 0) AS cents",
+      [id, id, id, id, sessionId],
     ).first;
     return row['cents'] as int? ?? 0;
+  }
+
+  /// Clientes com crediário guardados neste terminal (quem deve desce para toda a rede).
+  List<({String id, String name, int code})> localCreditCustomers(String query) {
+    final words = normalizeSearch(query.trim()).split(' ').where((word) => word.isNotEmpty).toList();
+    final rows = _db.select(
+      'SELECT id, name, code FROM customer WHERE credit IS NOT NULL '
+      "${words.map((_) => "AND (search_text LIKE ? ESCAPE '\\' OR CAST(code AS TEXT) = ?) ").join()}"
+      'ORDER BY name, id LIMIT 30',
+      [
+        for (final word in words) ...[
+          '%${word.replaceAll(r'\', r'\\').replaceAll('%', r'\%').replaceAll('_', r'\_')}%',
+          word,
+        ],
+      ],
+    );
+    return [for (final row in rows) (id: uuidText(row['id'] as List<int>), name: row['name'] as String, code: row['code'] as int)];
+  }
+
+  /// Recebimento do crediário: só a outbox (a central abate e devolve o cliente atualizado).
+  void saveCreditPayment(Map<String, Object?> payload, {required DateTime now}) => enqueue('credit_payment', payload, now: now);
+
+  /// O que mexe no crediário do cliente e a central ainda não devolveu: vendas, recebimentos e
+  /// devoluções ainda na fila, ou já aplicados depois da última vez que o cliente desceu.
+  List<Map<String, dynamic>> pendingCreditEvents(String customerId) {
+    final saved = _db.select('SELECT saved_at FROM customer WHERE id = ?', [uuidBytes(customerId)]);
+    final savedAt = saved.isEmpty ? '' : saved.first['saved_at'] as String;
+    final events = <Map<String, dynamic>>[];
+    final rows = _db.select(
+      "SELECT kind, payload FROM outbox WHERE kind IN ('sale', 'credit_payment', 'sale_return') "
+      "AND (sent_at IS NULL OR (sent_at > ? AND result = 'applied')) ORDER BY sequence",
+      [savedAt],
+    );
+    for (final row in rows) {
+      final payload = jsonDecode(row['payload'] as String) as Map<String, dynamic>;
+      switch (row['kind']) {
+        case 'sale' when payload['customer_id'] == customerId:
+          for (final payment in (payload['payments'] as List? ?? const []).cast<Map<String, dynamic>>()) {
+            if (payment['method'] == 'store_credit') {
+              events.add({'kind': 'sale', 'at': payload['sold_at'], 'id': payload['id'], 'installments': payment['installments']});
+            }
+          }
+        case 'credit_payment' when payload['customer_id'] == customerId:
+          events.add({'kind': 'payment', 'at': payload['received_at'], 'amount': payload['amount']});
+        case 'sale_return' when payload['destination'] == 'store_credit':
+          final sale = _db.select('SELECT customer_id FROM sale WHERE id = ?', [uuidBytes(payload['sale_id'] as String)]);
+          final owner = sale.isEmpty || sale.first['customer_id'] == null ? null : uuidText(sale.first['customer_id'] as List<int>);
+          if (owner == customerId) events.add({'kind': 'payment', 'at': payload['returned_at'], 'amount': payload['total']});
+      }
+    }
+    return events;
   }
 
   /// Sangria ou suprimento: grava aqui e põe na outbox, na mesma transação.
