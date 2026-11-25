@@ -6,6 +6,7 @@ import { AppHeader } from "../../app-header";
 import { ErrorNotice } from "../../error-notice";
 import { CustomerGroupSelect } from "../../descontos/ui";
 import { CreditSection } from "../../crediario/section";
+import { CashbackSection } from "../../cashback/section";
 import { CHANNELS, documentText, PURPOSES } from "../format";
 import {
   AgreementRow,
@@ -138,6 +139,8 @@ async function CustomerContent({ params }: { params: Params }) {
       </section>
 
       {can(user, "credit.view") && <CreditSection customerId={customer.id} />}
+
+      <CashbackSection customerId={customer.id} />
 
       <section className={styles.card}>
         <h2>Convênios</h2>

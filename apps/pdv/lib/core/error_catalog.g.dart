@@ -850,6 +850,42 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Ele recebe a senha temporária e troca na primeira entrada.',
     retryable: false,
   ),
+  'FA849': ErrorCatalogEntry(
+    code: 'FA849',
+    message: 'Este cliente não autorizou o cashback.',
+    action: 'Registre o consentimento de cashback na ficha do cliente, se ele quiser.',
+    retryable: false,
+  ),
+  'FA850': ErrorCatalogEntry(
+    code: 'FA850',
+    message: 'O saldo de cashback não cobre este valor.',
+    action: 'Use o saldo disponível que aparece na tela e o resto em outra forma de pagamento.',
+    retryable: false,
+  ),
+  'FA851': ErrorCatalogEntry(
+    code: 'FA851',
+    message: 'O cashback passa do máximo que pode pagar desta compra.',
+    action: 'O máximo é um percentual da compra, definido pela rede.',
+    retryable: false,
+  ),
+  'FA852': ErrorCatalogEntry(
+    code: 'FA852',
+    message: 'A reserva de cashback não está mais valendo.',
+    action: 'Lance o cashback de novo.',
+    retryable: false,
+  ),
+  'FA853': ErrorCatalogEntry(
+    code: 'FA853',
+    message: 'Confira os parâmetros do cashback.',
+    action: 'Carência de 0 a 365 dias, validade de 1 a 3650 dias e uso de 1% a 100% da compra.',
+    retryable: false,
+  ),
+  'FA854': ErrorCatalogEntry(
+    code: 'FA854',
+    message: 'Não foi possível registrar o cashback.',
+    action: 'Tente de novo. Se continuar, avise o suporte com o código.',
+    retryable: false,
+  ),
   'FA870': ErrorCatalogEntry(
     code: 'FA870',
     message: 'Informe o motivo da devolução.',

@@ -348,6 +348,18 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - **Devolução de venda no crediário:** destino "Abatimento no crediário". Na central vira um recebimento do tipo `return` (não passa pelo caixa), que abate na ordem do crediário. Se passar do débito, o excesso fica registrado e vira alerta do caixa. Venda que não foi no crediário não abate (FA846).
   - **Banco local versão 13:** o crediário do cliente (`customer.credit`) e a devolução com o destino novo.
 
+**Cashback (Etapa 7, banco e retaguarda)**
+
+- **Percentual:** do motor de regras, tipo "Cashback" (produto, família, categoria... ou loja), na hora da venda.
+- **Só com consentimento:** sem o consentimento de cashback do cliente na hora da venda, não ganha nem usa (FA849).
+- **Ganho:** um lote por venda, sobre o valor pago sem a parte paga com cashback (`cashback_entry` do tipo `earn`), com carência e validade da rede. Arredondado no centavo.
+- **Parâmetros da rede** (`cashback_policy`, em `/descontos`, com `rules.manage` em todas as filiais): carência (padrão 0 dia), validade (padrão 90 dias) e quanto da compra o cashback pode pagar (padrão 50%). Erro: FA853.
+- **Uso, só com internet:** o PDV reserva o valor na central (`app.pdv_cashback_reserve`: consentimento, saldo e máximo; FA849 a FA851) e a venda confirma a reserva. Desistência libera (`app.pdv_cashback_release`, FA852). Reserva não confirmada em 2 horas volta para o saldo. Venda que chega sem reserva válida vale e usa o saldo de agora, com o alerta "Cashback usado sem reserva válida ou acima do máximo".
+- **Lotes:** o uso tira do lote que vence antes (`cashback_allocation`). O vencido sai do saldo por um lançamento de expiração, gravado na próxima operação do cliente que der certo.
+- **Devolução:** o ganho da venda é estornado na proporção (do que sobrou do lote; o que o cliente já usou fica registrado como diferença). O cashback usado na venda volta como lote novo, na proporção acumulada das devoluções, para fechar no centavo (`sale_return.cashback_refund`). O destino da devolução (crédito, convênio, dinheiro ou crediário) recebe o resto (`sale_return.refund_amount`): a sangria de devolução, o crédito de devolução e o abatimento no crediário usam esse valor.
+- **Retaguarda:** extrato e saldo na ficha do cliente (quem vê clientes). Erros: FA849 a FA854.
+- **O PDV (saldo, forma de pagamento, ganho no comprovante, devolução) vem no PR seguinte (7C-2).**
+
 ## Estoque
 
 - **Fonte da verdade:** a tabela `stock_movement`, que nunca é alterada. Correção é uma movimentação contrária, com `reversal_of` apontando para a original.

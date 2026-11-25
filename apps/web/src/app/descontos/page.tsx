@@ -7,6 +7,7 @@ import { ErrorNotice } from "../error-notice";
 import { dayText, levelLabel } from "../regras/format";
 import type { CategoryOption, GroupOption, NamedOption } from "../regras/ui";
 import { DiscountRow, discountText, kindLabel, STACKING_LABELS, STATUS_LABELS } from "./format";
+import { CashbackPolicy, CashbackPolicyForm } from "../cashback/ui";
 import { CreateDiscountForm, CustomerGroupForm, EndDiscountButton, SimulatorForm } from "./ui";
 import styles from "../terminais/page.module.css";
 
@@ -48,13 +49,14 @@ async function DiscountsContent({ searchParams }: { searchParams: SearchParams }
   }
   const params = await searchParams;
   const showHistory = params.historico === "1";
-  const [rules, options, structure, branches, customerGroups, agreements] = await Promise.all([
+  const [rules, options, structure, branches, customerGroups, agreements, cashback] = await Promise.all([
     apiFetch<DiscountRow[]>(`/admin/discount-rules${showHistory ? "?historico=1" : ""}`),
     apiFetch<{ manufacturers: NamedOption[] }>("/admin/rule-options"),
     apiFetch<{ categories: CategoryOption[]; groups: GroupOption[] }>("/admin/product-structure"),
     apiFetch<NamedOption[]>("/admin/branches"),
     apiFetch<NamedOption[]>("/admin/customer-groups"),
     apiFetch<NamedOption[]>("/admin/agreements"),
+    apiFetch<CashbackPolicy>("/admin/cashback-policy"),
   ]);
   if (!rules.ok) redirectIfNeeded(rules.error, "/descontos");
   const branchList = branches.ok ? branches.data : [];
@@ -149,6 +151,17 @@ async function DiscountsContent({ searchParams }: { searchParams: SearchParams }
           </div>
         )}
       </section>
+
+      {cashback.ok && (
+        <section className={styles.card}>
+          <h2>Cashback</h2>
+          <p className={styles.hint}>
+            O percentual de cada produto vem das regras (tipo Cashback, em Regras). O cliente só ganha e usa com o
+            consentimento de cashback, e só ganha sobre o que pagou sem cashback. O uso no caixa precisa de internet.
+          </p>
+          <CashbackPolicyForm policy={cashback.data} />
+        </section>
+      )}
 
       <section className={styles.card}>
         <h2>Grupos de clientes</h2>
