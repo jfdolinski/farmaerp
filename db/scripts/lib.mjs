@@ -173,6 +173,13 @@ export async function bootstrapAdmin(config, { email, password, groupName }) {
         'INSERT INTO user_credential (user_id, password_hash, must_change_password) VALUES ($1, $2, true)',
         [user.id, hash],
       );
+      // O primeiro administrador também administra a plataforma: é quem cadastra as empresas
+      // (cada uma como cliente separado).
+      await client.query(
+        `INSERT INTO platform_admin (user_id)
+         SELECT $1 WHERE NOT EXISTS (SELECT 1 FROM platform_admin WHERE deleted_at IS NULL)`,
+        [user.id],
+      );
       await client.query('COMMIT');
       return 'created';
     } catch (error) {

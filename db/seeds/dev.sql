@@ -220,4 +220,10 @@ SELECT seed.user_id, seed.pin_hash
   ) AS seed (user_id, pin_hash)
  WHERE NOT EXISTS (SELECT 1 FROM user_pin up WHERE up.user_id = seed.user_id AND up.deleted_at IS NULL);
 
+
+-- O administrador de demonstração também administra a plataforma (cadastra empresas como clientes separados).
+INSERT INTO platform_admin (user_id)
+SELECT '019a0000-0000-7000-8000-000000000008'::uuid
+ WHERE NOT EXISTS (SELECT 1 FROM platform_admin WHERE user_id = '019a0000-0000-7000-8000-000000000008' AND deleted_at IS NULL);
+
 COMMIT;

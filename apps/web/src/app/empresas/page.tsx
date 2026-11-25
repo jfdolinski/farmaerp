@@ -50,10 +50,11 @@ async function CompaniesContent() {
       {!result.ok && <ErrorNotice error={result.error} />}
       {data.canManage && (
         <section className={styles.card}>
-          <h2>Nova empresa</h2>
-          {data.companies.length === 0 && (
-            <p className={styles.hint}>Cadastre a primeira empresa para começar a usar o sistema.</p>
-          )}
+          <h2>Nova empresa da mesma rede</h2>
+          <p className={styles.hint}>
+            Outro CNPJ do mesmo dono: ele compartilha produtos, clientes, usuários e crediário com as empresas desta lista.
+            Uma farmácia de outro dono é um cliente separado, cadastrado pelo administrador da plataforma.
+          </p>
           <CreateCompanyForm />
         </section>
       )}

@@ -22,6 +22,7 @@ export interface CurrentUser {
   code: number;
   permissions: string[];
   mustChangePassword: boolean;
+  platformAdmin?: boolean;
 }
 
 function unavailable(): ApiError {

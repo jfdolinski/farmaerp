@@ -838,6 +838,18 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Escolha outro destino para a devolução.',
     retryable: false,
   ),
+  'FA847': ErrorCatalogEntry(
+    code: 'FA847',
+    message: 'Dê um nome ao cliente, com até 150 letras.',
+    action: 'É o nome da rede ou da farmácia, que aparece só para o administrador da plataforma.',
+    retryable: false,
+  ),
+  'FA848': ErrorCatalogEntry(
+    code: 'FA848',
+    message: 'Informe o nome e o e-mail do administrador da empresa.',
+    action: 'Ele recebe a senha temporária e troca na primeira entrada.',
+    retryable: false,
+  ),
   'FA870': ErrorCatalogEntry(
     code: 'FA870',
     message: 'Informe o motivo da devolução.',

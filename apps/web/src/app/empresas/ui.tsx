@@ -40,7 +40,7 @@ export interface BranchRow {
   phone: string | null;
 }
 
-type BranchValues = Partial<Omit<BranchRow, "id" | "company_id">>;
+export type BranchValues = Partial<Omit<BranchRow, "id" | "company_id">>;
 
 const confirmFirst = (message: string) => (event: MouseEvent<HTMLButtonElement>) => {
   if (!window.confirm(message)) event.preventDefault();
@@ -88,7 +88,7 @@ function CertificateNotice({ state }: { state: StructureFormState }) {
 }
 
 /** Nome, endereço e estado, iguais na filial nova e na edição. O CNPJ fica por conta de quem chama. */
-function BranchFields({ values, disabled }: { values: BranchValues; disabled?: boolean }) {
+export function BranchFields({ values, disabled }: { values: BranchValues; disabled?: boolean }) {
   return (
     <>
       <div className={styles.inline}>

@@ -258,7 +258,8 @@
       "credit_account_event_id_uuid_v7_check",
       "credit_installment_id_uuid_v7_check",
       "credit_payment_id_uuid_v7_check",
-      "credit_allocation_id_uuid_v7_check"
+      "credit_allocation_id_uuid_v7_check",
+      "platform_admin_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -2814,6 +2815,22 @@
   "FA846": {
     "message": "Só a venda feita no crediário pode ter o valor abatido no crediário.",
     "action": "Escolha outro destino para a devolução.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA847": {
+    "message": "Dê um nome ao cliente, com até 150 letras.",
+    "action": "É o nome da rede ou da farmácia, que aparece só para o administrador da plataforma.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA848": {
+    "message": "Informe o nome e o e-mail do administrador da empresa.",
+    "action": "Ele recebe a senha temporária e troca na primeira entrada.",
     "httpStatus": 422,
     "severity": "warning",
     "retryable": false,
