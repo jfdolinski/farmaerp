@@ -3,6 +3,7 @@ import express from 'express';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthController } from './auth/auth.controller.js';
+import { PlatformController } from './auth/platform.controller.js';
 import { RolesController } from './auth/roles.controller.js';
 import { SessionGuard } from './auth/session.guard.js';
 import { UsersController } from './auth/users.controller.js';
@@ -59,6 +60,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     StockController,
     CustomersController,
     CreditController,
+    PlatformController,
     AgreementsController,
     SuppliersController,
     PurchaseInvoicesController,

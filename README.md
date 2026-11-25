@@ -57,6 +57,14 @@ Societária:  Grupo econômico > Empresa > Filial > Terminal
 Filiais:     Grupo econômico > Grupo de filial > Região > Filial
 ```
 
+**Clientes separados (plataforma)**
+
+- Cada grupo econômico é um cliente do sistema, com dados só dele: usuários, perfis, produtos, clientes, estoque, vendas, caixa, crediário, descontos e terminais. A RLS e as funções filtram pelo grupo de quem está logado. Só o catálogo de produtos (`catalog_*`) é comum, e nenhum cliente o altera.
+- **Empresa nova de outro dono:** cadastrada pelo administrador da plataforma em `/plataforma` (`app.create_tenant`). Nascem juntos o grupo (com os perfis padrão), a empresa, a primeira filial e o administrador da empresa, com senha temporária que aparece uma vez e é trocada na primeira entrada. Erros: FA847 e FA848, além de CNPJ inválido (FA211), CNPJ já cadastrado (FA213) e e-mail já usado (FA406).
+- **O administrador da plataforma** (`platform_admin`) vê só a lista dos clientes (`app.list_tenants`: nome, raízes de CNPJ, quantidades de filiais e usuários, e-mail do administrador), nunca os dados deles. Em produção, é o primeiro administrador criado no deploy (`BOOTSTRAP_ADMIN_EMAIL`); no seed de desenvolvimento e homologação, `admin@farmaerp.test`. A sessão informa `platformAdmin` só para a tela; o banco confere de novo.
+- **Outro CNPJ do mesmo dono:** continua em `/empresas`, dentro do mesmo cliente, compartilhando produtos, clientes e crediário.
+- O teste `db/tests/platform.test.mjs` confere, tabela por tabela, que um cliente não vê nada do outro.
+
 Todo estabelecimento, inclusive a matriz, é uma filial com CNPJ completo.
 A empresa guarda a raiz de 8 caracteres do CNPJ principal, mas a filial pode ter um CNPJ de outra raiz. O certificado A1 é conferido com o CNPJ da própria filial.
 

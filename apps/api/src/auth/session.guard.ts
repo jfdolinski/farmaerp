@@ -19,6 +19,8 @@ export interface SessionUser {
   code: number;
   permissions: string[];
   mustChangePassword: boolean;
+  /** Administra a plataforma (cadastra empresas como clientes separados). */
+  platformAdmin?: boolean;
 }
 
 export type AuthenticatedRequest = Request & {
