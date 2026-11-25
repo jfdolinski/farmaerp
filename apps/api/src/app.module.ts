@@ -8,6 +8,7 @@ import { RolesController } from './auth/roles.controller.js';
 import { SessionGuard } from './auth/session.guard.js';
 import { UsersController } from './auth/users.controller.js';
 import { AgreementsController } from './customers/agreements.controller.js';
+import { CashbackController } from './customers/cashback.controller.js';
 import { CreditController } from './customers/credit.controller.js';
 import { CustomersController } from './customers/customers.controller.js';
 import { DatabaseService } from './database.service.js';
@@ -39,6 +40,7 @@ import { ReturnsController } from './sales/returns.controller.js';
 import { PdvAuthEventsController } from './auth/pdv-auth-events.controller.js';
 import { SalesController } from './sales/sales.controller.js';
 import { OfflineRulesController, TerminalStockController } from './terminals/offline-rules.controller.js';
+import { TerminalCashbackController } from './terminals/terminal-cashback.controller.js';
 import { TerminalCustomersController } from './terminals/terminal-customers.controller.js';
 import { TerminalSyncController } from './terminals/terminal-sync.controller.js';
 import { TerminalGuard } from './terminals/terminal.guard.js';
@@ -60,6 +62,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     StockController,
     CustomersController,
     CreditController,
+    CashbackController,
     PlatformController,
     AgreementsController,
     SuppliersController,
@@ -71,6 +74,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     TerminalDeviceController,
     TerminalSyncController,
     TerminalCustomersController,
+    TerminalCashbackController,
     SalesController,
     ControlledController,
     CashSessionsController,

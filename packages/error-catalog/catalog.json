@@ -259,7 +259,10 @@
       "credit_installment_id_uuid_v7_check",
       "credit_payment_id_uuid_v7_check",
       "credit_allocation_id_uuid_v7_check",
-      "platform_admin_id_uuid_v7_check"
+      "platform_admin_id_uuid_v7_check",
+      "cashback_policy_id_uuid_v7_check",
+      "cashback_entry_id_uuid_v7_check",
+      "cashback_allocation_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -2835,5 +2838,67 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": []
+  },
+  "FA849": {
+    "message": "Este cliente não autorizou o cashback.",
+    "action": "Registre o consentimento de cashback na ficha do cliente, se ele quiser.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA850": {
+    "message": "O saldo de cashback não cobre este valor.",
+    "action": "Use o saldo disponível que aparece na tela e o resto em outra forma de pagamento.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA851": {
+    "message": "O cashback passa do máximo que pode pagar desta compra.",
+    "action": "O máximo é um percentual da compra, definido pela rede.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA852": {
+    "message": "A reserva de cashback não está mais valendo.",
+    "action": "Lance o cashback de novo.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA853": {
+    "message": "Confira os parâmetros do cashback.",
+    "action": "Carência de 0 a 365 dias, validade de 1 a 3650 dias e uso de 1% a 100% da compra.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "cashback_policy_waiting_check",
+      "cashback_policy_validity_check",
+      "cashback_policy_max_use_check",
+      "cashback_policy_group_key"
+    ]
+  },
+  "FA854": {
+    "message": "Não foi possível registrar o cashback.",
+    "action": "Tente de novo. Se continuar, avise o suporte com o código.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "cashback_entry_kind_check",
+      "cashback_entry_amount_check",
+      "cashback_entry_status_check",
+      "cashback_entry_lot_check",
+      "cashback_entry_use_check",
+      "cashback_entry_sale_earn_key",
+      "cashback_allocation_amount_check",
+      "sale_return_cashback_refund_check"
+    ]
   }
 }

@@ -9,6 +9,7 @@ export const PAYMENT_LABELS: Record<string, string> = {
   return_credit: "Crédito de devolução",
   store_credit: "Crediário",
   return: "Devolução",
+  cashback: "Cashback",
 };
 
 export const FISCAL_LABELS: Record<string, string> = {
@@ -40,6 +41,7 @@ export const ALERT_LABELS: Record<string, string> = {
   credit_schedule: "Parcelas do crediário diferentes do cálculo da central",
   credit_dependent: "Dependente sem autorização no crediário",
   credit_release: "Crediário acima do limite do operador, sem liberação válida",
+  cashback_use: "Cashback usado sem reserva válida ou acima do máximo",
 };
 
 export const brl = (value: number | string | null) =>
