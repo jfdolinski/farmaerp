@@ -2,6 +2,8 @@ import 'package:uuid/uuid.dart';
 
 import '../local/local_database.dart';
 import 'controlled.dart';
+import 'credit.dart';
+import 'credit_engine.dart';
 import 'discount_engine.dart';
 import 'money.dart';
 import 'pos_auth.dart';
@@ -13,7 +15,8 @@ enum PaymentMethod {
   debitCard('debit_card', 'Cartão de débito'),
   pix('pix', 'PIX'),
   agreement('agreement', 'Convênio'),
-  returnCredit('return_credit', 'Crédito de devolução');
+  returnCredit('return_credit', 'Crédito de devolução'),
+  storeCredit('store_credit', 'Crediário');
 
   const PaymentMethod(this.code, this.label);
 
@@ -96,6 +99,10 @@ class Payment {
     this.returnId,
     this.returnCode,
     this.creditBalanceCents,
+    this.installments,
+    this.dependentId,
+    this.dependentName,
+    this.creditRelease,
   });
 
   final PaymentMethod method;
@@ -110,6 +117,13 @@ class Payment {
   final String? returnId;
   final String? returnCode;
   final int? creditBalanceCents;
+
+  /// Crediário: as parcelas mostradas ao cliente, o dependente que comprou e quem liberou acima do
+  /// limite do operador.
+  final List<ScheduledInstallment>? installments;
+  final String? dependentId;
+  final String? dependentName;
+  final ({String supervisorId, String supervisorName, String reason})? creditRelease;
 }
 
 /// Cliente identificado na venda (com os convênios dele).
@@ -122,6 +136,7 @@ class SaleCustomer {
     this.agreements = const [],
     this.groupId,
     this.birthDate,
+    this.credit,
   });
 
   final String id;
@@ -133,6 +148,9 @@ class SaleCustomer {
   /// Grupo de clientes e nascimento, para os descontos por grupo e de aniversariante.
   final String? groupId;
   final String? birthDate;
+
+  /// Crediário como a central mandou (sem o que o terminal ainda não enviou).
+  final CreditAccount? credit;
 }
 
 /// Venda em montagem.
@@ -295,6 +313,13 @@ SaleDraft buildSale({
       'agreement_id': payment.agreementId,
       'agreement_registration': payment.agreementRegistration,
       'return_id': payment.returnId,
+      if (payment.method == PaymentMethod.storeCredit) ...{
+        'installments': [for (final installment in payment.installments ?? const <ScheduledInstallment>[]) installment.toJson()],
+        'dependent_id': payment.dependentId,
+        'release': payment.creditRelease == null
+            ? null
+            : {'supervisor_id': payment.creditRelease!.supervisorId, 'reason': payment.creditRelease!.reason},
+      },
     });
   }
   if (change > 0) throw const PosException('FA972');

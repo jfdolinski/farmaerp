@@ -9,6 +9,8 @@ import '../face/face_widgets.dart';
 import '../ui/caps.dart';
 import 'cart.dart';
 import 'cash_dialogs.dart';
+import 'credit.dart';
+import 'credit_dialogs.dart';
 import 'focus_kit.dart';
 import 'money.dart';
 import 'pos_controller.dart';
@@ -625,6 +627,9 @@ class _SaleViewState extends State<_SaleView> {
         const SingleActivator(LogicalKeyboardKey.f9): () {
           if (!controller.quoteMode) _dialog(() => showReturnDialog(context, controller));
         },
+        const SingleActivator(LogicalKeyboardKey.f11): () {
+          if (!controller.quoteMode) _dialog(() => showCreditReceiptDialog(context, controller));
+        },
       },
       child: Focus(
         focusNode: _shell,
@@ -979,6 +984,13 @@ class _TotalsPanel extends StatelessWidget {
                 icon: const Icon(Icons.assignment),
                 label: const Text('Puxar orçamento (F3)'),
               ),
+            if (cart.isEmpty && !controller.quoteMode && controller.session != null)
+              OutlinedButton.icon(
+                key: const Key('credit-receipt-open'),
+                onPressed: () => dialog(() => showCreditReceiptDialog(context, controller)),
+                icon: const Icon(Icons.account_balance_wallet),
+                label: const Text('Receber crediário (F11)'),
+              ),
             if (cart.quoteCode != null) Text('Orçamento ${cart.quoteCode}', key: const Key('cart-quote')),
             const SizedBox(height: 8),
             FilledButton.icon(
@@ -1033,15 +1045,29 @@ class _PaymentPanelState extends State<_PaymentPanel> {
   final _authorization = TextEditingController();
   String? _error;
 
+  /// Crediário: número de parcelas e quem comprou (vazio: o titular).
+  int _installments = 1;
+  CreditDependent? _dependent;
+
   @override
   void initState() {
     super.initState();
     _fillRemaining();
+    // No crediário, as parcelas mostradas acompanham o valor digitado.
+    _amount.addListener(() {
+      if (_method == PaymentMethod.storeCredit && mounted) setState(() {});
+    });
   }
 
   /// O que falta, já com o desconto da forma escolhida (por exemplo, PIX com desconto).
   void _fillRemaining() {
-    final remaining = widget.controller.remainingIfPaidWith(_method);
+    var remaining = widget.controller.remainingIfPaidWith(_method);
+    // No crediário, sugere o que cabe no disponível.
+    final credit = _method == PaymentMethod.storeCredit ? widget.controller.saleCredit : null;
+    if (credit != null) {
+      final available = credit.availableCents - widget.controller.creditInCartCents;
+      if (available < remaining) remaining = available > 0 ? available : 0;
+    }
     _amount.text = formatCents(remaining).replaceFirst('R\$ ', '');
   }
 
@@ -1055,12 +1081,13 @@ class _PaymentPanelState extends State<_PaymentPanel> {
     super.dispose();
   }
 
-  void _add() {
+  Future<void> _add() async {
     final cents = parseCents(_amount.text);
     if (cents == null || cents <= 0) {
       setState(() => _error = 'Digite o valor recebido, por exemplo 50,00.');
       return;
     }
+    if (_method == PaymentMethod.storeCredit) return _addCredit(cents);
     final card =
         _method == PaymentMethod.creditCard ||
         _method == PaymentMethod.debitCard;
@@ -1105,6 +1132,32 @@ class _PaymentPanelState extends State<_PaymentPanel> {
     _refocusAmount();
   }
 
+  /// Crediário: confere conta, limite e parcelas; acima do limite do operador, pede quem libere.
+  Future<void> _addCredit(int cents) async {
+    final controller = widget.controller;
+    if (!controller.checkCreditPayment(cents, _installments)) return;
+    ({String supervisorId, String supervisorName, String reason})? release;
+    if (controller.creditNeedsRelease(cents)) {
+      release = await showCreditReleaseDialog(context, controller, cents);
+      if (release == null || !mounted) return;
+    }
+    controller.addPayment(
+      Payment(
+        method: PaymentMethod.storeCredit,
+        amountCents: cents,
+        installments: controller.creditPlan(cents, _installments),
+        dependentId: _dependent?.id,
+        dependentName: _dependent?.name,
+        creditRelease: release,
+      ),
+    );
+    setState(() {
+      _error = null;
+      _fillRemaining();
+    });
+    _refocusAmount();
+  }
+
   void _applyCoupon() {
     if (widget.controller.applyCoupon(_coupon.text)) _coupon.clear();
     setState(_fillRemaining);
@@ -1124,6 +1177,54 @@ class _PaymentPanelState extends State<_PaymentPanel> {
       _amount.text = formatCents(suggested).replaceFirst('R\$ ', '');
     });
     if (found != null) _refocusAmount();
+  }
+
+  List<Widget> _creditFields(PosController controller) {
+    final customer = controller.cart.customer;
+    final account = customer?.credit;
+    final summary = controller.saleCredit;
+    if (account == null || summary == null) return const [];
+    final max = account.policy.maxInstallments;
+    if (_installments > max) _installments = max;
+    final cents = parseCents(_amount.text) ?? 0;
+    final plan = controller.creditPlan(cents, _installments);
+    String brDay(String day) => day.split('-').reversed.join('/');
+    return [
+      Text(
+        'Crediário: disponível ${formatCents(summary.availableCents - controller.creditInCartCents)} '
+        'de ${formatCents(account.limitCents)}',
+        key: const Key('credit-available'),
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ),
+      if (account.blocked) const Text('Crediário bloqueado na retaguarda.', key: Key('credit-blocked')),
+      if (!account.blocked && summary.blockedByOverdue)
+        Text('Parcela em atraso há ${summary.overdueDays} dias: receba antes de vender no crediário.', key: const Key('credit-overdue')),
+      DropdownButtonFormField<int>(
+        key: const Key('credit-installments'),
+        isExpanded: true,
+        initialValue: _installments,
+        decoration: const InputDecoration(labelText: 'Parcelas'),
+        items: [for (var n = 1; n <= max; n += 1) DropdownMenuItem(value: n, child: Text('${n}x'))],
+        onChanged: (value) => setState(() => _installments = value ?? 1),
+      ),
+      if (account.dependents.isNotEmpty)
+        DropdownButtonFormField<CreditDependent?>(
+          key: const Key('credit-dependent'),
+          isExpanded: true,
+          initialValue: _dependent,
+          decoration: const InputDecoration(labelText: 'Quem compra'),
+          items: [
+            DropdownMenuItem<CreditDependent?>(value: null, child: Text('O titular, ${customer!.name}')),
+            for (final dependent in account.dependents) DropdownMenuItem<CreditDependent?>(value: dependent, child: Text(dependent.name)),
+          ],
+          onChanged: (value) => setState(() => _dependent = value),
+        ),
+      for (final installment in plan)
+        Text(
+          '${installment.number}/${plan.length} vence ${brDay(installment.dueDate)}: ${formatCents(installment.amountCents)}',
+          key: Key('credit-plan-${installment.number}'),
+        ),
+    ];
   }
 
   /// Volta para o valor, com o que falta selecionado.
@@ -1163,8 +1264,8 @@ class _PaymentPanelState extends State<_PaymentPanel> {
               runSpacing: 8,
               children: [
                 for (final method in PaymentMethod.values)
-                  if (method != PaymentMethod.agreement ||
-                      (cart.customer?.agreements.isNotEmpty ?? false))
+                  if ((method != PaymentMethod.agreement || (cart.customer?.agreements.isNotEmpty ?? false)) &&
+                      (method != PaymentMethod.storeCredit || cart.customer?.credit != null))
                     ChoiceChip(
                       key: Key('method-${method.code}'),
                       label: Text(method.label),
@@ -1233,6 +1334,7 @@ class _PaymentPanelState extends State<_PaymentPanel> {
               ),
               onSubmitted: (_) => _add(),
             ),
+            if (_method == PaymentMethod.storeCredit) ..._creditFields(controller),
             if (_method == PaymentMethod.agreement)
               DropdownButtonFormField<Map<String, dynamic>>(
                 key: const Key('agreement'),
@@ -1278,7 +1380,9 @@ class _PaymentPanelState extends State<_PaymentPanel> {
               ListTile(
                 dense: true,
                 title: Text(
-                  payment.returnCode == null
+                  payment.method == PaymentMethod.storeCredit
+                      ? '${payment.method.label} ${payment.installments?.length ?? 1}x${payment.dependentName == null ? '' : ' · ${payment.dependentName}'}'
+                      : payment.returnCode == null
                       ? payment.method.label
                       : '${payment.method.label} ${payment.returnCode}',
                 ),

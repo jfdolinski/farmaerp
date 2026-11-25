@@ -330,7 +330,15 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - **Venda no crediário** (forma `store_credit`): o PDV manda as parcelas que mostrou ao cliente, que viram `credit_installment` (não mudam). Fora do formato, sem conta ou dependente de outro grupo: conflito (FA962, FA834, FA004). Conta bloqueada, atraso além do prazo, acima do disponível, dependente sem autorização, parcelas acima do máximo ou vencimentos diferentes da conta da central: a venda vale (já aconteceu) e fica o alerta.
 - **Descida:** quem deve desce para todos os terminais da rede, com o limite, os parâmetros, as parcelas em aberto e os dependentes autorizados. Quando o débito acaba, sai dos terminais que não guardaram o cliente. Formato 5 da descida.
 - **Retaguarda:** `/crediario` lista as contas (com débito, em atraso, bloqueadas ou todas, e busca) e os parâmetros por filial. A ficha do cliente mostra o resumo, as parcelas com multa e juros de hoje, os recebimentos, os dependentes e o histórico. Erros: FA834 a FA839.
-- **O PDV (forma de pagamento, recebimento, comprovante) vem no PR seguinte (7B-2).**
+- **No PDV:**
+  - **Forma de pagamento "Crediário":** aparece só para cliente com conta. Mostra o disponível, o número de parcelas (até o máximo da filial), os vencimentos de cada uma e, se houver, quem compra (titular ou dependente autorizado). O valor sugerido é o que cabe no disponível. As contas são as mesmas da central (`lib/pos/credit_engine.dart`, conferido por `packages/credit-cases/cases.json`).
+  - **Recusas no caixa:** sem conta (FA834), conta bloqueada (FA840), parcela vencida além do prazo da filial (FA841), acima do disponível (FA842) e parcelas fora do permitido (FA843).
+  - **Limite do operador** ("venda no crediário", por perfil): acima dele, outra pessoa com limite que cubra libera com código e PIN, ou pela câmera (FA845). A liberação sobe no pagamento e fica em `supervisor_release` (`sales.store_credit`); sem ela, a venda vale e fica o alerta "Crediário acima do limite do operador".
+  - **Sem internet:** o crediário que desceu, mais as vendas, os recebimentos e as devoluções deste terminal que a central ainda não devolveu (outbox não enviada ou enviada depois da última descida do cliente).
+  - **Recebimento:** "Receber crediário (F11)", com o caixa sem venda em andamento. Busca entre os clientes com crediário do terminal, mostra cada parcela com a multa e os juros de hoje, aceita dinheiro, cartão ou PIX até o total em aberto (FA844) e imprime o comprovante. O dinheiro entra na gaveta (conta para a sangria).
+  - **Comprovante da venda:** as parcelas com os vencimentos, quem comprou, quem liberou e a linha para a assinatura do cliente.
+  - **Devolução de venda no crediário:** destino "Abatimento no crediário". Na central vira um recebimento do tipo `return` (não passa pelo caixa), que abate na ordem do crediário. Se passar do débito, o excesso fica registrado e vira alerta do caixa. Venda que não foi no crediário não abate (FA846).
+  - **Banco local versão 13:** o crediário do cliente (`customer.credit`) e a devolução com o destino novo.
 
 ## Estoque
 

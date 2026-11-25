@@ -243,7 +243,8 @@ class _ReturnDialogState extends State<_ReturnDialog> {
                       child: Column(
                         children: [
                           for (final entry in returnDestinationLabels.entries)
-                            if (entry.key != 'agreement' || sale['has_agreement'] == true)
+                            if ((entry.key != 'agreement' || sale['has_agreement'] == true) &&
+                                (entry.key != 'store_credit' || sale['has_store_credit'] == true))
                               RadioListTile<String>(
                                 key: Key('return-destination-${entry.key}'),
                                 value: entry.key,
@@ -252,6 +253,7 @@ class _ReturnDialogState extends State<_ReturnDialog> {
                                 subtitle: Text(switch (entry.key) {
                                   'credit' => 'O cliente usa na próxima compra nesta loja.',
                                   'agreement' => 'Abate na próxima fatura do convênio do cliente.',
+                                  'store_credit' => 'Abate o que o cliente deve no crediário.',
                                   _ => 'Sai do caixa por uma sangria de devolução com o documento.',
                                 }),
                               ),

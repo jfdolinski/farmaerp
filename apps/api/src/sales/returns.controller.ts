@@ -5,7 +5,7 @@ import { DatabaseService } from '../database.service.js';
 import { AppError } from '../observability/app-error.js';
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
-const DESTINATIONS = new Set(['credit', 'agreement', 'cash', 'all']);
+const DESTINATIONS = new Set(['credit', 'agreement', 'cash', 'store_credit', 'all']);
 
 function optionalDay(value?: string): string | null {
   if (value === undefined || value === '') return null;

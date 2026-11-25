@@ -1998,7 +1998,8 @@
       "credit_allocation_interest_check",
       "credit_allocation_principal_check",
       "credit_allocation_open_check",
-      "credit_allocation_total_check"
+      "credit_allocation_total_check",
+      "credit_payment_return_check"
     ]
   },
   "FA963": {
@@ -2703,7 +2704,8 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": [
-      "credit_account_customer_key"
+      "credit_account_customer_key",
+      "credit_payment_return_key"
     ]
   },
   "FA836": {
@@ -2760,5 +2762,61 @@
       "credit_account_event_kind_check",
       "credit_account_event_reason_check"
     ]
+  },
+  "FA840": {
+    "message": "O crediário deste cliente está bloqueado.",
+    "action": "Use outra forma de pagamento. O gerente libera o crediário na retaguarda.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA841": {
+    "message": "O cliente tem parcela do crediário em atraso.",
+    "action": "Receba as parcelas em atraso antes de vender no crediário, ou use outra forma de pagamento.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA842": {
+    "message": "O valor passa do limite disponível do crediário.",
+    "action": "Lance no crediário só o disponível e o resto em outra forma, ou peça ao gerente para aumentar o limite.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA843": {
+    "message": "Número de parcelas fora do permitido.",
+    "action": "Escolha entre 1 e o máximo de parcelas da filial.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA844": {
+    "message": "O valor passa do que o cliente deve no crediário.",
+    "action": "Confira o valor. O total em aberto aparece na tela.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA845": {
+    "message": "O limite de venda no crediário de quem liberou não cobre este valor.",
+    "action": "Chame o gerente ou outra pessoa com limite maior. Quem vende não pode liberar a própria venda.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA846": {
+    "message": "Só a venda feita no crediário pode ter o valor abatido no crediário.",
+    "action": "Escolha outro destino para a devolução.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
   }
 }

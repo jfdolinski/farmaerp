@@ -109,6 +109,7 @@ async function ReturnsContent({ searchParams }: { searchParams: SearchParams }) 
               <option value="credito">Crédito para nova compra</option>
               <option value="convenio">Abatimento no convênio</option>
               <option value="dinheiro">Dinheiro</option>
+              <option value="crediario">Abatimento no crediário</option>
             </select>
           </label>
           <button type="submit">Filtrar</button>

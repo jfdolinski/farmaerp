@@ -796,6 +796,48 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'O motivo aceita até 500 letras.',
     retryable: false,
   ),
+  'FA840': ErrorCatalogEntry(
+    code: 'FA840',
+    message: 'O crediário deste cliente está bloqueado.',
+    action: 'Use outra forma de pagamento. O gerente libera o crediário na retaguarda.',
+    retryable: false,
+  ),
+  'FA841': ErrorCatalogEntry(
+    code: 'FA841',
+    message: 'O cliente tem parcela do crediário em atraso.',
+    action: 'Receba as parcelas em atraso antes de vender no crediário, ou use outra forma de pagamento.',
+    retryable: false,
+  ),
+  'FA842': ErrorCatalogEntry(
+    code: 'FA842',
+    message: 'O valor passa do limite disponível do crediário.',
+    action: 'Lance no crediário só o disponível e o resto em outra forma, ou peça ao gerente para aumentar o limite.',
+    retryable: false,
+  ),
+  'FA843': ErrorCatalogEntry(
+    code: 'FA843',
+    message: 'Número de parcelas fora do permitido.',
+    action: 'Escolha entre 1 e o máximo de parcelas da filial.',
+    retryable: false,
+  ),
+  'FA844': ErrorCatalogEntry(
+    code: 'FA844',
+    message: 'O valor passa do que o cliente deve no crediário.',
+    action: 'Confira o valor. O total em aberto aparece na tela.',
+    retryable: false,
+  ),
+  'FA845': ErrorCatalogEntry(
+    code: 'FA845',
+    message: 'O limite de venda no crediário de quem liberou não cobre este valor.',
+    action: 'Chame o gerente ou outra pessoa com limite maior. Quem vende não pode liberar a própria venda.',
+    retryable: false,
+  ),
+  'FA846': ErrorCatalogEntry(
+    code: 'FA846',
+    message: 'Só a venda feita no crediário pode ter o valor abatido no crediário.',
+    action: 'Escolha outro destino para a devolução.',
+    retryable: false,
+  ),
   'FA870': ErrorCatalogEntry(
     code: 'FA870',
     message: 'Informe o motivo da devolução.',

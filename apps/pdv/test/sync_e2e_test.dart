@@ -391,6 +391,42 @@ void main() {
         expect((soldItem['discount_rules'] as List).map((r) => (r as Map)['name']), contains('Dipirona E2E 7%'));
         expect((saleDetail['alerts'] as List? ?? const []).where((a) => (a as Map)['kind'] == 'auto_discount'), isEmpty);
         await admin('/admin/discount-rules/${discountRule['id']}/end', {}, token: session);
+
+        // Crediário: a conta aberta na retaguarda desce com o cliente; a venda no crediário (liberada
+        // pelo gerente, acima do limite do operador) e o recebimento sobem e a central confere.
+        await admin('/admin/credit/customers/$_demoCustomer/open', {'homeBranchId': _branch, 'creditLimit': 300}, token: session);
+        await sync.pull(token.value);
+        await pos.selectCustomer(_demoCustomer);
+        expect(pos.cart.customer?.credit?.limitCents, 30000);
+        expect(await pos.identifySeller('3'), isTrue, reason: pos.notice?.message);
+        pos.scan('7890000000017');
+        pos.startPayment();
+        final creditCents = pos.cart.totalCents;
+        expect(pos.creditNeedsRelease(creditCents), isTrue);
+        final creditRelease = await pos.releaseCredit(creditCents, '2', '1357', 'Teste E2E');
+        expect(creditRelease, isNotNull, reason: pos.notice?.message);
+        pos.addPayment(Payment(
+          method: PaymentMethod.storeCredit, amountCents: creditCents, installments: pos.creditPlan(creditCents, 1),
+          creditRelease: creditRelease,
+        ));
+        expect(pos.notice, isNull, reason: pos.notice?.message);
+        await pos.finish();
+        expect(await pos.receiveCredit(customerId: _demoCustomer, amountCents: 100, method: 'cash'), isTrue, reason: pos.notice?.message);
+        await sync.push(token.value);
+        expect(
+          database.debugSelect("SELECT kind, result FROM outbox WHERE kind IN ('sale', 'credit_payment') ORDER BY sequence DESC LIMIT 2")
+              .map((row) => '${row['kind']} ${row['result']}'),
+          ['credit_payment applied', 'sale applied'],
+        );
+        final creditDetail = jsonDecode((await http.get(Uri.parse('$base/admin/credit/customers/$_demoCustomer'), headers: {'Authorization': 'Bearer $session'})).body)
+            as Map<String, dynamic>;
+        expect((creditDetail['summary'] as Map)['principal_open'], closeTo((creditCents - 100) / 100, 0.001));
+        expect((creditDetail['payments'] as List).single, containsPair('amount', 1));
+        final creditReleases = jsonDecode((await http.get(Uri.parse('$base/admin/supervisor-releases?action=sales.store_credit'), headers: {'Authorization': 'Bearer $session'})).body);
+        expect((creditReleases as List), isNotEmpty);
+        // Depois da descida, o terminal tem o crediário da central (e não conta de novo o que subiu).
+        await sync.pull(token.value);
+        expect(pos.creditForReceipt(_demoCustomer)!.account.summary(pos.creditToday).principalOpenCents, creditCents - 100);
       } finally {
         await admin('/admin/products/$_dipirona/prices', {'branchId': _branch, 'price': null}, token: session);
         await admin('/admin/terminals/$terminalId/revoke', {'reason': 'Fim do teste E2E'}, token: session);

@@ -15,6 +15,8 @@ import '../terminal/terminal_api.dart';
 import 'cart.dart';
 import 'cash.dart';
 import 'controlled.dart';
+import 'credit.dart';
+import 'credit_engine.dart';
 import 'discount.dart';
 import 'discount_engine.dart';
 import 'money.dart';
@@ -650,6 +652,7 @@ class PosController extends ChangeNotifier {
             agreements: ((customer['agreements'] as List?) ?? const []).cast<Map<String, dynamic>>(),
             groupId: customer['customer_group_id'] as String?,
             birthDate: customer['birth_date'] as String?,
+            credit: CreditAccount.fromJson(customer['credit']),
           );
           reprice();
         } on ApiException {
@@ -943,6 +946,7 @@ class PosController extends ChangeNotifier {
       if (!cart.isEmpty || paying) throw const PosException('FA998');
       if (reason.trim().isEmpty || reason.trim().length > 500) throw const PosException('FA870');
       if (destination == 'agreement' && sale['has_agreement'] != true) throw const PosException('FA897');
+      if (destination == 'store_credit' && sale['has_store_credit'] != true) throw const PosException('FA846');
       if (!returnDestinationLabels.containsKey(destination)) throw const PosException('FA894');
       const uuid = Uuid();
       final items = <Map<String, Object?>>[];
@@ -1013,6 +1017,170 @@ class PosController extends ChangeNotifier {
     } on PosException catch (error) {
       notice = ErrorDisplay.fromCode(error.code);
       return null;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  // ---- Crediário ----
+
+  /// Hoje em São Paulo, como a central conta os vencimentos.
+  String get creditToday => saoPauloDay(_clock());
+
+  /// Crediário de um cliente com o que este terminal ainda não enviou.
+  CreditAccount? creditAccountOf(String customerId, CreditAccount? base) =>
+      base?.withPending(database.pendingCreditEvents(customerId));
+
+  /// Crediário do cliente da venda, hoje (sem o que já está lançado nesta venda).
+  CreditSummary? get saleCredit {
+    final customer = cart.customer;
+    return customer == null ? null : creditAccountOf(customer.id, customer.credit)?.summary(creditToday);
+  }
+
+  /// Quanto desta venda já está lançado no crediário.
+  int get creditInCartCents =>
+      cart.payments.where((p) => p.method == PaymentMethod.storeCredit).fold(0, (sum, p) => sum + p.amountCents);
+
+  /// Parcelas de um valor no crediário do cliente da venda, como a central vai calcular.
+  List<ScheduledInstallment> creditPlan(int amountCents, int count) {
+    final account = cart.customer?.credit;
+    if (account == null || amountCents <= 0 || count < 1) return const [];
+    return creditSchedule(account.terms, creditToday, amountCents, count);
+  }
+
+  /// O valor no crediário (com o que já está na venda) passa do limite do operador?
+  bool creditNeedsRelease(int amountCents) {
+    final current = operator;
+    if (current == null) return false;
+    final limit = creditSaleLimitCents(current);
+    return limit != null && creditInCartCents + amountCents > limit;
+  }
+
+  void _checkCreditPayment(int amountCents, int count) {
+    final customer = cart.customer;
+    final account = customer == null ? null : creditAccountOf(customer.id, customer.credit);
+    if (account == null) throw const PosException('FA834');
+    if (account.blocked) throw const PosException('FA840');
+    final summary = account.summary(creditToday);
+    if (summary.blockedByOverdue) throw const PosException('FA841');
+    if (count < 1 || count > account.policy.maxInstallments) throw const PosException('FA843');
+    if (creditInCartCents + amountCents > summary.availableCents) throw const PosException('FA842');
+  }
+
+  /// Confere o crediário antes de pedir a liberação: o erro aparece na tela e devolve falso.
+  bool checkCreditPayment(int amountCents, int count) {
+    try {
+      _checkCreditPayment(amountCents, count);
+      return true;
+    } on PosException catch (error) {
+      _fail(error.code);
+      return false;
+    }
+  }
+
+  /// Quem libera a venda no crediário acima do limite do operador: outra pessoa, com limite que cubra.
+  Future<({String supervisorId, String supervisorName, String reason})?> releaseCredit(
+    int amountCents,
+    String code,
+    String pin,
+    String reason,
+  ) async {
+    final current = operator;
+    if (current == null || busy) return null;
+    busy = true;
+    notice = null;
+    notifyListeners();
+    try {
+      final releaser = await auth.verify(code, pin);
+      if (releaser.id == current.id) throw const PosException('FA845');
+      final limit = creditSaleLimitCents(releaser);
+      if (limit != null && creditInCartCents + amountCents > limit) throw const PosException('FA845');
+      logger?.info('Crediário liberado acima do limite', fields: {'releaser_code': releaser.code});
+      return (supervisorId: releaser.id, supervisorName: releaser.name, reason: reason.trim());
+    } on PosException catch (error) {
+      notice = ErrorDisplay.fromCode(error.code);
+      return null;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  /// Clientes com crediário guardados no terminal, para o recebimento.
+  List<({String id, String name, int code})> creditCustomers(String query) => database.localCreditCustomers(query);
+
+  /// Crediário do cliente para o recebimento: o que a central mandou mais o que ainda não subiu.
+  ({String name, int code, CreditAccount account})? creditForReceipt(String customerId) {
+    final row = database.customerById(customerId);
+    final base = row == null ? null : CreditAccount.fromJson(row['credit']);
+    final account = creditAccountOf(customerId, base);
+    if (row == null || account == null) return null;
+    return (name: row['name']! as String, code: row['code']! as int, account: account);
+  }
+
+  /// Recebe parcelas do crediário: grava na outbox e imprime o comprovante. O caixa precisa estar
+  /// sem venda em andamento.
+  Future<bool> receiveCredit({
+    required String customerId,
+    required int amountCents,
+    required String method,
+    String? cardBrand,
+    String? authorizationCode,
+  }) async {
+    final current = operator;
+    final open = session;
+    if (current == null || open == null || busy || quoteMode) return false;
+    busy = true;
+    notice = null;
+    notifyListeners();
+    try {
+      if (!cart.isEmpty || paying) throw const PosException('FA998');
+      if (!countedMethods.containsKey(method)) throw const PosException('FA972');
+      final found = creditForReceipt(customerId);
+      if (found == null) throw const PosException('FA834');
+      final today = creditToday;
+      final summary = found.account.summary(today);
+      if (amountCents <= 0) throw const PosException('FA972');
+      if (amountCents > summary.totalOpenCents) throw const PosException('FA844');
+      final allocation = creditAllocate(found.account.installments, amountCents, today, found.account.policy);
+      final now = _clock();
+      database.saveCreditPayment({
+        'id': const Uuid().v7(),
+        'cash_session_id': open.id,
+        'customer_id': customerId,
+        'received_by': current.id,
+        'received_at': now.toUtc().toIso8601String(),
+        'method': method,
+        'amount': amountCents / 100,
+        'card_brand': cardBrand?.trim().isEmpty ?? true ? null : cardBrand!.trim(),
+        'authorization_code': authorizationCode?.trim().isEmpty ?? true ? null : authorizationCode!.trim(),
+      }, now: now);
+      final after = creditApplyPayment(found.account.installments, amountCents, today, found.account.policy);
+      final remaining = after.fold(0, (sum, state) => sum + creditPosition(state, today, found.account.policy).totalCents);
+      logger?.info('Recebimento do crediário', fields: {'customer_code': found.code, 'method': method});
+      info = 'Recebimento de ${formatCents(amountCents)} do crediário de ${found.name} registrado.';
+      onSaleSaved?.call();
+      final lines = buildCreditPaymentReceipt(
+        fiscal: database.fiscal,
+        customerName: found.name,
+        customerCode: found.code,
+        amountCents: amountCents,
+        methodLabel: countedMethods[method]!,
+        chargesCents: allocation.allocations.fold(0, (sum, a) => sum + a.feeCents + a.interestCents),
+        principalCents: allocation.allocations.fold(0, (sum, a) => sum + a.principalCents),
+        remainingCents: remaining,
+        nextDue: [for (final state in (after..sort((a, b) => a.dueDate.compareTo(b.dueDate))).take(3)) (dueDate: state.dueDate, openCents: state.principalOpenCents)],
+        operatorName: current.name,
+        at: now,
+        terminalNumber: terminalNumber() ?? 0,
+      );
+      busy = false;
+      await _printLines('crediario', lines);
+      return true;
+    } on PosException catch (error) {
+      notice = ErrorDisplay.fromCode(error.code);
+      return false;
     } finally {
       busy = false;
       notifyListeners();
@@ -1195,6 +1363,7 @@ class PosController extends ChangeNotifier {
         agreements: ((data['agreements'] as List?) ?? const []).cast<Map<String, dynamic>>(),
         groupId: data['customer_group_id'] as String?,
         birthDate: data['birth_date'] as String?,
+        credit: CreditAccount.fromJson(data['credit']),
       );
       reprice();
     } on ApiException catch (error) {
@@ -1207,7 +1376,7 @@ class PosController extends ChangeNotifier {
 
   void clearCustomer() {
     cart.customer = null;
-    cart.payments.removeWhere((payment) => payment.method == PaymentMethod.agreement);
+    cart.payments.removeWhere((payment) => payment.method == PaymentMethod.agreement || payment.method == PaymentMethod.storeCredit);
     reprice();
     notifyListeners();
   }
@@ -1261,6 +1430,14 @@ class PosController extends ChangeNotifier {
   void addPayment(Payment payment) {
     if (payment.amountCents <= 0) return _fail('FA972');
     if (payment.method == PaymentMethod.agreement && cart.customer == null) return _fail('FA983');
+    if (payment.method == PaymentMethod.storeCredit) {
+      try {
+        if (creditNeedsRelease(payment.amountCents) && payment.creditRelease == null) throw const PosException('FA845');
+        _checkCreditPayment(payment.amountCents, payment.installments?.length ?? 0);
+      } on PosException catch (error) {
+        return _fail(error.code);
+      }
+    }
     if (payment.method == PaymentMethod.returnCredit) {
       final returnId = payment.returnId;
       final balance = payment.creditBalanceCents;
