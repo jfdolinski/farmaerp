@@ -16,6 +16,8 @@ import 'face/face_camera.dart';
 import 'face/face_engine.dart';
 import 'face/face_service.dart';
 import 'fiscal/nfce_credentials.dart';
+import 'fiscal/nfce_emitter.dart';
+import 'fiscal/sefaz.dart';
 import 'local/local_database.dart';
 import 'pos/display_settings.dart';
 import 'pos/pdv_home.dart';
@@ -158,6 +160,14 @@ Future<void> main() async {
     '${documents.path}${Platform.pathSeparator}FarmaERP${Platform.pathSeparator}comprovantes',
   );
   final pos = PosController(
+    nfce: NfceEmitter(
+      database: database,
+      credentials: nfceCredentials,
+      sefaz: SefazClient(),
+      terminalId: () => controller.terminalId,
+      appVersion: _appVersion,
+      logger: logger,
+    ),
     database: database,
     auth: PosAuth(database: database, logger: logger),
     printer: () => configuredPrinter(database, pdfDirectory),

@@ -513,7 +513,92 @@ const _migrations = <String>[
   ) STRICT;
   CREATE INDEX health_professional_registration_idx ON health_professional (council, state, registration);
   ''',
+  // NFC-e emitida no caixa: a nota (autorizada com o protocolo, ou a assinada quando ficou pendente).
+  '''
+  CREATE TABLE nfce_document (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    sale_id BLOB NOT NULL UNIQUE CHECK (length(sale_id) = 16),
+    series INTEGER NOT NULL,
+    number INTEGER NOT NULL,
+    access_key TEXT NOT NULL UNIQUE,
+    environment INTEGER NOT NULL CHECK (environment IN (1, 2)),
+    emission_type INTEGER NOT NULL CHECK (emission_type IN (1, 9)),
+    status TEXT NOT NULL CHECK (status IN ('authorized', 'rejected', 'pending', 'contingency')),
+    protocol TEXT,
+    status_code TEXT,
+    reason TEXT,
+    xml TEXT NOT NULL,
+    qr_code TEXT NOT NULL,
+    consult_url TEXT NOT NULL,
+    emitted_at TEXT NOT NULL,
+    authorized_at TEXT,
+    attempts INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL,
+    UNIQUE (series, number)
+  ) STRICT;
+  ''',
 ];
+
+/// NFC-e do caixa, para guardar, imprimir o DANFE e subir à central.
+class LocalNfce {
+  const LocalNfce({
+    required this.id,
+    required this.saleId,
+    required this.series,
+    required this.number,
+    required this.accessKey,
+    required this.environment,
+    required this.emissionType,
+    required this.status,
+    this.protocol,
+    this.statusCode,
+    this.reason,
+    required this.xml,
+    required this.qrCode,
+    required this.consultUrl,
+    required this.emittedAt,
+    this.authorizedAt,
+  });
+
+  final String id;
+  final String saleId;
+  final int series;
+  final int number;
+  final String accessKey;
+  final int environment;
+  final int emissionType;
+
+  /// authorized, rejected, pending ou contingency.
+  final String status;
+  final String? protocol;
+  final String? statusCode;
+  final String? reason;
+  final String xml;
+  final String qrCode;
+  final String consultUrl;
+  final DateTime emittedAt;
+  final DateTime? authorizedAt;
+
+  bool get authorized => status == 'authorized';
+
+  /// O que sobe para a central (item "nfce" da outbox).
+  Map<String, Object?> toPayload() => {
+    'id': id,
+    'sale_id': saleId,
+    'series': series,
+    'number': number,
+    'access_key': accessKey,
+    'environment': environment,
+    'emission_type': emissionType,
+    'status': status,
+    'protocol': protocol,
+    'status_code': statusCode,
+    'reason': reason,
+    'xml': xml,
+    'emitted_at': emittedAt.toUtc().toIso8601String(),
+    'authorized_at': authorizedAt?.toUtc().toIso8601String(),
+  };
+}
 
 /// Profissional da saúde (prescritor) na cópia local.
 class LocalProfessional {
@@ -1676,6 +1761,96 @@ class LocalDatabase {
         jsonEncode(credential.envelope),
         credential.receivedAt.toUtc().toIso8601String(),
       ],
+    );
+  }
+
+  /// Série e próximo número da NFC-e deste caixa: depois do maior entre o inicial, o que a
+  /// central conhece e o que este caixa já usou. Null sem série do modelo 65.
+  ({int series, int number})? nextNfceNumber() {
+    final rows = _db.select(
+      "SELECT series, initial_number, central_last_used_number, local_last_used_number FROM fiscal_series "
+      "WHERE model = '65' AND active = 1 LIMIT 1",
+    );
+    if (rows.isEmpty) return null;
+    final row = rows.first;
+    final used = [
+      (row['initial_number'] as int) - 1,
+      (row['central_last_used_number'] as int?) ?? 0,
+      (row['local_last_used_number'] as int?) ?? 0,
+    ].reduce(max);
+    return (series: row['series'] as int, number: used + 1);
+  }
+
+  /// Guarda a nota, gasta o número da série e põe a nota na outbox, na mesma transação.
+  void saveNfce(LocalNfce nfce, {required DateTime now}) => _transaction(() {
+    final stamp = now.toUtc().toIso8601String();
+    _db.execute(
+      'INSERT INTO nfce_document (id, sale_id, series, number, access_key, environment, emission_type, status, protocol, '
+      'status_code, reason, xml, qr_code, consult_url, emitted_at, authorized_at, updated_at) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        uuidBytes(nfce.id), uuidBytes(nfce.saleId), nfce.series, nfce.number, nfce.accessKey, nfce.environment,
+        nfce.emissionType, nfce.status, nfce.protocol, nfce.statusCode, nfce.reason, nfce.xml, nfce.qrCode,
+        nfce.consultUrl, nfce.emittedAt.toUtc().toIso8601String(), nfce.authorizedAt?.toUtc().toIso8601String(), stamp,
+      ],
+    );
+    _db.execute(
+      "UPDATE fiscal_series SET local_last_used_number = max(COALESCE(local_last_used_number, 0), ?) "
+      "WHERE model = '65' AND series = ?",
+      [nfce.number, nfce.series],
+    );
+    enqueue('nfce', nfce.toPayload(), now: now);
+  });
+
+  /// NFC-e de uma venda deste caixa, se houver.
+  LocalNfce? nfceOfSale(String saleId) {
+    final rows = _db.select('SELECT * FROM nfce_document WHERE sale_id = ?', [uuidBytes(saleId)]);
+    if (rows.isEmpty) return null;
+    final row = rows.first;
+    DateTime? when(Object? value) => value == null ? null : DateTime.parse(value as String);
+    return LocalNfce(
+      id: uuidText(row['id'] as List<int>),
+      saleId: saleId,
+      series: row['series'] as int,
+      number: row['number'] as int,
+      accessKey: row['access_key'] as String,
+      environment: row['environment'] as int,
+      emissionType: row['emission_type'] as int,
+      status: row['status'] as String,
+      protocol: row['protocol'] as String?,
+      statusCode: row['status_code'] as String?,
+      reason: row['reason'] as String?,
+      xml: row['xml'] as String,
+      qrCode: row['qr_code'] as String,
+      consultUrl: row['consult_url'] as String,
+      emittedAt: DateTime.parse(row['emitted_at'] as String),
+      authorizedAt: when(row['authorized_at']),
+    );
+  }
+
+  /// Dados fiscais do produto para a nota: NCM, CEST, GTIN do código principal e a tributação
+  /// em vigor no dia (a mais recente que já começou).
+  ({String? ncm, String? cest, String? gtin, Map<String, dynamic>? tax})? nfceProductData(String productId, DateTime day) {
+    final id = uuidBytes(productId);
+    final rows = _db.select('SELECT ncm, cest FROM product WHERE id = ?', [id]);
+    if (rows.isEmpty) return null;
+    String two(int value) => value.toString().padLeft(2, '0');
+    final today = '${day.year}-${two(day.month)}-${two(day.day)}';
+    final tax = _db.select(
+      'SELECT data FROM product_tax WHERE product_id = ? AND valid_from <= ? ORDER BY valid_from DESC LIMIT 1',
+      [id, today],
+    );
+    final barcode = _db.select(
+      'SELECT code FROM product_barcode WHERE product_id = ? ORDER BY is_primary DESC, code LIMIT 1',
+      [id],
+    );
+    final gtin = barcode.isEmpty ? null : barcode.first['code'] as String;
+    return (
+      ncm: rows.first['ncm'] as String?,
+      cest: rows.first['cest'] as String?,
+      // Só GTIN de verdade (8, 12, 13 ou 14 dígitos); código interno vai como "SEM GTIN".
+      gtin: gtin != null && RegExp(r'^(\d{8}|\d{12,14})$').hasMatch(gtin) ? gtin : null,
+      tax: tax.isEmpty ? null : (jsonDecode(tax.first['data'] as String) as Map).cast<String, dynamic>(),
     );
   }
 

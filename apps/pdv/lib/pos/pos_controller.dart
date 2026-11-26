@@ -10,6 +10,7 @@ import '../core/local_logger.dart';
 import '../customers/customer_service.dart';
 import '../face/face_math.dart' show templateBytes;
 import '../face/face_service.dart';
+import '../fiscal/nfce_emitter.dart';
 import '../local/local_database.dart';
 import '../terminal/terminal_api.dart';
 import 'cart.dart';
@@ -56,7 +57,11 @@ class PendingControlled {
 
 /// Estado do caixa: quem está operando, o turno, a venda em montagem e o pagamento.
 class PosController extends ChangeNotifier {
+  /// Emissão da NFC-e (null: o caixa não emite, como no orçamento).
+  final NfceEmitter? nfce;
+
   PosController({
+    this.nfce,
     required this.database,
     required this.auth,
     required this.printer,
@@ -1769,6 +1774,11 @@ class PosController extends ChangeNotifier {
         now: now,
       );
       database.saveSale(draft.payload, code: draft.code, itemRows: draft.itemRows, now: now);
+      // NFC-e: emitida direto na Sefaz depois de a venda estar guardada. O que der errado vira
+      // aviso, e a venda fica com a nota pendente.
+      final emitted = await nfce?.emit(saleId: draft.payload['id']! as String, cart: cart);
+      final document = emitted?.nfce;
+      if (document != null) database.saveNfce(document, now: now);
       final lines = buildReceipt(
         fiscal: database.fiscal,
         saleCode: draft.code,
@@ -1779,13 +1789,17 @@ class PosController extends ChangeNotifier {
         terminalNumber: terminalNumber() ?? 0,
         cashbackEarnedCents: cashbackEarnEstimateCents,
         cashbackWaitingDays: saleCashback?.waitingDays ?? 0,
+        nfce: document,
       );
       saleCashback = null;
       lastSale = CompletedSale(code: draft.code, totalCents: cart.totalCents, changeCents: cart.changeCents, lines: lines);
       logger?.info('Venda concluída', fields: {'sale_code': draft.code, 'items': cart.lines.length});
       cart.clear();
       paying = false;
-      info = 'Venda ${draft.code} concluída.';
+      info = document?.authorized ?? false
+          ? 'Venda ${draft.code} concluída. NFC-e ${document!.number} autorizada.'
+          : 'Venda ${draft.code} concluída.';
+      if (emitted?.noticeCode != null) notice = ErrorDisplay.fromCode(emitted!.noticeCode!);
       onSaleSaved?.call();
       await _print(lastSale!);
     } on PosException catch (error) {

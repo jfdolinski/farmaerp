@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
+import '../local/local_database.dart' show LocalNfce;
 import 'cart.dart';
 import 'credit_engine.dart';
 import 'money.dart';
@@ -14,13 +15,17 @@ const receiptWidth = 48;
 /// Linha do comprovante, com destaque opcional. [barcode] imprime o texto como código de barras
 /// (Code 128), centralizado e com o texto embaixo.
 class ReceiptLine {
-  const ReceiptLine(this.text, {this.bold = false, this.center = false}) : barcode = false;
-  const ReceiptLine.barcode(this.text) : bold = false, center = true, barcode = true;
+  const ReceiptLine(this.text, {this.bold = false, this.center = false}) : barcode = false, qr = false;
+  const ReceiptLine.barcode(this.text) : bold = false, center = true, barcode = true, qr = false;
+
+  /// QR Code (o da consulta da NFC-e).
+  const ReceiptLine.qr(this.text) : bold = false, center = true, barcode = false, qr = true;
 
   final String text;
   final bool bold;
   final bool center;
   final bool barcode;
+  final bool qr;
 }
 
 String _cnpj(String? value) => value == null || value.length != 14
@@ -57,6 +62,7 @@ List<ReceiptLine> buildReceipt({
   SaleCustomer? customer,
   int cashbackEarnedCents = 0,
   int cashbackWaitingDays = 0,
+  LocalNfce? nfce,
 }) {
   final branch = (fiscal?['branch'] as Map?) ?? const {};
   final company = (fiscal?['company'] as Map?) ?? const {};
@@ -76,8 +82,13 @@ List<ReceiptLine> buildReceipt({
     ReceiptLine('${branch['name'] ?? ''} · CNPJ ${_cnpj(branch['cnpj'] as String?)}', center: true),
     if (address.isNotEmpty) for (final line in _wrap(address)) ReceiptLine(line, center: true),
     const ReceiptLine(''),
-    const ReceiptLine('COMPROVANTE DE VENDA', bold: true, center: true),
-    const ReceiptLine('NÃO É DOCUMENTO FISCAL', center: true),
+    if (nfce != null && nfce.authorized) ...[
+      const ReceiptLine('DANFE NFC-e', bold: true, center: true),
+      for (final line in _wrap('Documento Auxiliar da Nota Fiscal de Consumidor Eletrônica')) ReceiptLine(line, center: true),
+    ] else ...[
+      const ReceiptLine('COMPROVANTE DE VENDA', bold: true, center: true),
+      const ReceiptLine('NÃO É DOCUMENTO FISCAL', center: true),
+    ],
     const ReceiptLine(''),
     ReceiptLine(_twoColumns('Venda $saleCode', when)),
     ReceiptLine('Caixa $terminalNumber · Operador: $operatorName'),
@@ -143,8 +154,37 @@ List<ReceiptLine> buildReceipt({
       const ReceiptLine('Reconheço a compra no crediário.', center: true),
       const ReceiptLine(''),
     ],
-    const ReceiptLine('Nota fiscal pendente de emissão.', center: true),
+    if (nfce != null && nfce.authorized) ...nfceReceiptLines(nfce, customer: customer)
+    else
+      const ReceiptLine('Nota fiscal pendente de emissão.', center: true),
     const ReceiptLine('Obrigado pela preferência!', center: true),
+  ];
+}
+
+/// Parte fiscal do DANFE NFC-e: número, série, protocolo, consulta pela chave e o QR Code.
+List<ReceiptLine> nfceReceiptLines(LocalNfce nfce, {SaleCustomer? customer}) {
+  String two(int value) => value.toString().padLeft(2, '0');
+  String moment(DateTime value) {
+    final local = value.toLocal();
+    return '${two(local.day)}/${two(local.month)}/${local.year} ${two(local.hour)}:${two(local.minute)}:${two(local.second)}';
+  }
+
+  final key = nfce.accessKey.replaceAllMapped(RegExp(r'(\d{4})(?=\d)'), (match) => '${match[1]} ');
+  return [
+    if (nfce.environment == 2) ...[
+      const ReceiptLine('EMITIDA EM AMBIENTE DE HOMOLOGAÇÃO', bold: true, center: true),
+      const ReceiptLine('SEM VALOR FISCAL', bold: true, center: true),
+    ],
+    ReceiptLine(customer == null ? 'CONSUMIDOR NÃO IDENTIFICADO' : 'CONSUMIDOR: ${customer.documentMasked ?? customer.name}', center: true),
+    ReceiptLine('NFC-e nº ${nfce.number} Série ${nfce.series} ${moment(nfce.emittedAt)}', center: true),
+    if (nfce.protocol != null && nfce.authorizedAt != null) ...[
+      const ReceiptLine('Protocolo de autorização:', center: true),
+      ReceiptLine('${nfce.protocol} ${moment(nfce.authorizedAt!)}', center: true),
+    ],
+    const ReceiptLine('Consulte pela chave de acesso em', center: true),
+    for (final line in _wrap(nfce.consultUrl)) ReceiptLine(line, center: true),
+    for (final line in _wrap(key)) ReceiptLine(line, center: true),
+    ReceiptLine.qr(nfce.qrCode),
   ];
 }
 
@@ -340,6 +380,18 @@ Uint8List encodeEscPos(List<ReceiptLine> lines) {
   bytes.add([0x1B, 0x40]); // ESC @: reinicia
   bytes.add([0x1B, 0x74, 0x03]); // ESC t 3: página 860
   for (final line in lines) {
+    if (line.qr) {
+      final data = line.text.codeUnits.where((code) => code < 0x80).toList();
+      final size = data.length + 3;
+      bytes.add([0x1B, 0x61, 1]);
+      bytes.add([0x1D, 0x28, 0x6B, 4, 0, 0x31, 0x41, 0x32, 0x00]); // modelo 2
+      bytes.add([0x1D, 0x28, 0x6B, 3, 0, 0x31, 0x43, 5]); // tamanho do módulo
+      bytes.add([0x1D, 0x28, 0x6B, 3, 0, 0x31, 0x45, 0x31]); // correção M
+      bytes.add([0x1D, 0x28, 0x6B, size & 0xFF, size >> 8, 0x31, 0x50, 0x30, ...data]); // guarda o conteúdo
+      bytes.add([0x1D, 0x28, 0x6B, 3, 0, 0x31, 0x51, 0x30]); // imprime
+      bytes.addByte(0x0A);
+      continue;
+    }
     if (line.barcode) {
       final data = line.text.codeUnits.where((code) => code < 0x80).toList();
       bytes.add([0x1B, 0x61, 1]); // centraliza
@@ -384,14 +436,22 @@ class PdfReceiptPrinter implements ReceiptPrinter {
       // Bobina de 80 mm, altura conforme o conteúdo.
       pageFormat: PdfPageFormat(
         80 * PdfPageFormat.mm,
-        (lines.length * 4.2 + lines.where((line) => line.barcode).length * 14 + 20) * PdfPageFormat.mm,
+        (lines.length * 4.2 + lines.where((line) => line.barcode).length * 14 + lines.where((line) => line.qr).length * 34 + 20) *
+            PdfPageFormat.mm,
         marginAll: 4 * PdfPageFormat.mm,
       ),
       build: (context) => pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.stretch,
         children: [
           for (final line in lines)
-            if (line.barcode)
+            if (line.qr)
+              pw.Center(
+                child: pw.Padding(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 2 * PdfPageFormat.mm),
+                  child: pw.BarcodeWidget(barcode: pw.Barcode.qrCode(), data: line.text, width: 30 * PdfPageFormat.mm, height: 30 * PdfPageFormat.mm),
+                ),
+              )
+            else if (line.barcode)
               pw.Padding(
                 padding: const pw.EdgeInsets.symmetric(vertical: 2 * PdfPageFormat.mm, horizontal: 8 * PdfPageFormat.mm),
                 child: pw.BarcodeWidget(
