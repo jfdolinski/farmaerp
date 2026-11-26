@@ -18,6 +18,7 @@ import { PurchaseInvoicesController } from './purchases/purchase-invoices.contro
 import { ServiceInvoicesController } from './purchases/service-invoices.controller.js';
 import { DfeController } from './sefaz/dfe.controller.js';
 import { DfeService } from './sefaz/dfe.service.js';
+import { SngpcService } from './sngpc/sngpc.service.js';
 import { SuppliersController } from './purchases/suppliers.controller.js';
 import { AllExceptionsFilter } from './observability/all-exceptions.filter.js';
 import { AppLogger, createPinoLogger } from './observability/app-logger.js';
@@ -98,6 +99,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
   providers: [
     DatabaseService,
     DfeService,
+    SngpcService,
     SessionGuard,
     TerminalGuard,
     { provide: APP_GUARD, useClass: ThrottlerGuard },

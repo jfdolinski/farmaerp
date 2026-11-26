@@ -269,7 +269,9 @@
       "sngpc_movement_id_uuid_v7_check",
       "sngpc_dispensing_complement_id_uuid_v7_check",
       "app_release_id_uuid_v7_check",
-      "terminal_update_event_id_uuid_v7_check"
+      "terminal_update_event_id_uuid_v7_check",
+      "sngpc_credential_id_uuid_v7_check",
+      "sngpc_submission_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -2995,7 +2997,8 @@
     "dbConstraints": [
       "sngpc_movement_state_check",
       "sngpc_movement_stock_key",
-      "sngpc_complement_dispensing_key"
+      "sngpc_complement_dispensing_key",
+      "sngpc_credential_branch_key"
     ]
   },
   "FA864": {
@@ -3133,6 +3136,40 @@
     "action": "Os dados do caixa estão preservados. Informe o código e a referência ao suporte.",
     "httpStatus": 500,
     "severity": "error",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA720": {
+    "message": "Esta remessa do SNGPC não pode mais ser alterada.",
+    "action": "A remessa enviada não muda. Atualize a tela.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "sngpc_submission_kind_check",
+      "sngpc_submission_status_check",
+      "sngpc_submission_sha_check",
+      "sngpc_submission_protocol_check",
+      "sngpc_submission_reason_check",
+      "sngpc_submission_error_check",
+      "sngpc_submission_period_check",
+      "sngpc_submission_state_check",
+      "sngpc_submission_open_key"
+    ]
+  },
+  "FA721": {
+    "message": "Não foi possível enviar ao SNGPC agora.",
+    "action": "A rotina tenta de novo sozinha. Se continuar, confira a credencial do SNGPC da filial.",
+    "httpStatus": 502,
+    "severity": "warning",
+    "retryable": true,
+    "dbConstraints": []
+  },
+  "FA722": {
+    "message": "O SNGPC recusou a credencial da filial.",
+    "action": "Confira o usuário e a senha do SNGPC do farmacêutico responsável e cadastre de novo.",
+    "httpStatus": 422,
+    "severity": "warning",
     "retryable": false,
     "dbConstraints": []
   }

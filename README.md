@@ -613,6 +613,20 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - **Retaguarda:** `/sngpc` com as filiais, o aviso de inventário, de pendência com mais de 7 dias e de envio com data chegada; as abas "Pendentes" (escolher, corrigir, simular e conferir), "Conferidas" e "Fora do SNGPC". O comprador aparece mascarado.
 - **Erros:** FA861 a FA868.
 
+**SNGPC: envio à Anvisa (Etapa 8)**
+
+- **Credencial do SNGPC por filial** (usuário e senha do farmacêutico responsável): em `/sngpc`, criptografada pela API com `FISCAL_ENCRYPTION_KEY` (`sngpc_credential`). A tela mostra só a data do cadastro.
+- **Remessas** (`sngpc_submission`): a rotina da API (`SngpcService`, a cada minuto, `app.worker = 'sngpc'`) pega as filiais com credencial e com o que fazer, reservando cada uma por 10 minutos (várias instâncias não repetem).
+  - A primeira remessa da filial é o **inventário**; as movimentações só saem depois do inventário aceito.
+  - Entram as conferidas com a data de envio chegada, na ordem do SNGPC. Produto com movimentação recusada fica de fora até ela ser corrigida e conferida de novo.
+  - Uma remessa em aberto por filial. O **arquivo é guardado como foi enviado** (com o SHA-256 e o protocolo) e não muda (FA720).
+  - Falha de transmissão fica registrada na remessa (tentativas e o último erro) e a rotina tenta de novo; credencial recusada aparece como FA722.
+  - **Resultado:** aceita, ou recusada com o motivo da Anvisa. A recusa volta para o farmacêutico (aba "Recusadas", "Reabrir para corrigir").
+- **Arquivo e conector provisórios:** `apps/api/src/sngpc/sngpc-xml.ts` segue a estrutura do SNGPC atual e `sngpc-gateway.ts` usa um contrato próprio (o da Anvisa falsa dos testes). Antes de ligar o envio real, conferir os dois com a documentação oficial da API nova da Anvisa. Os códigos dos motivos de perda ficam em `app.sngpc_loss_code`.
+- **Envio real desligado por padrão:** só liga com `SNGPC_LIVE=true` e `SNGPC_URL` (HTTPS fora do desenvolvimento). Desligado, as remessas ficam montadas esperando, e a tela avisa. `SNGPC_WORKER=off` desliga a rotina (testes).
+- **Retaguarda:** abas "Aceitas", "Recusadas" e "Envios" (remessas, situação, protocolo, tentativas e o arquivo para baixar); avisos de credencial que falta, envio desligado, data de envio passada e recusas.
+- **Erros:** FA720 a FA722 (faixa `FA72x` reservada para a Etapa 8).
+
 ## Clientes
 
 - **Cadastro:** único na rede, com código humano. Pessoa física com CPF ou jurídica com CNPJ, ambos com dígito validado e sem repetir no grupo. Só nome e documento são obrigatórios.
