@@ -271,6 +271,7 @@
       "app_release_id_uuid_v7_check",
       "terminal_update_event_id_uuid_v7_check",
       "terminal_credential_delivery_id_uuid_v7_check",
+      "health_professional_id_uuid_v7_check",
       "sngpc_credential_id_uuid_v7_check",
       "sngpc_submission_id_uuid_v7_check"
     ]
@@ -3259,5 +3260,29 @@
     "severity": "error",
     "retryable": true,
     "dbConstraints": []
+  },
+  "FA733": {
+    "message": "Já existe um profissional com este conselho, número e UF.",
+    "action": "Busque o profissional na lista e edite o cadastro que já existe.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "health_professional_registration_key"
+    ]
+  },
+  "FA734": {
+    "message": "Os dados do profissional são inválidos.",
+    "action": "Informe o nome, o conselho, o número (letras, números e hífen) e a UF. A especialidade é opcional.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "health_professional_name_check",
+      "health_professional_council_check",
+      "health_professional_registration_check",
+      "health_professional_state_check",
+      "health_professional_specialty_check"
+    ]
   }
 }

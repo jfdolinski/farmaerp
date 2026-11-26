@@ -586,6 +586,7 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - **Paciente:** opcional; idade e sexo obrigatórios no antimicrobiano.
   - **Lote:** só os lotes com saldo e não vencidos da cópia local, o que vence primeiro antes. Quantidade acima do saldo do lote é recusada (FA988).
   - **Liberação:** código e PIN de quem tem `controlled.dispense` (perfil Farmacêutico; FA985 para os demais).
+- **Prescritor do cadastro:** na receita, "Buscar no cadastro" acha o profissional por nome (sem acento) ou pelo número no conselho e preenche nome, conselho, número e UF. Prescritor que não está no cadastro pode ser cadastrado na hora ("Cadastrar prescritor"): entra na cópia local e sobe pela outbox.
 - **Pendente (estoque negativo):** sem lote com saldo para a quantidade, o farmacêutico libera com um motivo, sem os dados da receita. Com lote com saldo, a liberação pendente é recusada (FA989). Os dados do SNGPC são completados na manutenção do SNGPC.
 - **Na central:** `controlled_dispensing` guarda receita, comprador, lote e farmacêutico, e não muda depois.
   - Dados que a tabela recusa viram conflito (FA990).
@@ -617,6 +618,13 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - **No PDV** (`lib/fiscal/nfce_credentials.dart`): a entrega fica no banco local como chegou, ainda cifrada (tabela `nfce_credential`), e só é aberta em memória para emitir. A barra inferior mostra "NFC-e: aguardando o certificado", "pronta" ou "certificado vencido". Entrega que não abre: FA732.
 - **Tela Fiscal:** o que falta para ligar e quantos caixas já receberam o certificado em uso.
 - **Testes:** a entrega de referência (`apps/pdv/test/fixtures/fiscal/entrega-certificado.json`, chave e certificado só de teste) é gerada com o código da API e aberta tanto pelo PDV (Dart) quanto pela API.
+
+**Profissionais da saúde (prescritores)**
+
+- **Cadastro** (`health_professional`, migration 0057, por grupo): nome, conselho (CRM, CRO, CRMV, COREN, CRF, RMS), número, UF, especialidade (opcional) e situação. O mesmo conselho, número (sem zeros à esquerda, sem diferença de maiúsculas) e UF não se repete (FA733); dados inválidos: FA734.
+- **Retaguarda:** `/profissionais`, com busca por nome ou número, cadastro, edição e inativação. Cadastra quem tem `health_professionals.manage` (Gerente e Farmacêutico); quem tem `controlled.view` só consulta.
+- **Caixa:** os ativos descem para todos os caixas do grupo (7º tipo da descida; formato 8, que faz os caixas recarregarem tudo uma vez). Inativo desce vazio e sai da cópia local. O cadastro rápido feito no caixa sobe pela outbox (`health_professional`); se a central já tiver o mesmo profissional, fica com o que já tinha, sem conflito.
+- A receita da venda continua guardando o prescritor por extenso: o cadastro só ajuda a preencher.
 
 **SNGPC: manutenção (Etapa 8, entreposto)**
 

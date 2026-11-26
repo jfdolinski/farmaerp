@@ -689,6 +689,37 @@ class PosController extends ChangeNotifier {
     }
   }
 
+  /// Prescritores do cadastro (nome ou número no conselho), para preencher a receita.
+  List<LocalProfessional> searchPrescribers(String term) => database.searchProfessionals(term);
+
+  /// Prescritor da receita já está no cadastro (mesmo conselho, número e UF)?
+  bool prescriberRegistered(PrescriptionForm form) =>
+      database.professionalByRegistration(form.prescriberCouncil, form.prescriberNumber, form.prescriberState) != null;
+
+  /// Cadastro rápido do prescritor digitado na receita. Sobe para a central pela outbox; já
+  /// cadastrado devolve o que existe. Campos do prescritor com problema: FA734.
+  LocalProfessional? registerPrescriber(PrescriptionForm form) {
+    final errors = prescriptionErrors(form, _clock());
+    if (const ['prescriberName', 'prescriberCouncil', 'prescriberNumber', 'prescriberState'].any(errors.containsKey)) {
+      _fail('FA734');
+      return null;
+    }
+    final existing = database.professionalByRegistration(form.prescriberCouncil, form.prescriberNumber, form.prescriberState);
+    if (existing != null) return existing;
+    final saved = database.saveProfessional(
+      name: form.prescriberName,
+      council: form.prescriberCouncil,
+      registration: form.prescriberNumber,
+      state: form.prescriberState,
+      now: _clock(),
+    );
+    notice = null;
+    // Sem dados pessoais do paciente: só o registro do profissional.
+    logger?.info('Prescritor cadastrado no caixa', fields: {'council': saved.council, 'state': saved.state});
+    notifyListeners();
+    return saved;
+  }
+
   /// Receitas completas já lançadas em outros itens desta venda (para reaproveitar).
   List<CartLine> prescriptionSources(PendingControlled pending) => [
     for (final line in cart.lines)
