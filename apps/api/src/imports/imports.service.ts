@@ -1,4 +1,5 @@
 import { Inject, Injectable, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { existsSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import yauzl from 'yauzl';
@@ -13,10 +14,17 @@ const TICK_MS = 10_000;
 const MAX_ENTRY_BYTES = 10 * 1024 * 1024;
 const PROGRESS_EVERY = 100;
 
-/** Pasta dos arquivos enviados (volume do EasyPanel). Sem ela, a importação fica indisponível. */
-export function importsDir(): string | null {
+/** Volume padrão no servidor (EasyPanel): basta montar o volume, sem variável. */
+export const DEFAULT_IMPORTS_DIR = '/data/imports';
+
+/**
+ * Pasta dos arquivos enviados: IMPORTS_DIR, ou o volume padrão quando ele existe. Sem nenhum dos
+ * dois, a importação fica indisponível.
+ */
+export function importsDir(defaultDir = DEFAULT_IMPORTS_DIR): string | null {
   const dir = process.env.IMPORTS_DIR;
-  return dir && dir.trim() !== '' ? dir : null;
+  if (dir && dir.trim() !== '') return dir;
+  return existsSync(defaultDir) ? defaultDir : null;
 }
 
 export const importFilePath = (dir: string, id: string) => join(dir, `${id}.zip`);

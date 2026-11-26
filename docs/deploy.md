@@ -64,7 +64,7 @@ Variáveis:
 | `TERMINAL_TOKEN_SECRET` | Segredo gerado |
 | `FISCAL_ENCRYPTION_KEY` | Chave gerada, 32 bytes em base64 (veja "Atualizar para a configuração fiscal") |
 | `RELEASES_DIR` | `/data/releases` (volume das versões do PDV; veja "Atualizar para as versões do PDV") |
-| `IMPORTS_DIR` | `/data/imports` (volume dos arquivos da importação de notas; veja "Atualizar para a importação de notas") |
+| `IMPORTS_DIR` | Opcional. Sem ela, a API usa `/data/imports` quando o volume está montado (veja "Atualizar para a importação de notas") |
 | `RELEASE_UPLOAD_TOKEN` | Segredo gerado, com ao menos 32 caracteres (o mesmo do segredo do GitHub) |
 | `POSTGRES_ADMIN_PASSWORD` | Senha do banco (passo 2). **Só no primeiro deploy** |
 | `BOOTSTRAP_ADMIN_EMAIL` | E-mail do primeiro administrador. **Só no primeiro deploy** |
@@ -315,7 +315,6 @@ npm run test:images
 A importação das notas do sistema anterior (.zip de até 1 GB) guarda o arquivo numa pasta da API enquanto ele é processado; depois de processado, o arquivo é apagado.
 
 1. No serviço `api`, em **Montagens** (Mounts), crie um **volume** com o nome `imports` e o caminho de montagem `/data/imports`.
-2. Em **Ambiente**, inclua `IMPORTS_DIR` com `/data/imports`. Salve.
-3. Implante a API, confira e implante a retaguarda.
+2. Implante a API, confira e implante a retaguarda.
 
-Sem a pasta, a importação responde FA740 e o resto da API funciona normalmente. `IMPORTS_WORKER=off` desliga o processamento (só para testes).
+Não precisa de variável: a API encontra o volume em `/data/imports` (`IMPORTS_DIR` só para outro caminho). Sem a pasta, a importação responde FA740 e o resto da API funciona normalmente. `IMPORTS_WORKER=off` desliga o processamento (só para testes).
