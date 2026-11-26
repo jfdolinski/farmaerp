@@ -1,4 +1,4 @@
-import { readCertificate } from './certificate.js';
+import { readCertificate, signingMaterial } from './certificate.js';
 import { buildPfx } from '../../test/fiscal-pfx.js';
 
 const code = (call: () => unknown) => {
@@ -36,5 +36,23 @@ describe('leitura do certificado A1', () => {
 
   it('certificado sem CNPJ dá FA913', () => {
     expect(code(() => readCertificate(buildPfx({ commonName: 'PESSOA FÍSICA' }), 'senha-do-teste'))).toBe('FA913');
+  });
+});
+
+describe('material de assinatura do caixa', () => {
+  it('devolve a chave em PKCS#8 e só o certificado do titular, que conferem entre si', async () => {
+    const { createPrivateKey, X509Certificate, sign, verify } = await import('node:crypto');
+    const material = signingMaterial(buildPfx(), 'senha-do-teste');
+    expect(material.privateKey).toMatch(/^-----BEGIN PRIVATE KEY-----\r?\n/);
+    expect(material.certificate.match(/BEGIN CERTIFICATE/g)).toHaveLength(1);
+    const certificate = new X509Certificate(material.certificate);
+    expect(certificate.subject).toContain('EMPRESA TESTE:11222333000181');
+    const key = createPrivateKey(material.privateKey);
+    const signature = sign('sha1', Buffer.from('nota'), key);
+    expect(verify('sha1', Buffer.from('nota'), certificate.publicKey, signature)).toBe(true);
+  });
+
+  it('senha errada dá FA912', () => {
+    expect(code(() => signingMaterial(buildPfx(), 'errada'))).toBe('FA912');
   });
 });

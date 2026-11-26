@@ -488,7 +488,35 @@ const _migrations = <String>[
   ALTER TABLE product ADD COLUMN cashback_bp INTEGER;
   ALTER TABLE sale_return ADD COLUMN cashback_refund_cents INTEGER NOT NULL DEFAULT 0;
   ''',
+  // NFC-e: a entrega do certificado e do CSC fica como veio, cifrada para a chave deste caixa.
+  '''
+  CREATE TABLE nfce_credential (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    credential_version TEXT NOT NULL,
+    fiscal_key TEXT NOT NULL,
+    valid_to TEXT NOT NULL,
+    envelope TEXT NOT NULL,
+    received_at TEXT NOT NULL
+  ) STRICT;
+  ''',
 ];
+
+/// Entrega do certificado e do CSC guardada no caixa (o conteúdo continua cifrado).
+class StoredNfceCredential {
+  const StoredNfceCredential({
+    required this.credentialVersion,
+    required this.fiscalKey,
+    required this.validTo,
+    required this.envelope,
+    required this.receivedAt,
+  });
+
+  final String credentialVersion;
+  final String fiscalKey;
+  final DateTime validTo;
+  final Map<String, dynamic> envelope;
+  final DateTime receivedAt;
+}
 
 /// Pessoa que pode entrar no PDV, com o que veio da central.
 class LocalUser {
@@ -1502,6 +1530,38 @@ class LocalDatabase {
     final rows = _db.select('SELECT data FROM fiscal LIMIT 1');
     return rows.isEmpty ? null : jsonDecode(rows.first['data'] as String) as Map<String, dynamic>;
   }
+
+  StoredNfceCredential? get nfceCredential {
+    final rows = _db.select('SELECT * FROM nfce_credential WHERE id = 1');
+    if (rows.isEmpty) return null;
+    final row = rows.first;
+    return StoredNfceCredential(
+      credentialVersion: row['credential_version'] as String,
+      fiscalKey: row['fiscal_key'] as String,
+      validTo: DateTime.parse(row['valid_to'] as String),
+      envelope: (jsonDecode(row['envelope'] as String) as Map).cast<String, dynamic>(),
+      receivedAt: DateTime.parse(row['received_at'] as String),
+    );
+  }
+
+  void saveNfceCredential(StoredNfceCredential credential) {
+    _db.execute(
+      'INSERT INTO nfce_credential (id, credential_version, fiscal_key, valid_to, envelope, received_at) '
+      'VALUES (1, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET credential_version = excluded.credential_version, '
+      'fiscal_key = excluded.fiscal_key, valid_to = excluded.valid_to, envelope = excluded.envelope, '
+      'received_at = excluded.received_at',
+      [
+        credential.credentialVersion,
+        credential.fiscalKey,
+        credential.validTo.toUtc().toIso8601String(),
+        jsonEncode(credential.envelope),
+        credential.receivedAt.toUtc().toIso8601String(),
+      ],
+    );
+  }
+
+  /// NFC-e desligada na filial: o caixa não guarda mais o certificado.
+  void clearNfceCredential() => _db.execute('DELETE FROM nfce_credential');
 
   /// Turno aberto neste terminal, se houver.
   LocalCashSession? get openCashSession {

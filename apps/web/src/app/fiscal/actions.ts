@@ -109,3 +109,17 @@ export async function setSeries(_previous: FiscalFormState, form: FormData): Pro
     }),
   );
 }
+
+export async function setNfce(_previous: FiscalFormState, form: FormData): Promise<FiscalFormState> {
+  const id = encodeURIComponent(text(form, "branchId"));
+  return finish(
+    await apiFetch(`/admin/fiscal/branches/${id}/nfce`, {
+      method: "PUT",
+      body: {
+        enabled: text(form, "enabled") === "true",
+        environment: Number(text(form, "environment")),
+        contingencyHours: Number(text(form, "contingencyHours")),
+      },
+    }),
+  );
+}

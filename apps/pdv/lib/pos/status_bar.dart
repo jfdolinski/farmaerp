@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 
+import '../fiscal/nfce_credentials.dart';
 import '../ui/caps.dart';
 import 'display_settings.dart';
 import 'pos_controller.dart';
@@ -50,6 +51,7 @@ class _PosStatusBarState extends State<PosStatusBar> {
     final lastSync = database.syncState.lastPullAt?.toLocal();
     final pending = database.outboxPending;
     final colors = Theme.of(context).colorScheme;
+    final nfce = controller.quoteMode ? null : nfceStatusText(database, now);
     final parts = <(String, String)>[
       ('loja', '${branch ?? 'Loja'} · ${TerminalKind.of(database.terminalProfile).label} ${number ?? '-'}'),
       if (!controller.quoteMode)
@@ -62,6 +64,7 @@ class _PosStatusBarState extends State<PosStatusBar> {
         if (pending > 0) '$pending a enviar',
         if (lastSync != null) 'sincronizado às ${_time(lastSync)}',
       ].join(' · ')),
+      if (nfce != null) ('nfce', nfce),
       ('agora', '${_two(now.day)}/${_two(now.month)}/${now.year} ${_time(now)}'),
       if (widget.appVersion != null) ('versao', 'v${widget.appVersion}'),
     ];

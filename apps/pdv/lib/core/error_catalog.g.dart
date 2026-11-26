@@ -616,6 +616,42 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Confira a venda e tente de novo. Se continuar, informe o código ao suporte.',
     retryable: false,
   ),
+  'FA727': ErrorCatalogEntry(
+    code: 'FA727',
+    message: 'A filial ainda não pode emitir NFC-e.',
+    action: 'Informe a inscrição estadual, o regime da empresa, o certificado A1 e o CSC na tela Fiscal.',
+    retryable: false,
+  ),
+  'FA728': ErrorCatalogEntry(
+    code: 'FA728',
+    message: 'A configuração da NFC-e é inválida.',
+    action: 'Escolha o ambiente e informe o prazo da contingência entre 1 e 168 horas.',
+    retryable: false,
+  ),
+  'FA729': ErrorCatalogEntry(
+    code: 'FA729',
+    message: 'Este terminal não emite NFC-e.',
+    action: 'Só terminais de caixa ou autoatendimento emitem nota. Confira o perfil do terminal em Terminais.',
+    retryable: false,
+  ),
+  'FA730': ErrorCatalogEntry(
+    code: 'FA730',
+    message: 'A NFC-e não está ligada nesta filial.',
+    action: 'Ligue "Emitir NFC-e" na tela Fiscal da retaguarda.',
+    retryable: false,
+  ),
+  'FA731': ErrorCatalogEntry(
+    code: 'FA731',
+    message: 'Não foi possível confirmar a chave de criptografia do terminal.',
+    action: 'O caixa registra a chave de novo sozinho. Se continuar, informe o código ao suporte.',
+    retryable: true,
+  ),
+  'FA732': ErrorCatalogEntry(
+    code: 'FA732',
+    message: 'O certificado recebido não abriu neste caixa.',
+    action: 'O caixa busca o certificado de novo sozinho. Se continuar, informe o código ao suporte.',
+    retryable: true,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',

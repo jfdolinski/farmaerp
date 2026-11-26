@@ -43,6 +43,7 @@ import { ReturnsController } from './sales/returns.controller.js';
 import { PdvAuthEventsController } from './auth/pdv-auth-events.controller.js';
 import { SalesController } from './sales/sales.controller.js';
 import { OfflineRulesController, TerminalStockController } from './terminals/offline-rules.controller.js';
+import { TerminalNfceController } from './terminals/terminal-nfce.controller.js';
 import { TerminalCashbackController } from './terminals/terminal-cashback.controller.js';
 import { TerminalCustomersController } from './terminals/terminal-customers.controller.js';
 import { TerminalSyncController } from './terminals/terminal-sync.controller.js';
@@ -93,6 +94,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     ReturnsController,
     OfflineRulesController,
     TerminalStockController,
+    TerminalNfceController,
     SyncConflictsController,
     TerminalAdminController,
   ],
