@@ -175,10 +175,27 @@ describe('venda de controlado', () => {
     // Antimicrobiano sem lote: a venda completa exige o lote.
     const noBatch = sale({ product: antimicrobial, controlled: { ...complete({ prescription_type: 'antimicrobial', prescription_number: null }), patient_age: 34, patient_sex: 'F' }, batch: null });
     expect((await push([['sale', noBatch]]))[0].code).toBe('FA990');
-    // Com lote, idade e sexo, e sem número (não é notificação), passa sem alerta.
-    const ok = sale({ product: antimicrobial, controlled: { ...complete({ prescription_type: 'antimicrobial', prescription_number: null }), patient_age: 34, patient_sex: 'F' }, batch: batchAM1 });
-    expect((await push([['sale', ok]]))[0]).toMatchObject({ status: 'applied', code: null });
-    expect(await alertsOf(ok)).toEqual([]);
+    // Antimicrobiano (não psicotrópico): número da receita obrigatório; comprador opcional, mas inteiro.
+    const antimicrobialRx = (overrides) => ({
+      ...complete({ prescription_type: 'antimicrobial', prescription_number: 'AM-77' }), patient_age: 34, patient_sex: 'F', ...overrides,
+    });
+    const noBuyer = { buyer_name: null, buyer_document_type: null, buyer_document: null, buyer_issuer: null, buyer_state: null };
+    const refused = [
+      sale({ product: antimicrobial, batch: batchAM1, controlled: antimicrobialRx({ prescription_number: null }) }),
+      sale({ product: antimicrobial, batch: batchAM1, controlled: antimicrobialRx({ ...noBuyer, buyer_name: 'Só o Nome' }) }),
+      sale({ product: antimicrobial, batch: batchAM1, controlled: antimicrobialRx({ ...noBuyer, buyer_document_type: 'rg' }) }),
+      // Psicotrópico continua exigindo o comprador.
+      sale({ product: b1, batch: batchL1, controlled: complete(noBuyer) }),
+    ];
+    expect((await push(refused.map((payload) => ['sale', payload]))).map((r) => [r.status, r.code]))
+      .toEqual(refused.map(() => ['conflict', 'FA990']));
+    const withBuyer = sale({ product: antimicrobial, controlled: antimicrobialRx(), batch: batchAM1 });
+    expect((await push([['sale', withBuyer]]))[0]).toMatchObject({ status: 'applied', code: null });
+    expect(await alertsOf(withBuyer)).toEqual([]);
+    const withoutBuyer = sale({ product: antimicrobial, controlled: antimicrobialRx(noBuyer), batch: batchAM1 });
+    expect((await push([['sale', withoutBuyer]]))[0]).toMatchObject({ status: 'applied', code: null });
+    expect((await ownerPool.query('SELECT buyer_name, buyer_state FROM controlled_dispensing WHERE sale_id = $1', [withoutBuyer.id])).rows[0])
+      .toEqual({ buyer_name: null, buyer_state: null });
   });
 
   it('pendente: liberada com estoque negativo, sem receita, com alerta para a manutenção', async () => {

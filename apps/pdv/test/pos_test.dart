@@ -196,7 +196,10 @@ void main() {
       cart.add(database.saleProductByCode('7890000000024')!);
       expect(cart.lines[1].quantityMilli, 10000);
       expect(cart.totalCents, 2580 + 2500);
-      expect(() => cart.add(database.saleProductByCode('7890000000031')!), throwsA(isA<PosException>().having((e) => e.code, 'code', 'FA986')));
+      // Controlado entra sem a receita (pedida ao finalizar), em linha própria marcada como pendente.
+      final controlledLine = cart.add(database.saleProductByCode('7890000000031')!);
+      expect(controlledLine.warnings.last, 'Controlado: falta a receita (pedida ao finalizar)');
+      cart.lines.remove(controlledLine);
       expect(() => cart.add(database.saleProductByCode('7890000000048')!), throwsA(isA<PosException>().having((e) => e.code, 'code', 'FA974')));
     });
 
@@ -385,11 +388,16 @@ void main() {
       controller.scan('123456789');
       await tester.pump();
       expect(findText('Produto não encontrado.'), findsOneWidget);
+      // Controlado entra na venda; a receita é pedida ao finalizar.
       controller.scan('7890000000031');
+      await tester.pump();
+      expect(find.byKey(const Key('controlled-panel')), findsNothing);
+      expect(findTextContaining('falta a receita'), findsOneWidget);
+      controller.startPayment();
       await tester.pump();
       expect(find.byKey(const Key('controlled-panel')), findsOneWidget);
       expect(findTextContaining('é controlado (lista B1)'), findsOneWidget);
-      expect(controller.cart.isEmpty, isTrue);
+      expect(controller.paying, isFalse);
     });
 
     testWidgets('impressora com problema: a venda fica salva e dá para reimprimir', (tester) async {

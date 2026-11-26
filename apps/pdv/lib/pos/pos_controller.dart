@@ -42,12 +42,14 @@ class PendingZeroStock {
   final int minutesOffline;
 }
 
-/// Controlado lido, esperando a receita e a liberação do farmacêutico.
+/// Controlado da venda esperando a receita e a liberação do farmacêutico (pedidas ao finalizar).
 class PendingControlled {
-  const PendingControlled({required this.product, required this.quantityMilli});
+  const PendingControlled({required this.line});
 
-  final SaleProduct product;
-  final int quantityMilli;
+  final CartLine line;
+
+  SaleProduct get product => line.product;
+  int get quantityMilli => line.quantityMilli;
 
   PrescriptionType get suggestedType => PrescriptionType.forClass(product.controlledClass!);
 }
@@ -101,7 +103,8 @@ class PosController extends ChangeNotifier {
   final Future<void> Function(String reservationId)? cashbackRelease;
 
   /// Controlados do orçamento esperando a receita, um por vez.
-  final controlledQueue = <PendingControlled>[];
+  /// Pagamento pedido com controlado sem receita: depois do último liberado, segue para o pagamento.
+  bool _payAfterControlled = false;
 
   /// Controlado esperando a receita e o farmacêutico.
   PendingControlled? pendingControlled;
@@ -318,7 +321,7 @@ class PosController extends ChangeNotifier {
   void logout() {
     operator = null;
     pendingControlled = null;
-    controlledQueue.clear();
+    _payAfterControlled = false;
     pendingZeroStock = null;
     _releaseCashback(cart.payments.where((payment) => payment.method == PaymentMethod.cashback));
     saleCashback = null;
@@ -391,17 +394,6 @@ class PosController extends ChangeNotifier {
       final quantity = product.barcodeFractionMilli == null
           ? quantityMilli
           : (quantityMilli * product.barcodeFractionMilli! / 1000).round();
-      if (product.controlledClass != null) {
-        if (product.priceCents == null) throw const PosException('FA974');
-        final quantity = product.barcodeFractionMilli == null
-            ? quantityMilli
-            : (quantityMilli * product.barcodeFractionMilli! / 1000).round();
-        pendingControlled = PendingControlled(product: product, quantityMilli: quantity);
-        results = const [];
-        notice = null;
-        notifyListeners();
-        return;
-      }
       // Por encomenda não tem estoque mesmo: o aviso basta.
       if (product.status != 'on_order' && product.controlledClass == null && product.priceCents != null &&
           product.stockMilli - cart.quantityOf(product.id) - quantity < 0) {
@@ -614,11 +606,8 @@ class PosController extends ChangeNotifier {
           skipped.add('${product.name}, sem preço');
           continue;
         }
-        if (product.controlledClass != null) {
-          controlledQueue.add(PendingControlled(product: product, quantityMilli: quantity));
-          continue;
-        }
-        if (product.status != 'on_order' && product.stockMilli - cart.quantityOf(product.id) - quantity < 0) {
+        // Controlado entra sem conferir o estoque aqui: o saldo do lote é conferido na receita.
+        if (product.controlledClass == null && product.status != 'on_order' && product.stockMilli - cart.quantityOf(product.id) - quantity < 0) {
           skipped.add('${product.name}, sem estoque');
           continue;
         }
@@ -673,13 +662,11 @@ class PosController extends ChangeNotifier {
           skipped.add('o cliente (identifique de novo)');
         }
       }
-      _nextControlled();
       info = 'Orçamento ${data['code']} carregado.${skipped.isEmpty ? '' : ' Ficou de fora: ${skipped.join('; ')}.'}';
       logger?.info('Orçamento puxado no caixa', fields: {'quote_code': data['code'], 'skipped': skipped.length});
       return true;
     } on ApiException catch (error) {
       cart.clear();
-      controlledQueue.clear();
       notice = ErrorDisplay.fromCode(const {'FA001', 'FA008', 'FA009'}.contains(error.code) ? 'FA890' : error.code, traceId: error.traceId);
       return false;
     } finally {
@@ -688,10 +675,25 @@ class PosController extends ChangeNotifier {
     }
   }
 
-  /// Próximo controlado do orçamento, se houver.
+  /// Itens controlados que ainda não têm a receita (nem a liberação pendente).
+  List<CartLine> get controlledWithoutRelease =>
+      [for (final line in cart.lines) if (line.product.controlledClass != null && line.controlled == null) line];
+
+  /// Próximo controlado sem receita; sem nenhum, segue para o pagamento se foi pedido.
   void _nextControlled() {
-    if (pendingControlled == null && controlledQueue.isNotEmpty) pendingControlled = controlledQueue.removeAt(0);
+    final next = controlledWithoutRelease.firstOrNull;
+    pendingControlled = next == null ? null : PendingControlled(line: next);
+    if (next == null && _payAfterControlled) {
+      _payAfterControlled = false;
+      if (!cart.isEmpty) paying = true;
+    }
   }
+
+  /// Receitas completas já lançadas em outros itens desta venda (para reaproveitar).
+  List<CartLine> prescriptionSources(PendingControlled pending) => [
+    for (final line in cart.lines)
+      if (line != pending.line && line.controlled?.form != null) line,
+  ];
 
   /// Lotes do controlado com saldo para esta venda (descontado o que já está nela), FEFO.
   /// Lote vencido não aparece: não pode ser vendido.
@@ -747,11 +749,12 @@ class PosController extends ChangeNotifier {
         pharmacist: (id: pharmacist.id, name: pharmacist.name),
         today: today,
       );
-      cart.add(pending.product, quantityMilli: quantityMilli, controlled: release);
+      pending.line
+        ..quantityMilli = quantityMilli
+        ..controlled = release;
       _clearPayments();
-      pendingControlled = null;
-      _nextControlled();
       reprice();
+      _nextControlled();
       // Sem dados pessoais no log: só o produto, o lote e quem liberou.
       logger?.info('Controlado liberado', fields: {
         'product_code': pending.product.code,
@@ -788,11 +791,12 @@ class PosController extends ChangeNotifier {
       if (reason.trim().isEmpty) throw const PosException('FA986');
       final pharmacist = await _pharmacist(code, pin);
       final release = ControlledRelease.pending(reason: reason, pharmacist: (id: pharmacist.id, name: pharmacist.name));
-      cart.add(pending.product, quantityMilli: quantityMilli, controlled: release);
+      pending.line
+        ..quantityMilli = quantityMilli
+        ..controlled = release;
       _clearPayments();
-      pendingControlled = null;
-      _nextControlled();
       reprice();
+      _nextControlled();
       logger?.warn('Controlado liberado sem saldo em lote', fields: {
         'product_code': pending.product.code,
         'pharmacist_code': pharmacist.code,
@@ -807,10 +811,23 @@ class PosController extends ChangeNotifier {
     }
   }
 
+  /// Volta aos itens sem preencher: o controlado continua na venda, marcado como sem receita.
   void cancelControlled() {
     pendingControlled = null;
-    _nextControlled();
+    _payAfterControlled = false;
     notice = null;
+    notifyListeners();
+  }
+
+  /// "Não vender": tira o controlado da venda e segue para o próximo (ou para o pagamento).
+  void dropControlled() {
+    final pending = pendingControlled;
+    if (pending == null) return;
+    cart.lines.remove(pending.line);
+    _clearPayments();
+    reprice();
+    notice = null;
+    _nextControlled();
     notifyListeners();
   }
 
@@ -1580,14 +1597,26 @@ class PosController extends ChangeNotifier {
   }
 
   void remove(CartLine line) {
+    if (pendingControlled?.line == line) {
+      pendingControlled = null;
+      _payAfterControlled = false;
+    }
     cart.lines.remove(line);
     _clearPayments();
     reprice();
     notifyListeners();
   }
 
+  /// Finalizar: antes do pagamento, a receita (ou a liberação) de cada controlado, um por vez.
   void startPayment() {
     if (cart.isEmpty) return;
+    if (controlledWithoutRelease.isNotEmpty) {
+      _payAfterControlled = true;
+      notice = null;
+      _nextControlled();
+      notifyListeners();
+      return;
+    }
     paying = true;
     notice = null;
     notifyListeners();

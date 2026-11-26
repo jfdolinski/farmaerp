@@ -81,7 +81,9 @@ class CartLine {
     else if (product.stockMilli <= 0)
       'Sem estoque na cópia local',
     if (release != null) 'Desconto liberado por ${release!.supervisorName}',
-    if (controlled != null && controlled!.isPending)
+    if (product.controlledClass != null && controlled == null)
+      'Controlado: falta a receita (pedida ao finalizar)'
+    else if (controlled != null && controlled!.isPending)
       'Controlado sem saldo em lote: liberado por ${controlled!.pharmacistName}, dados do SNGPC pendentes'
     else if (controlled != null)
       'Controlado · lote ${controlled!.batch!.number} · ${controlled!.form!.type.label} · liberado por ${controlled!.pharmacistName}',
@@ -210,7 +212,8 @@ class Cart {
   /// No orçamento, o controlado entra sem a receita (ela é do caixa) ([quote]).
   /// [merge] falso mantém o item separado (desconto próprio vindo do orçamento, por exemplo).
   CartLine add(SaleProduct product, {int quantityMilli = 1000, ControlledRelease? controlled, bool quote = false, bool merge = true}) {
-    if (!quote && (product.controlledClass != null) != (controlled != null)) throw const PosException('FA986');
+    // O controlado entra sem a receita: ela é pedida ao finalizar (e conferida em buildSale).
+    if (!quote && controlled != null && product.controlledClass == null) throw const PosException('FA986');
     if (product.priceCents == null) throw const PosException('FA974');
     if (quantityMilli <= 0) throw const PosException('FA975');
     // Código lido com fracionamento (caixa com 10, por exemplo) vale a fração. No controlado, a
@@ -219,7 +222,8 @@ class Cart {
         ? quantityMilli
         : (quantityMilli * product.barcodeFractionMilli! / 1000).round();
     for (final line in lines) {
-      if (merge && controlled == null && line.product.id == product.id && line.manualDiscountCents == 0 && line.zeroStockRelease == null) {
+      if (merge && controlled == null && line.controlled == null && line.product.id == product.id && line.manualDiscountCents == 0 &&
+          line.zeroStockRelease == null) {
         line.quantityMilli += quantity;
         return line;
       }
@@ -258,6 +262,8 @@ SaleDraft buildSale({
   required DateTime now,
 }) {
   if (cart.isEmpty) throw const PosException('FA975');
+  // Controlado sem receita nem liberação não sai do caixa.
+  if (cart.lines.any((line) => line.product.controlledClass != null && line.controlled == null)) throw const PosException('FA986');
   if (cart.payments.any((p) => p.method == PaymentMethod.agreement) && cart.customer == null) throw const PosException('FA983');
   if (cart.paidCents < cart.totalCents || cart.overpaidWithoutCash) throw const PosException('FA972');
   const uuid = Uuid();

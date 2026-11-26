@@ -168,6 +168,9 @@ function DisregardForm({ row }: { row: SngpcMovement }) {
 
 function CompleteSaleForm({ row, batches }: { row: SngpcMovement; batches: SngpcBatch[] }) {
   const [state, action, pending] = useActionState<SngpcState, FormData>(completeSale, {});
+  // Antimicrobiano não é psicotrópico: o comprador é opcional (número, idade e sexo são obrigatórios).
+  const [prescriptionType, setPrescriptionType] = useState("");
+  const antimicrobial = prescriptionType === "antimicrobial";
   return (
     <form action={action} className={styles.stack}>
       <input type="hidden" name="movementId" value={row.id} />
@@ -181,7 +184,7 @@ function CompleteSaleForm({ row, batches }: { row: SngpcMovement; batches: Sngpc
         </label>
         <label>
           Tipo de receita
-          <select name="prescriptionType" required defaultValue="">
+          <select name="prescriptionType" required value={prescriptionType} onChange={(event) => setPrescriptionType(event.target.value)}>
             <option value="" disabled>
               Escolha
             </option>
@@ -194,7 +197,7 @@ function CompleteSaleForm({ row, batches }: { row: SngpcMovement; batches: Sngpc
         </label>
         <label>
           Número
-          <input name="prescriptionNumber" maxLength={30} size={12} />
+          <input name="prescriptionNumber" required={antimicrobial || prescriptionType.startsWith("notification")} maxLength={30} size={12} />
         </label>
         <label>
           Data da receita
@@ -225,12 +228,12 @@ function CompleteSaleForm({ row, batches }: { row: SngpcMovement; batches: Sngpc
       </div>
       <div className={styles.inline}>
         <label>
-          Comprador
-          <input name="buyerName" required maxLength={150} size={24} />
+          {antimicrobial ? "Comprador (opcional)" : "Comprador"}
+          <input name="buyerName" required={!antimicrobial} maxLength={150} size={24} />
         </label>
         <label>
           Documento
-          <select name="buyerDocumentType" required defaultValue="rg">
+          <select name="buyerDocumentType" required={!antimicrobial} defaultValue="rg">
             <option value="rg">RG</option>
             <option value="cpf">CPF</option>
             <option value="cnh">CNH</option>
@@ -240,15 +243,15 @@ function CompleteSaleForm({ row, batches }: { row: SngpcMovement; batches: Sngpc
         </label>
         <label>
           Número
-          <input name="buyerDocument" required maxLength={30} size={14} />
+          <input name="buyerDocument" required={!antimicrobial} maxLength={30} size={14} />
         </label>
         <label>
           Órgão emissor
-          <input name="buyerIssuer" required maxLength={20} size={8} />
+          <input name="buyerIssuer" required={!antimicrobial} maxLength={20} size={8} />
         </label>
         <label>
           UF
-          <input name="buyerState" required maxLength={2} size={3} />
+          <input name="buyerState" required={!antimicrobial} maxLength={2} size={3} />
         </label>
       </div>
       <div className={styles.inline}>
@@ -258,11 +261,11 @@ function CompleteSaleForm({ row, batches }: { row: SngpcMovement; batches: Sngpc
         </label>
         <label>
           Idade
-          <input name="patientAge" inputMode="numeric" maxLength={3} size={4} />
+          <input name="patientAge" required={antimicrobial} inputMode="numeric" maxLength={3} size={4} />
         </label>
         <label>
           Sexo
-          <select name="patientSex" defaultValue="">
+          <select name="patientSex" required={antimicrobial} defaultValue="">
             <option value="">—</option>
             <option value="F">Feminino</option>
             <option value="M">Masculino</option>

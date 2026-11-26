@@ -21,6 +21,10 @@ const managerId = '019a0000-0000-7000-8000-00000000000d';
 const pharmacistId = '019a0000-0000-7000-8000-0000000000f1';
 const clonazepam = '019a0000-0000-7000-8000-000000000033';
 const amoxicilina = '019a0000-0000-7000-8000-000000000043';
+const diazepam = '019a0000-0000-7000-8000-000000000053';
+const azitromicina = '019a0000-0000-7000-8000-000000000063';
+const batchDiazepam = '019a0000-0000-7000-8000-000000000056';
+const batchAzitro = '019a0000-0000-7000-8000-000000000066';
 const batchOld = '019a0000-0000-7000-8000-000000000036';
 const batchNew = '019a0000-0000-7000-8000-000000000038';
 const batchExpired = '019a0000-0000-7000-8000-000000000039';
@@ -61,6 +65,20 @@ LocalDatabase seeded() {
       user(pharmacistId, 7, 'Farmacêutica Ana', const ['sales.sell', 'controlled.dispense']),
       product(clonazepam, 4, 'Clonazepam 2 mg', 'B1', '7890000000055'),
       product(amoxicilina, 5, 'Amoxicilina 500 mg', 'antimicrobial', '7890000000048'),
+      product(diazepam, 6, 'Diazepam 10 mg', 'B1', '7890000000062'),
+      product(azitromicina, 8, 'Azitromicina 500 mg', 'antimicrobial', '7890000000079'),
+      const PullItem(type: 'stock', id: diazepam, data: {
+        'quantity': 4,
+        'batches': [
+          {'id': batchDiazepam, 'number': 'DZP01', 'expires_on': '2030-06-30', 'quantity': 4},
+        ],
+      }),
+      const PullItem(type: 'stock', id: azitromicina, data: {
+        'quantity': 3,
+        'batches': [
+          {'id': batchAzitro, 'number': 'AZT01', 'expires_on': '2030-06-30', 'quantity': 3},
+        ],
+      }),
       const PullItem(type: 'stock', id: clonazepam, data: {
         'quantity': 5,
         'batches': [
@@ -162,31 +180,150 @@ void main() {
       expect(prescriptionErrors(filled()..prescriberName = 'Dr', today).keys, ['prescriberName']);
       expect(prescriptionErrors(filled()..patientName = 'Jo', today).keys, ['patientName']);
     });
+
+    test('antimicrobiano (não psicotrópico): número, idade e sexo obrigatórios; comprador opcional, mas inteiro', () {
+      final today = DateTime(2026, 11, 23, 18);
+      PrescriptionForm antimicrobial() => filled(type: PrescriptionType.antimicrobial, date: DateTime(2026, 11, 20))
+        ..patientAge = 40
+        ..patientSex = 'M';
+      expect(PrescriptionType.antimicrobial.requiresBuyer, isFalse);
+      expect(PrescriptionType.specialControl.requiresBuyer, isTrue);
+      expect(prescriptionErrors(antimicrobial(), today), isEmpty);
+      expect(prescriptionErrors(antimicrobial()..number = '', today).keys, ['number']);
+      expect(prescriptionErrors(antimicrobial()..number = '', today)['number'], 'Informe o número da receita');
+      PrescriptionForm withoutBuyer() => antimicrobial()
+        ..buyerName = ''
+        ..buyerDocument = ''
+        ..buyerIssuer = ''
+        ..buyerState = '';
+      expect(prescriptionErrors(withoutBuyer(), today), isEmpty);
+      expect(prescriptionErrors(withoutBuyer()..buyerName = 'Comprador Fictício', today).keys.toSet(),
+          {'buyerDocument', 'buyerIssuer', 'buyerState'});
+      // Psicotrópico sem comprador continua barrado.
+      expect(prescriptionErrors(filled()..buyerName = '', today).keys, ['buyerName']);
+      // O que sobe: comprador vazio vai nulo (inclusive o tipo de documento).
+      final release = ControlledRelease.complete(
+        form: withoutBuyer(),
+        batch: const ControlledBatch(id: batchAzitro, number: 'AZT01', expiresOn: '2030-06-30', availableMilli: 3000),
+        pharmacist: (id: pharmacistId, name: 'Farmacêutica Ana'),
+        today: today,
+      );
+      final json = release.toJson();
+      expect([json['buyer_name'], json['buyer_document_type'], json['buyer_document'], json['buyer_issuer'], json['buyer_state']],
+          [null, null, null, null, null]);
+      expect([json['prescription_number'], json['patient_age'], json['patient_sex']], ['SP-123456', 40, 'M']);
+    });
+
+    test('receita de outro item: só do mesmo tipo; notificação traz tudo menos número e data', () {
+      final special = filled(type: PrescriptionType.specialControl)..patientName = 'Paciente Fictício';
+      final copy = reusePrescription(special, PrescriptionType.specialControl)!;
+      expect([copy.number, copy.date, copy.prescriberName, copy.buyerDocument, copy.patientName],
+          ['SP-123456', DateTime(2026, 11, 20), 'Dra. Fictícia', '123456789', 'Paciente Fictício']);
+      expect(identical(copy, special), isFalse);
+      expect(reusePrescription(special, PrescriptionType.antimicrobial), isNull);
+      final notification = reusePrescription(filled(), PrescriptionType.notificationB)!;
+      expect([notification.number, notification.date, notification.prescriberNumber, notification.buyerName],
+          ['', null, '123456', 'Comprador Fictício']);
+    });
   });
 
   group('venda de controlado', () {
-    test('lido no caixa, espera a receita; lotes em FEFO, sem o vencido', () async {
+    test('lido no caixa, entra na venda sem receita; ao finalizar, pede a receita; lotes em FEFO, sem o vencido', () async {
       await ready();
       controller.scan('7890000000055');
-      expect(controller.cart.isEmpty, isTrue);
-      expect(controller.pendingControlled?.product.id, clonazepam);
+      controller.scan('7890000000055');
+      final line = controller.cart.lines.single;
+      expect([line.product.id, line.quantityMilli, line.controlled], [clonazepam, 2000, null]);
+      expect(line.warnings.last, 'Controlado: falta a receita (pedida ao finalizar)');
+      expect(controller.pendingControlled, isNull);
+      // Desconto e quantidade mudam como em qualquer item.
+      controller.setQuantity(line, 1000);
+      expect(line.quantityMilli, 1000);
+
+      controller.startPayment();
+      expect(controller.paying, isFalse);
+      expect(controller.pendingControlled?.line, line);
       expect(controller.pendingControlled?.suggestedType, PrescriptionType.notificationB);
       expect(controller.controlledBatches(controller.pendingControlled!.product).map((b) => (b.number, b.availableMilli)), [
         ('CLZ01', 2000),
         ('CLZ02', 3000),
       ]);
+      // Voltar aos itens: o controlado fica na venda, ainda sem receita.
       controller.cancelControlled();
-      expect(controller.pendingControlled, isNull);
-      // Sem a liberação, o carrinho recusa o controlado.
+      expect([controller.pendingControlled, controller.paying, controller.cart.lines.length], [null, false, 1]);
+      // Sem a receita, a venda não sai nem por fora do fluxo.
       expect(
-        () => controller.cart.add(database.saleProductByCode('7890000000055')!),
+        () => buildSale(cart: controller.cart, session: database.openCashSession!, operator: controller.operator!, number: 1,
+            terminalNumber: 1, now: now),
         throwsA(isA<PosException>().having((e) => e.code, 'code', 'FA986')),
       );
+      // Tirar o item que está esperando a receita fecha a janela.
+      controller.startPayment();
+      controller.remove(line);
+      expect([controller.pendingControlled, controller.paying], [null, false]);
+    });
+
+    test('dois controlados: um por vez; a receita do primeiro serve para o segundo; depois vai para o pagamento', () async {
+      await ready();
+      controller.scan('7890000000055');
+      controller.scan('7890000000062');
+      controller.startPayment();
+      expect(controller.pendingControlled?.product.id, clonazepam);
+      expect(controller.prescriptionSources(controller.pendingControlled!), isEmpty);
+      expect(await controller.releaseControlled(form: filled(), batchId: batchOld, quantityMilli: 1000, code: '7', pin: '2468'), isTrue);
+      expect([controller.pendingControlled?.product.id, controller.paying], [diazepam, false]);
+      final sources = controller.prescriptionSources(controller.pendingControlled!);
+      expect(sources.single.product.id, clonazepam);
+      final copy = reusePrescription(sources.single.controlled!.form!, controller.pendingControlled!.suggestedType)!
+        ..number = 'SP-654321'
+        ..date = DateTime(2026, 11, 21);
+      expect(await controller.releaseControlled(form: copy, batchId: batchDiazepam, quantityMilli: 1000, code: '7', pin: '2468'), isTrue);
+      expect([controller.pendingControlled, controller.paying], [null, true]);
+      final forms = controller.cart.lines.map((line) => line.controlled!.form!).toList();
+      expect(forms.map((form) => (form.number, form.prescriberNumber, form.buyerDocument)), [
+        ('SP-123456', '123456', '123456789'),
+        ('SP-654321', '123456', '123456789'),
+      ]);
+      // A cópia é independente: mudar a do segundo não mexe no primeiro.
+      expect(identical(forms[0], forms[1]), isFalse);
+    });
+
+    test('não vender tira o controlado e segue; sem itens, não vai ao pagamento', () async {
+      await ready();
+      controller.scan('7890000000055');
+      controller.startPayment();
+      controller.dropControlled();
+      expect([controller.cart.isEmpty, controller.pendingControlled, controller.paying], [true, null, false]);
+    });
+
+    test('antimicrobiano sem comprador: a venda sobe com o comprador vazio', () async {
+      await ready();
+      controller.scan('7890000000079');
+      controller.startPayment();
+      final form = filled(type: PrescriptionType.antimicrobial, date: DateTime(2026, 11, 20))
+        ..buyerName = ''
+        ..buyerDocument = ''
+        ..buyerIssuer = ''
+        ..buyerState = ''
+        ..patientAge = 52
+        ..patientSex = 'F';
+      expect(await controller.releaseControlled(form: form..number = '', batchId: batchAzitro, quantityMilli: 1000, code: '7', pin: '2468'), isFalse);
+      expect(noticeCode(), 'FA986');
+      expect(await controller.releaseControlled(form: form..number = 'RX-9', batchId: batchAzitro, quantityMilli: 1000, code: '7', pin: '2468'), isTrue);
+      controller.addPayment(Payment(method: PaymentMethod.cash, amountCents: 2450));
+      await controller.finish();
+      expect(controller.notice, isNull);
+      final item = (database.nextOutboxBatch().last.payload['items'] as List).single as Map<String, dynamic>;
+      final data = item['controlled'] as Map<String, dynamic>;
+      expect([data['prescription_type'], data['prescription_number'], data['buyer_name'], data['buyer_document_type'], data['patient_age']],
+          ['antimicrobial', 'RX-9', null, null, 52]);
+      expect(item['batch_id'], batchAzitro);
     });
 
     test('farmacêutico libera com receita e lote; a venda sobe com os dados só pela outbox', () async {
       await ready();
       controller.scan('7890000000055');
+      controller.startPayment();
       final form = filled();
       // Quem não tem a permissão não libera; PIN errado também não.
       expect(await controller.releaseControlled(form: form, batchId: batchOld, quantityMilli: 1000, code: '5', pin: '2468'), isFalse);
@@ -214,7 +351,8 @@ void main() {
       expect(noticeCode(), 'FA989');
 
       expect(await controller.releaseControlled(form: form, batchId: batchOld, quantityMilli: 2000, code: '7', pin: '2468'), isTrue);
-      expect(controller.pendingControlled, isNull);
+      expect([controller.pendingControlled, controller.paying], [null, true]);
+      controller.backToItems();
       final line = controller.cart.lines.single;
       expect([line.quantityMilli, line.controlled!.batch!.number, line.controlled!.pharmacistName], [2000, 'CLZ01', 'Farmacêutica Ana']);
       expect(line.warnings.last, contains('lote CLZ01'));
@@ -226,14 +364,15 @@ void main() {
 
       // Segundo item do mesmo produto fica separado, e o lote já usado mostra o saldo que sobra.
       controller.scan('7890000000055');
+      expect(controller.cart.lines, hasLength(2));
+      controller.startPayment();
       expect(controller.controlledBatches(controller.pendingControlled!.product).map((b) => (b.number, b.availableMilli)), [
         ('CLZ01', 1000),
         ('CLZ02', 3000),
       ]);
       expect(await controller.releaseControlled(form: filled(), batchId: batchNew, quantityMilli: 1000, code: '7', pin: '2468'), isTrue);
       expect(controller.cart.lines, hasLength(2));
-
-      controller.startPayment();
+      expect(controller.paying, isTrue);
       controller.addPayment(Payment(method: PaymentMethod.cash, amountCents: 4900));
       await controller.finish();
       expect(controller.notice, isNull);
@@ -257,6 +396,7 @@ void main() {
     test('sem saldo em lote: liberação pendente com motivo', () async {
       await ready();
       controller.scan('7890000000048');
+      controller.startPayment();
       expect(controller.controlledBatches(controller.pendingControlled!.product), isEmpty);
       expect(await controller.releaseControlledPending(reason: '  ', quantityMilli: 1000, code: '7', pin: '2468'), isFalse);
       expect(noticeCode(), 'FA986');
@@ -268,9 +408,11 @@ void main() {
       expect(line.controlled!.isPending, isTrue);
       expect(line.warnings.last, contains('dados do SNGPC pendentes'));
       // Quantidade do pendente pode mudar (não há lote para conferir).
+      controller.backToItems();
       controller.setQuantity(line, 2000);
       expect(line.quantityMilli, 2000);
       controller.startPayment();
+      expect(controller.paying, isTrue);
       controller.addPayment(Payment(method: PaymentMethod.pix, amountCents: 4900));
       await controller.finish();
       final item = (database.nextOutboxBatch().last.payload['items'] as List).single as Map<String, dynamic>;
@@ -287,6 +429,7 @@ void main() {
     test('quantidade acima de todos os lotes permite a liberação pendente', () async {
       await ready();
       controller.scan('7890000000055');
+      controller.startPayment();
       expect(await controller.releaseControlledPending(reason: 'Saldo físico maior que o do sistema', quantityMilli: 4000, code: '7', pin: '2468'), isTrue);
       expect(controller.cart.lines.single.controlled!.isPending, isTrue);
     });
@@ -307,8 +450,8 @@ void main() {
       await logging.login('3', '2468');
       logging.openShift(0);
       logging.scan('7890000000055');
-      expect(await logging.releaseControlled(form: filled(), batchId: batchOld, quantityMilli: 1000, code: '7', pin: '2468'), isTrue);
       logging.startPayment();
+      expect(await logging.releaseControlled(form: filled(), batchId: batchOld, quantityMilli: 1000, code: '7', pin: '2468'), isTrue);
       logging.addPayment(Payment(method: PaymentMethod.cash, amountCents: 2450));
       await logging.finish();
       await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -336,6 +479,11 @@ void main() {
       await tester.runAsync(ready);
       controller.scan('7890000000055');
       await pump(tester);
+      // Na leitura, só a marca no item; o painel aparece ao finalizar.
+      expect(find.byKey(const Key('controlled-panel')), findsNothing);
+      expect(findTextContaining('falta a receita'), findsOneWidget);
+      controller.startPayment();
+      await tester.pump();
       expect(find.byKey(const Key('controlled-panel')), findsOneWidget);
       await tester.tap(find.byKey(const Key('controlled-open')));
       await tester.pumpAndSettle();
@@ -367,12 +515,32 @@ void main() {
       expect(find.byKey(const Key('controlled-dialog')), findsNothing);
       expect(find.byKey(const Key('controlled-panel')), findsNothing);
       expect(controller.cart.lines.single.controlled!.form!.prescriberState, 'SP');
-      expect(findTextContaining('lote CLZ01'), findsOneWidget);
+      expect(controller.paying, isTrue);
+    });
+
+    testWidgets('segundo controlado: o botão traz a receita do primeiro', (tester) async {
+      await tester.runAsync(ready);
+      controller.scan('7890000000055');
+      controller.scan('7890000000062');
+      controller.startPayment();
+      await tester.runAsync(() => controller.releaseControlled(form: filled(), batchId: batchOld, quantityMilli: 1000, code: '7', pin: '2468'));
+      await pump(tester);
+      expect(findTextContaining('Diazepam 10 mg é controlado'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('controlled-open')));
+      await tester.pumpAndSettle();
+      expect(findText('Usar a receita de Clonazepam 2 mg'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('rx-reuse-0')));
+      await tester.pumpAndSettle();
+      expect(findTextContaining('A notificação vale para um só medicamento'), findsOneWidget);
+      String text(String name) => tester.widget<TextField>(find.byKey(Key('rx-$name'))).controller!.text;
+      expect([text('prescriberName'), text('prescriberNumber'), text('buyerDocument'), text('number'), text('date')],
+          ['Dra. Fictícia', '123456', '123456789', '', '']);
     });
 
     testWidgets('sem saldo em lote, a janela pede só o motivo', (tester) async {
       await tester.runAsync(ready);
       controller.scan('7890000000048');
+      controller.startPayment();
       await pump(tester);
       await tester.tap(find.byKey(const Key('controlled-open')));
       await tester.pumpAndSettle();

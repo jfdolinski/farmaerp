@@ -248,6 +248,21 @@ describe('SNGPC', () => {
     await expect(call(pharmacist, 'SELECT app.sngpc_complete_sale($1, $2::jsonb)', [row.id, JSON.stringify(data)])).rejects.toSatisfy(hasCode('FA987'));
     await expect(call(pharmacist, 'SELECT app.sngpc_complete_sale($1, $2::jsonb)', [row.id, JSON.stringify({ ...data, prescriptionDate: day(-1), prescriptionNumber: '' })]))
       .rejects.toSatisfy(hasCode('FA865'));
+    // Psicotrópico sem comprador não completa; antimicrobiano completa sem comprador (o tipo marcado na tela é ignorado).
+    const noBuyer = { buyerName: ' ', buyerDocument: '', buyerIssuer: '', buyerState: '' };
+    await expect(call(pharmacist, 'SELECT app.sngpc_complete_sale($1, $2::jsonb)', [row.id, JSON.stringify({ ...data, ...noBuyer, prescriptionDate: day(-1) })]))
+      .rejects.toSatisfy(hasCode('FA865'));
+    const antimicrobialData = { ...data, ...noBuyer, prescriptionType: 'antimicrobial', prescriptionDate: day(-1), patientAge: 40, patientSex: 'M' };
+    await expect(call(pharmacist, 'SELECT app.sngpc_complete_sale($1, $2::jsonb)', [row.id, JSON.stringify({ ...antimicrobialData, prescriptionNumber: '' })]))
+      .rejects.toSatisfy(hasCode('FA865'));
+    // Comprador pela metade (nome sem documento) não entra.
+    const { buyerDocument: _omit, ...halfBuyer } = { ...antimicrobialData, buyerName: 'Ana Compradora', buyerIssuer: 'SSP', buyerState: 'SP' };
+    await expect(call(pharmacist, 'SELECT app.sngpc_complete_sale($1, $2::jsonb)', [row.id, JSON.stringify(halfBuyer)]))
+      .rejects.toSatisfy(hasCode('FA865'));
+    await call(pharmacist, 'SELECT app.sngpc_complete_sale($1, $2::jsonb)', [row.id, JSON.stringify(antimicrobialData)]);
+    expect((await ownerPool.query(
+      'SELECT buyer_name, buyer_document_type FROM sngpc_dispensing_complement WHERE deleted_at IS NULL AND dispensing_id = (SELECT dispensing_id FROM sngpc_movement WHERE id = $1)', [row.id],
+    )).rows[0]).toEqual({ buyer_name: null, buyer_document_type: null });
     await call(pharmacist, 'SELECT app.sngpc_complete_sale($1, $2::jsonb)', [row.id, JSON.stringify({ ...data, prescriptionDate: day(-1) })]);
     await call(pharmacist, 'SELECT app.sngpc_complete_sale($1, $2::jsonb)', [row.id, JSON.stringify({ ...data, prescriptionDate: day(-1), buyerName: 'Maria Correta' })]);
     const after = (await movements()).find((r) => r.id === row.id);

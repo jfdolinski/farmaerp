@@ -242,13 +242,15 @@ void main() {
       expect(focused(const Key('seller-code')), isTrue);
     });
 
-    testWidgets('controlado: o botão da receita recebe o foco', (tester) async {
+    testWidgets('controlado: ao finalizar, o botão da receita recebe o foco', (tester) async {
       await tester.runAsync(() => controller.login('3', '2468'));
       controller.openShift(0);
       await tester.runAsync(() => controller.identifySeller('3'));
       await pump(tester);
       await tester.enterText(find.byKey(const Key('scan-field')), '7890000000055');
       await tester.testTextInput.receiveAction(TextInputAction.done);
+      await settle(tester);
+      controller.startPayment();
       await settle(tester);
       final button = tester.widget<FilledButton>(find.byKey(const Key('controlled-open')));
       expect(button.focusNode?.hasFocus, isTrue);
