@@ -78,12 +78,18 @@ const CASH_MESSAGES: Record<string, string> = {
 export function CancelForm({ id, until }: { id: string; until: string }) {
   const [state, action, pending] = useActionState<FiscalFormState, FormData>(cancelDocument, {});
   const [reason, setReason] = useState("");
-  const [now, setNow] = useState(() => Date.now());
+  // A hora só vem do navegador (o servidor não calcula o prazo, para a página não mudar ao abrir).
+  const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
+    const tick = () => setNow(Date.now());
+    const first = setTimeout(tick, 0);
+    const timer = setInterval(tick, 1000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+    };
   }, []);
-  const expired = new Date(until).getTime() <= now;
+  const expired = now !== null && new Date(until).getTime() <= now;
   const length = reason.trim().length;
   if (state.result) {
     const cash = String(state.result.cash_refund ?? "none");
@@ -119,7 +125,13 @@ export function CancelForm({ id, until }: { id: string; until: string }) {
         />
       </label>
       <p className={styles.hint}>
-        {length}/255 letras (mínimo 15) · prazo restante: <strong>{remaining(until, now)}</strong>
+        {length}/255 letras (mínimo 15)
+        {now !== null && (
+          <>
+            {" "}
+            · prazo restante: <strong>{remaining(until, now)}</strong>
+          </>
+        )}
       </p>
       <label className={styles.check}>
         <input type="checkbox" name="confirm" required />

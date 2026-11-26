@@ -58,7 +58,7 @@ const codeOf = (error: unknown) => (error instanceof AppError ? error.code : 'FA
 
 /** Falhas que não se resolvem sozinhas (certificado, UF, ambiente): aviso, fora do lote. */
 const BLOCKING = new Set(['FA943', 'FA753', 'FA754']);
-function failureResult(error: unknown): { kind: 'blocked' | 'unavailable'; reason: string } {
+export function failureResult(error: unknown): { kind: 'blocked' | 'unavailable'; reason: string } {
   const code = codeOf(error);
   if (!BLOCKING.has(code)) return { kind: 'unavailable', reason: `Falha ${code}.` };
   return { kind: 'blocked', reason: `${getError(code).message} (${code})` };

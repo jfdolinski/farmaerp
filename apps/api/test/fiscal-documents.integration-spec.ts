@@ -55,6 +55,9 @@ describe('notas fiscais pela central contra o banco real', () => {
   // O que a Sefaz falsa responde, por chave: na consulta e na autorização.
   const onStatus = new Map<string, string>();
   const onAuthorization = new Map<string, string>();
+  // Situação que a Sefaz falsa devolve no evento e na inutilização.
+  let eventStatus = '135';
+  let voidingStatus = '102';
   const server = () => app.getHttpServer();
   const admin = (method: 'get' | 'post', path: string, email = ADMIN_EMAIL) =>
     request(server())[method](`/admin${path}`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(email)}`);
@@ -107,9 +110,9 @@ describe('notas fiscais pela central contra o banco real', () => {
           answer = soap(onAuthorization.get(key) ?? `<retEnviNFe><cStat>104</cStat><xMotivo>Lote processado</xMotivo>${prot(key, '100', '135260000000555')}</retEnviNFe>`);
         } else if (path.endsWith('/event')) {
           answer = soap(`<retEnvEvento versao="1.00"><cStat>128</cStat><xMotivo>Lote processado</xMotivo><retEvento versao="1.00"><infEvento>`
-            + `<cStat>135</cStat><xMotivo>Evento registrado</xMotivo><nProt>135260000000888</nProt><dhRegEvento>2026-11-26T10:10:05-03:00</dhRegEvento></infEvento></retEvento></retEnvEvento>`);
+            + `<cStat>${eventStatus}</cStat><xMotivo>${eventStatus === '135' ? 'Evento registrado' : 'Prazo de cancelamento superior ao previsto'}</xMotivo><nProt>135260000000888</nProt><dhRegEvento>2026-11-26T10:10:05-03:00</dhRegEvento></infEvento></retEvento></retEnvEvento>`);
         } else if (path.endsWith('/voiding')) {
-          answer = soap('<retInutNFe versao="4.00"><infInut><tpAmb>2</tpAmb><cStat>102</cStat><xMotivo>Inutilizacao homologada</xMotivo>'
+          answer = soap(`<retInutNFe versao="4.00"><infInut><tpAmb>2</tpAmb><cStat>${voidingStatus}</cStat><xMotivo>${voidingStatus === '102' ? 'Inutilizacao homologada' : 'Numero ja inutilizado'}</xMotivo>`
             + '<nProt>135260000000999</nProt><dhRecbto>2026-11-26T11:00:00-03:00</dhRecbto></infInut></retInutNFe>');
         }
         res.writeHead(answer ? 200 : 404, { 'Content-Type': 'application/soap+xml; charset=utf-8' });
@@ -230,5 +233,25 @@ describe('notas fiscais pela central contra o banco real', () => {
     expect(message.body).toContain(`<serie>${series}</serie><nNFIni>${first + 1}</nNFIni><nNFFin>${first + 2}</nNFFin>`);
     expect(((await admin('get', `/fiscal-documents/voids?branch=${CENTRO}`).expect(200)).body as Json[])[0]).toMatchObject({ protocol: '135260000000999' });
     expect(codeOf(await admin('post', '/fiscal-documents/voids', OPERATOR_EMAIL).send({ branchId: CENTRO, series, first: first + 1, last: first + 1, reason: 'Numeracao pulada no caixa' }).expect(403))).toBe('FA002');
+  });
+
+  it('recusa da Sefaz no cancelamento e na inutilização volta com o código e o motivo', async () => {
+    const note = await saleWithNote({});
+    eventStatus = '501';
+    const refused = (await admin('post', `/fiscal-documents/${note.id}/cancel`).send({ reason: 'Cliente desistiu da compra' }).expect(422)).body as Json;
+    eventStatus = '135';
+    expect(refused).toMatchObject({ code: 'FA754' });
+    expect(String(refused.detail)).toMatch(/^Sefaz 501: /);
+    // A nota continua autorizada e a venda, de pé.
+    expect(((await admin('get', '/fiscal-documents?status=authorized').expect(200)).body as Json[]).map((row) => row.id)).toContain(note.id);
+
+    const first = base + 700;
+    await saleWithNote({}, first);
+    await saleWithNote({}, first + 2);
+    voidingStatus = '563';
+    const voidRefused = (await admin('post', '/fiscal-documents/voids').send({ branchId: CENTRO, series, first: first + 1, last: first + 1, reason: 'Numeracao pulada no caixa' }).expect(422)).body as Json;
+    voidingStatus = '102';
+    expect(voidRefused).toMatchObject({ code: 'FA754' });
+    expect(String(voidRefused.detail)).toMatch(/^Sefaz 563: /);
   });
 });
