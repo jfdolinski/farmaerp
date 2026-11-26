@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:farmaerp_pdv/core/secret_store.dart';
@@ -36,6 +37,8 @@ class FakeApi implements TerminalApi {
   String code = 'K7M2XQ9P';
   Object? failure;
   Object? heartbeatFailure;
+  /// Segura o sinal de vida até completar (etapa em andamento).
+  Completer<void>? heartbeatGate;
   int heartbeats = 0;
   int? terminalNumber = 2;
   int logins = 0;
@@ -117,6 +120,7 @@ class FakeApi implements TerminalApi {
     int? outboxPending,
   }) async {
     _maybeFail();
+    if (heartbeatGate != null) await heartbeatGate!.future;
     if (heartbeatFailure != null) throw heartbeatFailure!;
     heartbeats += 1;
     this.lastSyncAt = lastSyncAt;
@@ -289,6 +293,23 @@ class FakeApi implements TerminalApi {
 
   @override
   Future<Map<String, dynamic>> nfceCredentials({required String accessToken}) async => throw const ApiException('FA730');
+
+  /// Pedidos de cancelamento recebidos; a resposta (ou o erro) é a do teste.
+  final cancels = <Map<String, String>>[];
+  Map<String, dynamic> cancelAnswer = const {'cash': 0, 'cash_refund': 'none'};
+  Object? cancelFailure;
+
+  @override
+  Future<Map<String, dynamic>> cancelNfce({
+    required String accessToken,
+    required String documentId,
+    required String reason,
+    required String supervisorId,
+  }) async {
+    cancels.add({'document': documentId, 'reason': reason, 'supervisor': supervisorId});
+    if (cancelFailure != null) throw cancelFailure!;
+    return cancelAnswer;
+  }
 
   @override
   Future<PullPage> pull({

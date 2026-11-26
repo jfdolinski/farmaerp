@@ -697,3 +697,112 @@ class _CustomerDialogState extends State<_CustomerDialog> {
     );
   }
 }
+
+/// Cancelar a última venda: motivo (vai para a Sefaz) e a liberação do supervisor. A central
+/// cancela a NFC-e e desfaz a venda.
+Future<void> showCancelSaleDialog(BuildContext context, PosController controller) {
+  return showDialog<void>(context: context, builder: (_) => _CancelSaleDialog(controller: controller));
+}
+
+class _CancelSaleDialog extends StatefulWidget {
+  const _CancelSaleDialog({required this.controller});
+
+  final PosController controller;
+
+  @override
+  State<_CancelSaleDialog> createState() => _CancelSaleDialogState();
+}
+
+class _CancelSaleDialogState extends State<_CancelSaleDialog> {
+  final _reason = TextEditingController();
+  final _code = TextEditingController();
+  final _pin = TextEditingController();
+  final _codeFocus = FocusNode();
+  final _pinFocus = FocusNode();
+  String? _error;
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    _code.dispose();
+    _pin.dispose();
+    _codeFocus.dispose();
+    _pinFocus.dispose();
+    super.dispose();
+  }
+
+  Future<void> _confirm() async {
+    if (_reason.text.trim().length < 15) {
+      setState(() => _error = 'Escreva o motivo com pelo menos 15 letras.');
+      return;
+    }
+    final ok = await widget.controller.cancelLastSale(reason: _reason.text, supervisorCode: _code.text, supervisorPin: _pin.text);
+    if (!mounted) return;
+    if (ok) {
+      Navigator.pop(context);
+      return;
+    }
+    setState(() {
+      final notice = widget.controller.notice;
+      _error = widget.controller.info?.startsWith('Sem resposta') ?? false
+          ? widget.controller.info
+          : (notice == null ? null : '${notice.message} ${notice.action}');
+      _pin.clear();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sale = widget.controller.lastSale;
+    return AlertDialog(
+      title: Text('Cancelar a venda ${sale?.code ?? ''}'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('A NFC-e é cancelada na Sefaz e a venda é desfeita (estoque, pagamentos, cashback e crediário). '
+                'Precisa de internet e da liberação de um supervisor.'),
+            TextField(
+              key: const Key('cancel-reason'),
+              controller: _reason,
+              autofocus: true,
+              maxLength: 255,
+              decoration: const InputDecoration(labelText: 'Motivo (mínimo 15 letras)'),
+              onSubmitted: (_) => _codeFocus.requestFocus(),
+            ),
+            TextField(
+              key: const Key('cancel-supervisor-code'),
+              controller: _code,
+              focusNode: _codeFocus,
+              onSubmitted: (_) => _pinFocus.requestFocus(),
+              decoration: const InputDecoration(labelText: 'Código do supervisor'),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
+            TextField(
+              key: const Key('cancel-supervisor-pin'),
+              controller: _pin,
+              focusNode: _pinFocus,
+              obscureText: true,
+              onSubmitted: (_) => _confirm(),
+              decoration: const InputDecoration(labelText: 'PIN do supervisor'),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
+            ),
+            if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, key: const Key('cancel-error'))),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Voltar')),
+        FilledButton(
+          key: const Key('cancel-confirm'),
+          onPressed: widget.controller.busy ? null : _confirm,
+          child: Text(widget.controller.busy ? 'Cancelando...' : 'Cancelar a venda'),
+        ),
+      ],
+    );
+  }
+}

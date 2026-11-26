@@ -75,7 +75,15 @@ class NfceRetransmitter {
       if (opened == null) return 0;
       for (final nfce in waiting) {
         final signed = nfce.xml;
-        final result = await sefaz.authorize(signedNfe: signed, uf: uf, environment: nfce.environment, credentials: opened);
+        // Primeiro consulta: a nota pode já estar na Sefaz (resposta perdida, ou a central
+        // reenviou) ou ter sido cancelada pela retaguarda. Só envia o que a Sefaz não tem.
+        var result = await sefaz.consult(accessKey: nfce.accessKey, signedNfe: signed, uf: uf, environment: nfce.environment, credentials: opened);
+        if (result is SefazNotFound) {
+          result = await sefaz.authorize(signedNfe: signed, uf: uf, environment: nfce.environment, credentials: opened);
+          if (result is SefazDuplicate) {
+            result = await sefaz.consult(accessKey: nfce.accessKey, signedNfe: signed, uf: uf, environment: nfce.environment, credentials: opened);
+          }
+        }
         final now = _clock();
         switch (result) {
           case SefazAuthorized():
@@ -92,12 +100,16 @@ class NfceRetransmitter {
             );
             answered += 1;
             logger?.info('NFC-e transmitida e autorizada', fields: {'number': nfce.number, 'emission_type': nfce.emissionType});
+          case SefazCanceled():
+            database.updateNfce(nfce.copyWith(status: 'canceled', statusCode: result.statusCode, reason: result.reason), now: now);
+            answered += 1;
+            logger?.info('NFC-e cancelada na Sefaz', fields: {'number': nfce.number, 'status_code': result.statusCode});
           case SefazRejected():
             database.updateNfce(nfce.copyWith(status: 'rejected', statusCode: result.statusCode, reason: result.reason), now: now);
             answered += 1;
             logger?.warn('NFC-e transmitida e recusada', fields: {'number': nfce.number, 'status_code': result.statusCode});
-          case SefazUnavailable():
-            // A Sefaz continua sem responder: para a rodada e tenta na próxima.
+          case SefazUnavailable() || SefazDuplicate() || SefazNotFound():
+            // A Sefaz continua sem responder (ou sem o protocolo ainda): para a rodada e tenta na próxima.
             database.countNfceAttempt(nfce.id, now: now);
             return answered;
         }

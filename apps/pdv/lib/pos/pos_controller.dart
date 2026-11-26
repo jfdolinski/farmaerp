@@ -26,9 +26,11 @@ import 'receipt.dart';
 
 /// Venda concluída, para a tela e a reimpressão.
 class CompletedSale {
-  const CompletedSale({required this.code, required this.totalCents, required this.changeCents, required this.lines});
+  const CompletedSale({required this.code, required this.totalCents, required this.changeCents, required this.lines, this.saleId});
 
   final String code;
+  /// Id da venda (para cancelar a NFC-e dela). Vazio no orçamento.
+  final String? saleId;
   final int totalCents;
   final int changeCents;
   final List<ReceiptLine> lines;
@@ -78,6 +80,8 @@ class PosController extends ChangeNotifier {
     this.cashbackBalance,
     this.cashbackReserve,
     this.cashbackRelease,
+    this.cancelNfce,
+    this.syncNow,
     this.logger,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now;
@@ -106,6 +110,10 @@ class PosController extends ChangeNotifier {
   final Future<Map<String, dynamic>> Function(String customerId)? cashbackBalance;
   final Future<Map<String, dynamic>> Function(String customerId, double amount, double saleTotal)? cashbackReserve;
   final Future<void> Function(String reservationId)? cashbackRelease;
+  /// Pede à central o cancelamento da NFC-e (id da nota, motivo, supervisor). Com internet.
+  final Future<Map<String, dynamic>> Function(String documentId, String reason, String supervisorId)? cancelNfce;
+  /// Sincroniza agora (manda a fila para a central).
+  final Future<void> Function()? syncNow;
 
   /// Controlados do orçamento esperando a receita, um por vez.
   /// Pagamento pedido com controlado sem receita: depois do último liberado, segue para o pagamento.
@@ -1792,7 +1800,14 @@ class PosController extends ChangeNotifier {
         nfce: document,
       );
       saleCashback = null;
-      lastSale = CompletedSale(code: draft.code, totalCents: cart.totalCents, changeCents: cart.changeCents, lines: lines);
+      lastSale = CompletedSale(
+        code: draft.code,
+        totalCents: cart.totalCents,
+        changeCents: cart.changeCents,
+        lines: lines,
+        saleId: draft.payload['id']! as String,
+      );
+      lastSaleCanceled = false;
       logger?.info('Venda concluída', fields: {'sale_code': draft.code, 'items': cart.lines.length});
       cart.clear();
       paying = false;
@@ -1850,6 +1865,85 @@ class PosController extends ChangeNotifier {
           : 'Orçamento ${draft.code} concluído na plaquinha $cardNumber.';
       onSaleSaved?.call();
       if (printCoupon || cardNumber == null) await _print(lastQuote!);
+      return true;
+    } on PosException catch (error) {
+      notice = ErrorDisplay.fromCode(error.code);
+      return false;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  /// O que dizer ao operador depois do cancelamento. Sempre lembra de devolver o que foi pago.
+  static String cancelMessage(String code, Map<String, dynamic> result) {
+    const others = 'Cartão ou PIX: estorne na maquininha ou pelo banco.';
+    if (result['already'] == true) {
+      return 'A venda $code já estava cancelada na central. Confira se o cliente recebeu de volta o que pagou '
+          '(dinheiro pela gaveta; cartão ou PIX, estorno na maquininha ou pelo banco).';
+    }
+    if (result['sale_kept'] != null) return 'NFC-e cancelada, mas a venda não foi desfeita: acerte pela devolução.';
+    return switch (result['cash_refund'] as String?) {
+      'same_session' => 'Venda $code cancelada. Devolva o dinheiro ao cliente pela gaveta. $others',
+      'open_session' => 'Venda $code cancelada. A devolução do dinheiro foi registrada como sangria. $others',
+      'no_session' => 'Venda $code cancelada. Devolva o dinheiro e registre a saída à mão. $others',
+      _ => 'Venda $code cancelada. Devolva ao cliente o que foi pago. $others',
+    };
+  }
+
+  /// A última venda foi cancelada neste caixa (o botão some).
+  bool lastSaleCanceled = false;
+
+  /// Prazo do cancelamento da NFC-e (o mesmo da central).
+  static const cancelWindow = Duration(minutes: 30);
+
+  /// NFC-e autorizada da última venda, ainda no prazo de cancelar. Null quando não dá.
+  LocalNfce? get cancelableNfce {
+    final sale = lastSale;
+    if (quoteMode || sale == null || sale.saleId == null || lastSaleCanceled || cancelNfce == null) return null;
+    final document = database.nfceOfSale(sale.saleId!);
+    final authorizedAt = document?.authorizedAt;
+    if (document == null || document.status != 'authorized' || authorizedAt == null) return null;
+    return _clock().difference(authorizedAt) < cancelWindow ? document : null;
+  }
+
+  /// Cancela a última venda: o supervisor (outra pessoa, com "Cancelar NFC-e") libera no caixa e a
+  /// central cancela a NFC-e na Sefaz e desfaz a venda. Antes, a fila sobe: a central precisa ter a
+  /// venda e a nota. Devolve true quando a central confirmou.
+  Future<bool> cancelLastSale({required String reason, required String supervisorCode, required String supervisorPin}) async {
+    final current = operator;
+    final document = cancelableNfce;
+    final request = cancelNfce;
+    final sale = lastSale;
+    if (current == null || document == null || request == null || sale == null) return false;
+    busy = true;
+    notice = null;
+    notifyListeners();
+    try {
+      final text = reason.trim();
+      if (text.length < 15 || text.length > 255) throw const PosException('FA005');
+      final supervisor = await auth.verify(supervisorCode, supervisorPin, permission: 'fiscal.cancel');
+      if (supervisor.id == current.id) throw const PosException('FA982');
+      await syncNow?.call();
+      if (database.outboxHasSale(sale.saleId!)) throw const PosException('FA756');
+      final Map<String, dynamic> result;
+      try {
+        result = await request(document.id, text, supervisor.id);
+      } on ApiException catch (error) {
+        if (error.code == 'FA001') {
+          // Sem resposta: a central pode ter cancelado ou nem ter recebido. Pedir de novo é seguro:
+          // já cancelada, ela responde que está feito; na Sefaz, o pedido repetido é conferido pela chave.
+          notice = ErrorDisplay.fromCode('FA001');
+          info = 'Sem resposta da central. Tente de novo: se a venda já tiver sido cancelada, o caixa avisa.';
+          return false;
+        }
+        throw PosException(error.code);
+      }
+      database.updateNfce(document.copyWith(status: 'canceled', reason: text), now: _clock());
+      lastSaleCanceled = true;
+      info = cancelMessage(sale.code, result);
+      logger?.info('Venda cancelada no caixa', fields: {'sale_code': sale.code, 'supervisor_code': supervisor.code});
+      onSaleSaved?.call();
       return true;
     } on PosException catch (error) {
       notice = ErrorDisplay.fromCode(error.code);

@@ -41,4 +41,24 @@ void main() {
     expect(raw.select('PRAGMA user_version').first.columnAt(0), 12);
     expect(raw.select('PRAGMA foreign_keys').first.columnAt(0), 1);
   });
+
+  test('versão 17 com NFC-e atualiza para a 18 sem perder as notas, e a nota pode ficar cancelada', () {
+    final raw = LocalDatabase.migratedInMemory(17);
+    const now = '2026-11-26T10:00:00Z';
+    raw.execute(
+      'INSERT INTO nfce_document (id, sale_id, series, number, access_key, environment, emission_type, status, protocol, xml, qr_code, '
+      'consult_url, emitted_at, authorized_at, attempts, updated_at) '
+      "VALUES (randomblob(16), randomblob(16), 4, 42, '35261111222333000181650040000000421000000019', 2, 1, 'authorized', "
+      "'135260000000123', '<nfeProc/>', 'qr', 'url', ?, ?, 1, ?)",
+      [now, now, now],
+    );
+    final database = LocalDatabase.fromDatabase(raw);
+    addTearDown(database.close);
+    expect(database.schemaVersion, 18);
+    expect(raw.select('SELECT number, status, protocol FROM nfce_document').first, {'number': 42, 'status': 'authorized', 'protocol': '135260000000123'});
+    raw.execute("UPDATE nfce_document SET status = 'canceled'");
+    expect(raw.select('SELECT status FROM nfce_document').first['status'], 'canceled');
+    expect(() => raw.execute("UPDATE nfce_document SET status = 'outra'"), throwsA(anything));
+    expect(raw.select('PRAGMA foreign_keys').first.columnAt(0), 1);
+  });
 }

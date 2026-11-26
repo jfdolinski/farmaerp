@@ -139,6 +139,14 @@ abstract class TerminalApi {
   /// Certificado e CSC da NFC-e, cifrados para a chave do caixa.
   Future<Map<String, dynamic>> nfceCredentials({required String accessToken});
 
+  /// Pede à central o cancelamento da NFC-e (e da venda), liberado por um supervisor (com internet).
+  Future<Map<String, dynamic>> cancelNfce({
+    required String accessToken,
+    required String documentId,
+    required String reason,
+    required String supervisorId,
+  });
+
   /// Um pacote da descida. Sem cursor, a carga inteira.
   Future<PullPage> pull({
     required String accessToken,
@@ -452,6 +460,21 @@ class HttpTerminalApi implements TerminalApi {
   @override
   Future<Map<String, dynamic>> nfceCredentials({required String accessToken}) =>
       _post('/terminals/nfce/credentials', const {}, accessToken: accessToken);
+
+  /// A central fala com a Sefaz (até 30 s por chamada): o tempo de espera é maior que o normal.
+  @override
+  Future<Map<String, dynamic>> cancelNfce({
+    required String accessToken,
+    required String documentId,
+    required String reason,
+    required String supervisorId,
+  }) =>
+      _post(
+        '/terminals/fiscal-documents/${Uri.encodeComponent(documentId)}/cancel',
+        {'reason': reason, 'supervisorId': supervisorId},
+        accessToken: accessToken,
+        requestTimeout: const Duration(seconds: 120),
+      );
 
   @override
   Future<PullItem> createCustomer({required String accessToken, required Map<String, Object?> data}) async {

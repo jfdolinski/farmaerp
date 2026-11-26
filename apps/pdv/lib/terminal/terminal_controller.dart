@@ -98,6 +98,7 @@ class TerminalController extends ChangeNotifier {
   AccessToken? _token;
   Timer? _timer;
   bool _busy = false;
+  Future<void>? _current;
   bool _disposed = false;
 
   Future<void> start() async {
@@ -107,6 +108,14 @@ class TerminalController extends ChangeNotifier {
 
   /// Avança uma etapa: consulta o pareamento ou envia o sinal de vida.
   Future<void> tick() => _guarded(_step);
+
+  /// Sobe a outbox agora. Se uma etapa já está rodando (ex.: a do fim da venda), espera por ela
+  /// e roda outra, que já vê o que entrou na outbox depois que aquela começou.
+  Future<void> syncNow() async {
+    final current = _current;
+    if (current != null) await current;
+    await _guarded(_step);
+  }
 
   /// Depois de uma revogação: nova chave e novo código.
   Future<void> startNewPairing() async {
@@ -145,9 +154,13 @@ class TerminalController extends ChangeNotifier {
   }
 
   // Uma etapa de cada vez: a anterior pode demorar com a rede ruim.
-  Future<void> _guarded(Future<void> Function() action) async {
-    if (_busy || _disposed) return;
+  Future<void> _guarded(Future<void> Function() action) {
+    if (_busy || _disposed) return Future.value();
     _busy = true;
+    return _current = _run(action);
+  }
+
+  Future<void> _run(Future<void> Function() action) async {
     try {
       await action();
     } catch (error, stack) {
@@ -160,6 +173,7 @@ class TerminalController extends ChangeNotifier {
       _notice = ErrorDisplay.fromCode('FA000');
     } finally {
       _busy = false;
+      _current = null;
       if (!_disposed) notifyListeners();
     }
   }

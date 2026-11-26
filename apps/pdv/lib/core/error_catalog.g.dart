@@ -790,6 +790,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Escolha só números sem nota válida e ainda não inutilizados (até 10.000 de cada vez).',
     retryable: false,
   ),
+  'FA756': ErrorCatalogEntry(
+    code: 'FA756',
+    message: 'A venda ainda não chegou à central.',
+    action: 'Aguarde o caixa sincronizar (com internet) e tente cancelar de novo.',
+    retryable: true,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',

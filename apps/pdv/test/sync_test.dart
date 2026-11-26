@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -98,7 +99,7 @@ void main() {
 
   group('banco local', () {
     test('cria o esquema uma vez e guarda UUID em 16 bytes', () {
-      expect(database.schemaVersion, 17);
+      expect(database.schemaVersion, 18);
       expect(uuidBytes(dipirona), hasLength(16));
       expect(uuidText(uuidBytes(dipirona)), dipirona);
       expect(toCents(12.9), 1290);
@@ -327,6 +328,23 @@ void main() {
       await terminal.tick();
       expect(api.lastSyncAt, DateTime.utc(2026, 11, 23, 15, 30));
       expect(api.pullCalls.last.cursor, '9');
+    });
+
+    test('subir agora com uma etapa em andamento espera por ela e roda outra', () async {
+      final terminal = await ready();
+      await terminal.tick();
+      final before = api.heartbeats;
+      api.heartbeatGate = Completer<void>();
+      final running = terminal.tick();
+      var done = false;
+      final now = terminal.syncNow().then((_) => done = true);
+      await Future<void>.delayed(Duration.zero);
+      expect(done, isFalse);
+      api.heartbeatGate!.complete();
+      api.heartbeatGate = null;
+      await running;
+      await now;
+      expect(api.heartbeats, before + 2);
     });
 
     test('terminal bloqueado não baixa nada', () async {

@@ -3601,5 +3601,13 @@
       "fiscal_number_void_first_check",
       "fiscal_number_void_last_check"
     ]
+  },
+  "FA756": {
+    "message": "A venda ainda não chegou à central.",
+    "action": "Aguarde o caixa sincronizar (com internet) e tente cancelar de novo.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": true,
+    "dbConstraints": []
   }
 }

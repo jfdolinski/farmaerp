@@ -142,11 +142,11 @@ class PosScreen extends StatelessWidget {
             ],
           ),
           body: controller.quoteMode
-              ? _SaleView(controller: controller)
+              ? _SaleView(controller: controller, online: online)
               : switch ((operator, controller.session)) {
             (null, _) => _LoginView(controller: controller, face: face),
             (_, null) => _OpenShiftView(controller: controller),
-            _ => _SaleView(controller: controller),
+            _ => _SaleView(controller: controller, online: online),
           },
           bottomNavigationBar: PosStatusBar(controller: controller, online: online, appVersion: appVersion),
           ),
@@ -468,8 +468,9 @@ class _OpenShiftViewState extends State<_OpenShiftView> {
 }
 
 class _SaleView extends StatefulWidget {
-  const _SaleView({required this.controller});
+  const _SaleView({required this.controller, required this.online});
 
+  final bool online;
   final PosController controller;
 
   @override
@@ -656,7 +657,7 @@ class _SaleViewState extends State<_SaleView> {
                   ? QuotePanel(controller: controller, dialog: _dialog)
                   : controller.paying
                   ? _PaymentPanel(controller: controller, amountFocus: _paymentFocus)
-                  : _TotalsPanel(controller: controller, cart: cart, dialog: _dialog);
+                  : _TotalsPanel(controller: controller, cart: cart, dialog: _dialog, online: widget.online);
               if (wide) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -917,9 +918,10 @@ class _ItemsPanel extends StatelessWidget {
 }
 
 class _TotalsPanel extends StatelessWidget {
-  const _TotalsPanel({required this.controller, required this.cart, required this.dialog});
+  const _TotalsPanel({required this.controller, required this.cart, required this.dialog, required this.online});
 
   final PosController controller;
+  final bool online;
   final Cart cart;
   final void Function(Future<void> Function() open) dialog;
 
@@ -1023,12 +1025,22 @@ class _TotalsPanel extends StatelessWidget {
                   'Troco: ${formatCents(last.changeCents)}',
                   key: const Key('last-change'),
                 ),
-              TextButton.icon(
-                key: const Key('reprint'),
-                onPressed: controller.busy ? null : controller.reprint,
-                icon: const Icon(Icons.print),
-                label: const Text('Reimprimir'),
-              ),
+              // Nota cancelada não se reimprime.
+              if (!controller.lastSaleCanceled)
+                TextButton.icon(
+                  key: const Key('reprint'),
+                  onPressed: controller.busy ? null : controller.reprint,
+                  icon: const Icon(Icons.print),
+                  label: const Text('Reimprimir'),
+                ),
+              // Até 30 minutos depois da autorização, com internet (quem cancela é a central) e supervisor.
+              if (online && controller.cancelableNfce != null)
+                TextButton.icon(
+                  key: const Key('cancel-sale'),
+                  onPressed: controller.busy ? null : () => showCancelSaleDialog(context, controller),
+                  icon: const Icon(Icons.undo),
+                  label: const Text('Cancelar venda'),
+                ),
             ],
           ],
         ),
