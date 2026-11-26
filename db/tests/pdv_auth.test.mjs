@@ -174,8 +174,8 @@ describe('autenticação vinda do PDV', () => {
     const row = (await readAs(a.admin, 'SELECT * FROM app.list_pdv_auth_events($1)', [a.branch1.id])).find((r) => r.id === badRelease.id);
     expect(row).toMatchObject({ user_name: faceUser.name, authorized_by_name: operator.name, method: 'manager_release', alert: 'release_permission' });
     expect((await readAs(a.admin, 'SELECT * FROM app.list_pdv_auth_events($1)', [a.branch2.id])).length).toBe(0);
-    expect((await readAs(a.admin, 'SELECT * FROM app.list_pdv_auth_events(NULL, CURRENT_DATE + 1, NULL)')).length).toBe(0);
-    expect((await readAs(a.admin, 'SELECT * FROM app.list_pdv_auth_events(NULL, NULL, CURRENT_DATE - 1)')).length).toBe(0);
+    expect((await readAs(a.admin, "SELECT * FROM app.list_pdv_auth_events(NULL, (now() AT TIME ZONE 'America/Sao_Paulo')::date + 1, NULL)")).length).toBe(0);
+    expect((await readAs(a.admin, "SELECT * FROM app.list_pdv_auth_events(NULL, NULL, (now() AT TIME ZONE 'America/Sao_Paulo')::date - 1)")).length).toBe(0);
     expect(await readAs(b.admin, 'SELECT * FROM app.list_pdv_auth_events()')).toEqual([]);
     // Sem "Ver usuários", não vê.
     expect(await readAs(a.oneBranchUser, 'SELECT * FROM app.list_pdv_auth_events()')).toEqual([]);

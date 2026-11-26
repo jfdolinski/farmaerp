@@ -563,13 +563,34 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - **Paciente:** opcional; idade e sexo obrigatórios no antimicrobiano.
   - **Lote:** só os lotes com saldo e não vencidos da cópia local, o que vence primeiro antes. Quantidade acima do saldo do lote é recusada (FA988).
   - **Liberação:** código e PIN de quem tem `controlled.dispense` (perfil Farmacêutico; FA985 para os demais).
-- **Pendente (estoque negativo):** sem lote com saldo para a quantidade, o farmacêutico libera com um motivo, sem os dados da receita. Com lote com saldo, a liberação pendente é recusada (FA989). Os dados do SNGPC são completados na manutenção (Etapa 8).
+- **Pendente (estoque negativo):** sem lote com saldo para a quantidade, o farmacêutico libera com um motivo, sem os dados da receita. Com lote com saldo, a liberação pendente é recusada (FA989). Os dados do SNGPC são completados na manutenção do SNGPC.
 - **Na central:** `controlled_dispensing` guarda receita, comprador, lote e farmacêutico, e não muda depois.
   - Dados que a tabela recusa viram conflito (FA990).
   - Viram alerta da venda: controlado sem os dados, liberado por quem não tinha a permissão, pendente, receita vencida ou futura, tipo de receita diferente do da lista.
 - **Retaguarda:** `/controlados` lista por situação (todas, pendentes, completas) e período, com o documento do comprador mascarado. Exige `controlled.view` (Farmacêutico e Gerente).
 - **Dados pessoais:** vão só pela outbox e ficam no banco local criptografado e na central. Não entram no log nem no comprovante (que mostra lote, receita e farmacêutico).
 - **Seed:** Clonazepam de demonstração (lista B1, código de barras 7890000000055) com o lote CLZ01 na Loja Centro. O Administrador (PIN 2580) pode liberar.
+
+**SNGPC: manutenção (Etapa 8, entreposto)**
+
+- **Abertura por filial** (`app.sngpc_open`, permissão `sngpc.manage`, do Farmacêutico): o saldo de cada lote de controlado vira o inventário inicial. Saldo sem lote ou negativo fica fora e aparece no aviso, para acertar o estoque. Já aberto: FA861; ainda não aberto: FA862.
+- **Movimentações** (`sngpc_movement`): depois de aberto, toda movimentação de estoque de produto controlado entra pendente, por trigger: entrada por compra, transferência ou devolução, venda (ligada à dispensação), perda, transferência enviada e ajustes. A quantidade é sempre positiva; o tipo diz se entra ou sai. Nada é enviado sozinho.
+- **O que o farmacêutico completa** na pendência:
+  - data no SNGPC (não no futuro; FA866);
+  - motivo da perda (furto, avaria, vencimento, apreensão, amostra, recolhimento, outro);
+  - lote, quando a movimentação veio sem;
+  - quantidade contada, no inventário;
+  - lote e receita da venda liberada como pendente no caixa (`sngpc_dispensing_complement`; a dispensação original não muda; receita da data da venda ou antes, dentro da validade, FA987; só venda pendente, FA867).
+  - Inventário e ajustes podem ficar fora do SNGPC, com motivo (FA868, FA302): o SNGPC não tem ajuste de entrada.
+- **Simulação** (`app.sngpc_check`): para as escolhidas, aponta o que falta e o saldo por lote, com as já conferidas mais as escolhidas, na ordem do SNGPC (data, inventário, entradas antes das saídas, hora):
+  - inventário da filial ainda não conferido;
+  - pendência anterior do mesmo produto (segura as posteriores);
+  - sem lote, lote sem MS, venda sem receita, perda sem motivo, ajuste de entrada;
+  - data no futuro ou antes da abertura (sugere a data);
+  - saída antes da entrada do lote (sugere a data da entrada) ou saldo do lote negativo.
+- **Conferência** (`app.sngpc_confirm`): a API pede a senha de quem confere (FA409); tudo ou nada (FA864 com o que falta); data de envio de hoje em diante. Grava quem, quando e o MS do lote. Conferida não muda mais (FA863), e só segue o caminho do envio (enviada, aceita ou recusada), que chega no 8C-2.
+- **Retaguarda:** `/sngpc` com as filiais, o aviso de inventário, de pendência com mais de 7 dias e de envio com data chegada; as abas "Pendentes" (escolher, corrigir, simular e conferir), "Conferidas" e "Fora do SNGPC". O comprador aparece mascarado.
+- **Erros:** FA861 a FA868.
 
 ## Clientes
 
