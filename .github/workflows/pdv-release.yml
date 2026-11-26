@@ -1,17 +1,12 @@
-# Versão do PDV para Windows: gera o instalador e, numa tag pdv-v1.2.3, assina e publica na
+# Versão do PDV para Windows: numa tag pdv-v1.2.3, gera o instalador, assina e publica na
 # homologação (só para os terminais de teste; a liberação para a rede é em /plataforma/versoes).
-# Em PR que mexe no instalador, só gera o instalador como artefato, para conferir o pacote.
+# Também roda à mão (workflow_dispatch), só para gerar o instalador. Não roda em PR: a máquina
+# Windows conta minutos em dobro, e a suíte do PDV já roda em Linux no CI de todo PR.
 name: Versão do PDV
 
 on:
   push:
     tags: ['pdv-v*']
-  pull_request:
-    paths:
-      - 'apps/pdv/installer/**'
-      - 'apps/pdv/tool/build-installer.ps1'
-      - 'apps/pdv/lib/update/**'
-      - '.github/workflows/pdv-release.yml'
   workflow_dispatch:
     inputs:
       version:
