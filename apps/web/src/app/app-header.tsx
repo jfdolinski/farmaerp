@@ -56,6 +56,7 @@ export function AppHeader({ user }: { user: CurrentUser }) {
         {(can(user, "health_professionals.manage") || can(user, "controlled.view")) && (
           <Link href="/profissionais">Profissionais da saúde</Link>
         )}
+        {can(user, "imports.manage") && <Link href="/importacoes">Importação de notas</Link>}
         {can(user, "sync.view") && <Link href="/sincronizacao">Sincronização</Link>}
         {can(user, "users.view") && <Link href="/entradas-pdv">Entradas no PDV</Link>}
       </nav>
