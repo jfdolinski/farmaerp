@@ -20,6 +20,7 @@ interface ImportReport extends ImportRow {
     reason: string | null;
   }[];
   last_numbers: { branch_id: string; branch_name: string; model: string; series: number; last_number: number }[];
+  ignored_reasons?: { reason: string; total: number }[];
 }
 
 type Params = Promise<{ id: string }>;
@@ -118,7 +119,7 @@ async function ReportContent({ params }: { params: Params }) {
                 <td>{count(totals.canceled)}</td>
               </tr>
               <tr>
-                <th>Ignoradas (outros documentos, homologação ou não autorizadas)</th>
+                <th>Ignoradas (veja os motivos abaixo)</th>
                 <td>{count(totals.ignored)}</td>
               </tr>
               <tr>
@@ -132,7 +133,7 @@ async function ReportContent({ params }: { params: Params }) {
           <p className={styles.hint}>
             Por tipo de documento:{" "}
             {models.map(([model, total]) => `${MODEL_LABELS[model] ?? `Modelo ${model}`}: ${count(total)}`).join(" · ")}
-            . As NF-e e os outros modelos entram nas próximas etapas da importação.
+            . CT-e, SAT e outros documentos ainda não entram (ficam como ignorados).
           </p>
         )}
       </section>
@@ -161,6 +162,34 @@ async function ReportContent({ params }: { params: Params }) {
                     <td>{MODEL_LABELS[row.model] ?? row.model}</td>
                     <td>{row.series}</td>
                     <td>{row.last_number.toLocaleString("pt-BR")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {(report.ignored_reasons ?? []).length > 0 && (
+        <section className={styles.card}>
+          <h2>Ignoradas, por motivo</h2>
+          <p className={styles.hint}>
+            Notas que não mexem em nada. Se aparecer &quot;Nenhuma filial do cliente&quot;, cadastre a empresa em Empresas (ou
+            importe as NFC-e dela) e envie o arquivo de novo.
+          </p>
+          <div className={styles.tableWrap}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Motivo</th>
+                  <th>Notas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(report.ignored_reasons ?? []).map((row) => (
+                  <tr key={row.reason}>
+                    <td>{row.reason}</td>
+                    <td>{count(row.total)}</td>
                   </tr>
                 ))}
               </tbody>
