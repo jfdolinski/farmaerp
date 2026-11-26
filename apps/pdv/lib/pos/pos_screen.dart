@@ -656,7 +656,7 @@ class _SaleViewState extends State<_SaleView> {
               final side = controller.quoteMode
                   ? QuotePanel(controller: controller, dialog: _dialog)
                   : controller.paying
-                  ? _PaymentPanel(controller: controller, amountFocus: _paymentFocus)
+                  ? _PaymentPanel(controller: controller, amountFocus: _paymentFocus, dialog: _dialog)
                   : _TotalsPanel(controller: controller, cart: cart, dialog: _dialog, online: widget.online);
               if (wide) {
                 return Row(
@@ -1058,10 +1058,11 @@ class _TotalsPanel extends StatelessWidget {
 }
 
 class _PaymentPanel extends StatefulWidget {
-  const _PaymentPanel({required this.controller, required this.amountFocus});
+  const _PaymentPanel({required this.controller, required this.amountFocus, required this.dialog});
 
   final PosController controller;
   final FocusNode amountFocus;
+  final void Function(Future<void> Function() open) dialog;
 
   @override
   State<_PaymentPanel> createState() => _PaymentPanelState();
@@ -1507,7 +1508,7 @@ class _PaymentPanelState extends State<_PaymentPanel> {
             ),
             TextButton.icon(
               key: const Key('discard-cart-paying'),
-              onPressed: controller.busy ? null : () => showDiscardCartDialog(context, controller),
+              onPressed: controller.busy ? null : () => widget.dialog(() => showDiscardCartDialog(context, controller)),
               icon: const Icon(Icons.remove_shopping_cart),
               label: Text(controller.discardLabel),
             ),
