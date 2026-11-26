@@ -79,6 +79,8 @@ const balanceOf = async (productId) => Number((await ownerPool.query(
 
 beforeAll(async () => {
   ({ a, b } = await createFixtures());
+  // b.admin faz as vezes do administrador da plataforma nestes testes.
+  await ownerPool.query('INSERT INTO platform_admin (user_id) VALUES ($1)', [b.admin.id]);
 });
 afterAll(closePools);
 
@@ -110,8 +112,12 @@ describe('envio do arquivo', () => {
 describe('NFC-e importada', () => {
   let first;
 
-  it('cria filial, empresa, cliente e produtos; venda importada com pagamentos e saída de estoque', async () => {
+  it('empresa nova espera a plataforma; criada, a nota entra com cliente, produtos, pagamentos e saída de estoque', async () => {
     first = note();
+    expect(await importNote(first)).toMatchObject({ result: 'waiting', code: null });
+    expect((await ownerPool.query('SELECT count(*)::int AS n FROM branch WHERE cnpj = $1', [issuerCnpj])).rows[0].n).toBe(0);
+    const pending = (await ownerPool.query('SELECT id FROM import_pending_issuer WHERE economic_group_id = $1 AND cnpj = $2', [a.group.id, issuerCnpj])).rows[0];
+    await asUser(b.admin, "SELECT app.platform_resolve_issuer($1, 'create', '{}'::jsonb)", [pending.id]);
     expect(await importNote(first)).toMatchObject({ result: 'imported', code: null });
     const sale = (await ownerPool.query('SELECT * FROM imported_sale WHERE access_key = $1', [first.access_key])).rows[0];
     expect([Number(sale.total), Number(sale.change_amount), sale.series, sale.model]).toEqual([32, 8, 1, '65']);
@@ -173,7 +179,7 @@ describe('NFC-e importada', () => {
     // De novo não devolve duas vezes; cancelamento de nota fora da importação só fica no relatório.
     await asWorker('SELECT app.import_nfce_cancel($1, $2, $3, $4)', [job, 'cancelamento.xml', first.access_key, null]);
     expect(await balanceOf(productA)).toBe(-4);
-    expect((await asWorker('SELECT app.import_nfce_cancel($1, $2, $3, $4) AS r', [job, 'outro.xml', key(), null]))[0].r).toEqual({ result: 'canceled', found: false });
+    expect((await asWorker('SELECT app.import_nfce_cancel($1, $2, $3, $4) AS r', [job, 'outro.xml', key(), null]))[0].r).toEqual({ result: 'canceled', found: false, was_waiting: false });
 
     await asWorker('SELECT app.import_note_result($1, $2, NULL, NULL, $3, $4, $5)', [job, 'lixo.txt', 'ignored', null, 'Arquivo que não é nota']);
     await asWorker('SELECT app.document_import_progress($1, $2::jsonb, $3, NULL)', [job, JSON.stringify({ imported: 3 }), 'done']);

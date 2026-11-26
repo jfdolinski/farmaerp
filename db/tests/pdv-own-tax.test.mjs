@@ -70,7 +70,14 @@ beforeAll(async () => {
     payments: [{ type: '01', amount: 15 }],
     subtotal: 15, discount: 0, total: 15, change: 0, xml: XML,
   };
-  expect((await asWorker('SELECT app.import_nfce($1, $2, $3::jsonb) AS r', [job, 'n.xml', JSON.stringify(note)]))[0].r.result).toBe('imported');
+  // Empresa nova: espera o administrador da plataforma criar; depois a nota entra.
+  const importOnce = async () => (await asWorker('SELECT app.import_nfce($1, $2, $3::jsonb) AS r', [job, 'n.xml', JSON.stringify(note)]))[0].r.result;
+  expect(await importOnce()).toBe('waiting');
+  const platform = (await ownerPool.query("INSERT INTO user_account (economic_group_id, name) VALUES ($1, 'Plataforma') RETURNING id", [a.group.id])).rows[0].id;
+  await ownerPool.query('INSERT INTO platform_admin (user_id) VALUES ($1)', [platform]);
+  const pending = (await ownerPool.query('SELECT id FROM import_pending_issuer WHERE cnpj = $1', [issuerCnpj])).rows[0].id;
+  await run((c) => setUser(c, platform), "SELECT app.platform_resolve_issuer($1, 'create', '{}'::jsonb)", [pending]);
+  expect(await importOnce()).toBe('imported');
   branchId = (await ownerPool.query('SELECT branch_id FROM imported_sale WHERE access_key = $1', [note.access_key])).rows[0].branch_id;
   const products = (await ownerPool.query(
     'SELECT id, legacy_code FROM product WHERE economic_group_id = $1 AND legacy_code = ANY ($2)', [a.group.id, [legacyA, legacyB]],
