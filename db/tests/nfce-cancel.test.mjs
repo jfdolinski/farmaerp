@@ -382,3 +382,55 @@ describe('correções do reenvio e conferência no banco (0068)', () => {
     expect((await ownerPool.query('SELECT status FROM fiscal_document WHERE id = $1', [doc.id])).rows[0].status).toBe('canceled');
   });
 });
+
+describe('cancelamento pedido pelo caixa (0069)', () => {
+  const asTerminal = (terminal, sql, params) => run((c) => setTerminal(c, terminal.id), sql, params);
+
+  it('nota do próprio caixa, supervisor com a permissão, no prazo e sem bloqueio', async () => {
+    const { id } = await newSale({ quantity: 1 });
+    const doc = await document(id);
+    // O operador (Gerente) não tem fiscal.cancel; o administrador tem.
+    await expect(asTerminal(a.terminal1, 'SELECT * FROM app.terminal_cancel_context($1, $2)', [doc.id, operator.id])).rejects.toSatisfy(hasCode('FA002'));
+    await expect(asTerminal(a.terminal1, 'SELECT * FROM app.terminal_cancel_context($1, $2)', [doc.id, b.admin.id])).rejects.toSatisfy(hasCode('FA002'));
+    await expect(asTerminal(a.terminal1, 'SELECT * FROM app.terminal_cancel_context($1, NULL)', [doc.id])).rejects.toSatisfy(hasCode('FA002'));
+    // Nota de outro caixa não é vista.
+    await expect(asTerminal(a.terminal2, 'SELECT * FROM app.terminal_cancel_context($1, $2)', [doc.id, a.admin.id])).rejects.toSatisfy(hasCode('FA006'));
+    const [context] = await asTerminal(a.terminal1, 'SELECT * FROM app.terminal_cancel_context($1, $2)', [doc.id, a.admin.id]);
+    expect(context).toMatchObject({ status: 'authorized', access_key: doc.access_key, protocol: doc.protocol });
+
+    const late = await document((await newSale({ quantity: 1 })).id, { authorized_at: minutesAgo(31), emitted_at: minutesAgo(32) });
+    await expect(asTerminal(a.terminal1, 'SELECT * FROM app.terminal_cancel_context($1, $2)', [late.id, a.admin.id])).rejects.toSatisfy(hasCode('FA748'));
+    const loose = await document((await newSale({ quantity: 1 })).id, { status: 'contingency', emission_type: 9, protocol: null, authorized_at: null, status_code: null, reason: null });
+    await expect(asTerminal(a.terminal1, 'SELECT * FROM app.terminal_cancel_context($1, $2)', [loose.id, a.admin.id])).rejects.toSatisfy(hasCode('FA753'));
+  });
+
+  it('registra com o terminal e o supervisor, desfaz a venda; repetido responde que já está feito', async () => {
+    const before = await balance();
+    const { id } = await newSale({ quantity: 2 });
+    const doc = await document(id);
+    await expect(asTerminal(a.terminal1, 'SELECT app.terminal_cancel_register($1, $2, $3::jsonb)', [doc.id, operator.id, cancelEvent()])).rejects.toSatisfy(hasCode('FA002'));
+    const effects = (await asTerminal(a.terminal1, 'SELECT app.terminal_cancel_register($1, $2, $3::jsonb) AS r', [doc.id, a.admin.id, cancelEvent()]))[0].r;
+    expect(effects).toEqual({ cash: 20, cash_refund: 'same_session' });
+    expect(await balance()).toBe(before);
+    const event = (await ownerPool.query('SELECT requested_by, terminal_id FROM fiscal_event WHERE fiscal_document_id = $1', [doc.id])).rows[0];
+    expect(event).toEqual({ requested_by: a.admin.id, terminal_id: a.terminal1.id });
+    expect((await ownerPool.query('SELECT canceled_by FROM sale WHERE id = $1', [id])).rows[0].canceled_by).toBe(a.admin.id);
+    expect((await asTerminal(a.terminal1, 'SELECT app.terminal_cancel_register($1, $2, $3::jsonb) AS r', [doc.id, a.admin.id, cancelEvent()]))[0].r).toEqual({ already: true });
+    const [again] = await asTerminal(a.terminal1, 'SELECT status FROM app.terminal_cancel_context($1, $2)', [doc.id, a.admin.id]);
+    expect(again.status).toBe('canceled');
+    expect(await balance()).toBe(before);
+  });
+
+  it('venda com bloqueio: a nota fica cancelada e a venda não é desfeita (aviso)', async () => {
+    const sold = await newSale({ quantity: 1 });
+    const doc = await document(sold.id);
+    expect((await push(a.terminal1, 'sale_return', {
+      id: uuidV7(), number: randomInt(1, 1e6), cash_session_id: session, sale_id: sold.id, operator_id: operator.id, authorized_by: null,
+      reason: 'Troca', destination: 'cash', returned_at: new Date().toISOString(),
+      items: [{ id: uuidV7(), sale_item_id: sold.itemId, quantity: 1, amount: 10 }], total: 10,
+    })).status).toBe('applied');
+    await expect(asTerminal(a.terminal1, 'SELECT * FROM app.terminal_cancel_context($1, $2)', [doc.id, a.admin.id])).rejects.toSatisfy(hasCode('FA749'));
+    expect((await asTerminal(a.terminal1, 'SELECT app.terminal_cancel_register($1, $2, $3::jsonb) AS r', [doc.id, a.admin.id, cancelEvent()]))[0].r).toEqual({ sale_kept: 'FA749' });
+    expect((await ownerPool.query('SELECT deleted_at FROM sale WHERE id = $1', [sold.id])).rows[0].deleted_at).toBeNull();
+  });
+});

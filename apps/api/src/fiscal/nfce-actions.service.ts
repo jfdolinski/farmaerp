@@ -201,10 +201,10 @@ export class NfceActionsService implements OnApplicationBootstrap, OnModuleDestr
         })]);
         return { status: 'authorized' };
       }
-      if (status.kind === 'canceled' && status.cancelEvent && status.protocol) {
+      if (status.kind === 'canceled' && status.cancelEvent && status.cancelProtocol) {
         await client.query('SELECT app.fiscal_consult_canceled($1, $2::jsonb)', [id, JSON.stringify({
-          reason: 'Cancelamento registrado na Sefaz (consulta pela chave).', protocol: status.protocol, status_code: status.status,
-          xml: status.cancelEvent, registered_at: new Date().toISOString(),
+          reason: 'Cancelamento registrado na Sefaz (consulta pela chave).', protocol: status.cancelProtocol, status_code: status.status,
+          xml: status.cancelEvent, registered_at: status.cancelRegisteredAt ?? new Date().toISOString(),
         })]);
         return { status: 'canceled' };
       }
@@ -227,6 +227,39 @@ export class NfceActionsService implements OnApplicationBootstrap, OnModuleDestr
     const context = await this.database.withContext(
       async (client) => (await client.query<DocumentContext>("SELECT * FROM app.fiscal_action_context($1, 'cancel')", [id])).rows[0],
     );
+    const result = await this.sendCancel(context, reason);
+    return this.database.withContext(async (client) => {
+      const { rows } = await client.query<{ r: Record<string, unknown> }>('SELECT app.fiscal_cancel_register($1, $2::jsonb) AS r', [id, JSON.stringify({
+        reason, protocol: result.protocol, status_code: result.status, xml: result.xml, registered_at: result.registeredAt,
+      })]);
+      return { ...rows[0].r, sefaz: result.sefaz };
+    });
+  }
+
+  /**
+   * Cancelamento pedido pelo caixa (supervisor conferido no caixa pelo PIN e aqui pela permissão).
+   * Nota já cancelada (o caixa não viu a resposta e pediu de novo) responde que já está feito.
+   */
+  async cancelForTerminal(id: string, supervisorId: string, reason: string): Promise<Record<string, unknown>> {
+    const context = await this.database.withContext(
+      async (client) => (await client.query<DocumentContext>('SELECT * FROM app.terminal_cancel_context($1, $2)', [id, supervisorId])).rows[0],
+    );
+    if (context.status === 'canceled') return { already: true };
+    const result = await this.sendCancel(context, reason);
+    return this.database.withContext(async (client) => {
+      const { rows } = await client.query<{ r: Record<string, unknown> }>('SELECT app.terminal_cancel_register($1, $2, $3::jsonb) AS r', [id, supervisorId, JSON.stringify({
+        reason, protocol: result.protocol, status_code: result.status, xml: result.xml, registered_at: result.registeredAt,
+      })]);
+      return { ...rows[0].r, sefaz: result.sefaz };
+    });
+  }
+
+  /**
+   * Envia o evento de cancelamento. 573 (um pedido anterior já tinha chegado, por exemplo quando a
+   * resposta não voltou a tempo) consulta a chave e usa o evento que a Sefaz guardou, com o protocolo
+   * do cancelamento.
+   */
+  private async sendCancel(context: DocumentContext, reason: string): Promise<{ protocol: string; status: string; xml: string; registeredAt: string; sefaz: string }> {
     const certificate = this.certificate(context);
     const { envelope, event } = cancellationEnvelope({
       environment: context.environment as 1 | 2, uf: context.state ?? '', cnpj: context.cnpj, accessKey: context.access_key,
@@ -237,11 +270,23 @@ export class NfceActionsService implements OnApplicationBootstrap, OnModuleDestr
     if (result.kind === 'refused') {
       throw new AppError('FA754', { cause: new Error(`${result.status} ${result.reason}`), detail: `Sefaz ${result.status}: ${result.reason}`.slice(0, 300) });
     }
-    return this.database.withContext(async (client) => {
-      const { rows } = await client.query<{ r: Record<string, unknown> }>('SELECT app.fiscal_cancel_register($1, $2::jsonb) AS r', [id, JSON.stringify({
-        reason, protocol: result.protocol, status_code: result.status, xml: result.procXml, registered_at: result.registeredAt || new Date().toISOString(),
-      })]);
-      return { ...rows[0].r, sefaz: `${result.status} ${result.reason}` };
+    if (result.kind === 'registered') {
+      return {
+        protocol: result.protocol, status: result.status, xml: result.procXml,
+        registeredAt: result.registeredAt || new Date().toISOString(), sefaz: `${result.status} ${result.reason}`,
+      };
+    }
+    const status = parseStatus(await this.call(context, 'status', statusEnvelope(context.access_key, context.environment as 1 | 2), certificate));
+    if (status.kind === 'canceled' && status.cancelEvent && status.cancelProtocol) {
+      return {
+        protocol: status.cancelProtocol, status: status.status, xml: status.cancelEvent,
+        registeredAt: status.cancelRegisteredAt ?? new Date().toISOString(), sefaz: `${result.status} ${result.reason}`,
+      };
+    }
+    if (status.kind === 'unavailable') throw new AppError('FA944', { cause: new Error(`${status.status} ${status.reason}`) });
+    throw new AppError('FA754', {
+      cause: new Error(`${result.status} ${result.reason}; consulta ${status.status} ${status.reason}`),
+      detail: `Sefaz ${result.status}: ${result.reason}`.slice(0, 300),
     });
   }
 

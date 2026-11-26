@@ -125,6 +125,20 @@ function cut(xml: string, name: string): string | null {
   return xml.slice(start, start + end.index + end[0].length).replace(/(<\/?)\w+:/g, '$1');
 }
 
+/** Protocolo da Sefaz: 15 dígitos. */
+const PROTOCOL = /^\d{15}$/;
+
+/** Todos os elementos com o nome, recortados como vieram (a consulta traz um procEventoNFe por evento). */
+function cutAll(xml: string, name: string): string[] {
+  const parts: string[] = [];
+  const opening = new RegExp(`<(\\w+:)?${name}[\\s>]`, 'g');
+  for (let match = opening.exec(xml); match; match = opening.exec(xml)) {
+    const piece = cut(xml.slice(match.index), name);
+    if (piece) parts.push(piece);
+  }
+  return parts;
+}
+
 function envelope(service: string, body: string): string {
   return `<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:soap12="${SOAP_NS}"><soap12:Body>`
     + `<nfeDadosMsg xmlns="${WSDL}/${service}">${body}</nfeDadosMsg></soap12:Body></soap12:Envelope>`;
@@ -156,7 +170,11 @@ export function statusEnvelope(accessKey: string, environment: 1 | 2): string {
 
 export type StatusResult =
   | { kind: 'authorized'; status: string; reason: string; protocol: string; authorizedAt: string; protNFe: string }
-  | { kind: 'canceled'; status: string; reason: string; protocol: string | null; authorizedAt: string | null; protNFe: string | null; cancelEvent: string | null }
+  | {
+    kind: 'canceled'; status: string; reason: string; protocol: string | null; authorizedAt: string | null; protNFe: string | null;
+    /** procEventoNFe do cancelamento (tpEvento 110111), com o protocolo e a hora do evento (não os da autorização). */
+    cancelEvent: string | null; cancelProtocol: string | null; cancelRegisteredAt: string | null;
+  }
   | { kind: 'not_found'; status: string; reason: string }
   | { kind: 'unavailable'; status: string; reason: string }
   | { kind: 'other'; status: string; reason: string };
@@ -179,7 +197,14 @@ export function parseStatus(xml: string): StatusResult {
     return { kind: 'authorized', status, reason, protocol, authorizedAt, protNFe };
   }
   if (['101', '151', '155'].includes(status)) {
-    return { kind: 'canceled', status, reason, protocol, authorizedAt, protNFe: cut(xml, 'protNFe'), cancelEvent: cut(xml, 'procEventoNFe') };
+    const event = cutAll(xml, 'procEventoNFe').find((part) => /<tpEvento>110111<\/tpEvento>/.test(part));
+    // O infEvento do evento enviado traz o protocolo da autorização; o do retEvento é o do cancelamento.
+    const info = event ? find(find(parse(event), 'retEvento'), 'infEvento') : undefined;
+    const cancelProtocol = PROTOCOL.test(text(info, 'nProt')) ? text(info, 'nProt') : null;
+    return {
+      kind: 'canceled', status, reason, protocol, authorizedAt, protNFe: cut(xml, 'protNFe'),
+      cancelEvent: cancelProtocol ? event ?? null : null, cancelProtocol, cancelRegisteredAt: cancelProtocol ? text(info, 'dhRegEvento') || null : null,
+    };
   }
   if (status === '217') return { kind: 'not_found', status, reason };
   if (status === '108' || status === '109') return { kind: 'unavailable', status, reason };
@@ -199,7 +224,7 @@ export type AuthorizationResult =
   | { kind: 'rejected'; status: string; reason: string }
   | { kind: 'unavailable'; status: string; reason: string };
 
-/** 104 traz o protocolo: 100/150 autoriza. 204/539: a nota já está lá (consultar). 108/109: parado. */
+/** 104 traz o protocolo: 100/150 autoriza. 204: a nota já está lá (consultar). 108/109: parado. */
 export function parseAuthorization(xml: string, signedNfe: string): AuthorizationResult {
   const root = parse(xml);
   const batch = find(root, 'retEnviNFe') ?? unavailable('retEnviNFe ausente');
@@ -210,7 +235,9 @@ export function parseAuthorization(xml: string, signedNfe: string): Authorizatio
   const prot = find(batch, 'infProt');
   const status = text(prot, 'cStat');
   const reason = text(prot, 'xMotivo');
-  if (status === '204' || status === '539') return { kind: 'duplicate', status, reason };
+  // 204: a mesma nota já está na Sefaz (consultar). 539 é outra coisa: mesmo número com outra
+  // chave (a outra vem no motivo) e fica como recusa, para virar aviso.
+  if (status === '204') return { kind: 'duplicate', status, reason };
   if (status !== '100' && status !== '150') return { kind: 'rejected', status, reason };
   const protNFe = cut(xml, 'protNFe');
   if (!protNFe) return unavailable('autorizada sem o protocolo');
@@ -259,9 +286,15 @@ export function cancellationEnvelope(request: CancellationRequest, pem: { key: s
 export type EventResult =
   | { kind: 'registered'; status: string; reason: string; protocol: string; registeredAt: string; procXml: string }
   | { kind: 'refused'; status: string; reason: string }
+  /** 573 (o cancelamento já tinha sido registrado) ou registro sem protocolo: consultar a chave. */
+  | { kind: 'duplicate'; status: string; reason: string }
   | { kind: 'unavailable'; status: string; reason: string };
 
-/** 135 registrado; 155 registrado fora do prazo; 573 já registrado antes. O resto recusa. */
+/**
+ * 135 registrado; 155 registrado fora do prazo. 573 é o evento repetido (um pedido anterior
+ * chegou, mesmo sem resposta): a Sefaz não devolve o protocolo aqui, então vai para consulta.
+ * O resto recusa.
+ */
 export function parseEvent(xml: string, signedEvent: string): EventResult {
   const root = parse(xml);
   const lot = find(root, 'retEnvEvento') ?? unavailable('retEnvEvento ausente');
@@ -271,7 +304,9 @@ export function parseEvent(xml: string, signedEvent: string): EventResult {
   if (!info) return { kind: 'refused', status: lotStatus, reason: text(lot, 'xMotivo') };
   const status = text(info, 'cStat');
   const reason = text(info, 'xMotivo');
-  if (!['135', '155', '573'].includes(status)) return { kind: 'refused', status, reason };
+  if (status === '573') return { kind: 'duplicate', status, reason };
+  if (!['135', '155'].includes(status)) return { kind: 'refused', status, reason };
+  if (!PROTOCOL.test(text(info, 'nProt'))) return { kind: 'duplicate', status, reason };
   const retEvento = cut(xml, 'retEvento') ?? '';
   return {
     kind: 'registered', status, reason, protocol: text(info, 'nProt'), registeredAt: text(info, 'dhRegEvento'),
