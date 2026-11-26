@@ -3586,7 +3586,8 @@
       "stock_movement_canceled_sale_check",
       "credit_payment_cancel_check",
       "credit_payment_cancel_key",
-      "fiscal_document_cancel_note_check"
+      "fiscal_document_cancel_note_check",
+      "fiscal_document_resend_attempts_check"
     ]
   },
   "FA755": {

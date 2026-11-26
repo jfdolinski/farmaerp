@@ -9,6 +9,8 @@ export interface ApiError {
   action: string;
   retryable: boolean;
   traceId: string | null;
+  /** Detalhe que pode ir para a tela (ex.: o código e o motivo da Sefaz). */
+  detail?: string;
 }
 
 export type ApiResult<T> =

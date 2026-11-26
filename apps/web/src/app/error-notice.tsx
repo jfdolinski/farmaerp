@@ -10,6 +10,7 @@ export function ErrorNotice({ error }: { error?: ApiError }) {
   return (
     <div className={styles.error} role="alert">
       <strong>{error.message}</strong>
+      {error.detail && <span>{error.detail}</span>}
       <span>{error.action}</span>
       <small>{formatReference(error.code, error.traceId)}</small>
     </div>

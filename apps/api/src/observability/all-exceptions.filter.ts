@@ -73,6 +73,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       action: entry.action,
       retryable: entry.retryable,
       traceId,
+      ...(exception instanceof AppError && exception.code === entry.code && exception.detail ? { detail: exception.detail } : {}),
     });
   }
 }
