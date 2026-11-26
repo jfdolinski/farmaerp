@@ -88,8 +88,11 @@ function movement(m: SubmissionMovement): string {
         tag('dataPrescricao', day(p.date)) +
         `<prescritor>${tag('nomePrescritor', p.prescriber_name)}${tag('numeroRegistroProfissional', p.prescriber_number)}` +
         `${tag('conselhoProfissional', p.prescriber_council)}${tag('UFConselho', p.prescriber_state)}</prescritor>` +
-        `<comprador>${tag('nomeComprador', p.buyer_name)}${tag('tipoDocumento', DOCUMENT_CODE[String(p.buyer_document_type)] ?? '9')}` +
-        `${tag('numeroDocumento', p.buyer_document)}${tag('orgaoExpedidor', p.buyer_issuer)}${tag('UFEmissaoDocumento', p.buyer_state)}</comprador>` +
+        // Antimicrobiano pode sair sem comprador.
+        (p.buyer_name
+          ? `<comprador>${tag('nomeComprador', p.buyer_name)}${tag('tipoDocumento', DOCUMENT_CODE[String(p.buyer_document_type)] ?? '9')}` +
+            `${tag('numeroDocumento', p.buyer_document)}${tag('orgaoExpedidor', p.buyer_issuer)}${tag('UFEmissaoDocumento', p.buyer_state)}</comprador>`
+          : '') +
         (p.patient_name || p.patient_age !== null
           ? `<paciente>${optional('nome', p.patient_name)}${optional('idade', p.patient_age)}${optional('sexo', p.patient_sex)}</paciente>`
           : '') +

@@ -576,11 +576,13 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 
 **Controlados**
 
-- **No caixa:** o controlado lido abre o aviso "Preencher a receita". Cada controlado fica no seu item, com receita e lote próprios.
-  - **Receita:** tipo (sugerido pela lista do produto: A → notificação A, B1 → notificação B, B2 → B2, C2 → retinoide, C3 → talidomida, antimicrobiano → receita de antimicrobiano, demais → controle especial), número (obrigatório nas notificações) e data.
+- **No caixa:** o controlado lido entra na venda como os outros itens (desconto, quantidade etc.), marcado "Controlado: falta a receita (pedida ao finalizar)". Ao finalizar a venda, antes do pagamento, o caixa pede a receita (ou a liberação pendente) de cada controlado, um por vez; depois do último, segue para o pagamento. "Voltar aos itens" mantém o item sem receita; "Não vender" tira o item. Sem receita nem liberação, a venda não é gravada (FA986). Cada controlado fica no seu item, com receita e lote próprios.
+  - **Receita de outro item:** "Usar a receita de …" traz receita, prescritor, comprador e paciente de outro controlado da venda, só com o mesmo tipo de receita. Notificação vale para um só medicamento: o número e a data ficam para preencher.
+  - **Orçamento:** o controlado entra com os outros itens do orçamento puxado; a receita é pedida ao finalizar.
+  - **Receita:** tipo (sugerido pela lista do produto: A → notificação A, B1 → notificação B, B2 → B2, C2 → retinoide, C3 → talidomida, antimicrobiano → receita de antimicrobiano, demais → controle especial), número (obrigatório nas notificações e no antimicrobiano) e data.
   - **Validade:** 30 dias da data da receita; antimicrobiano, 10. Vencida ou com data no futuro é recusada (FA987).
   - **Prescritor:** nome, conselho (CRM, CRO, CRMV, COREN, CRF, RMS), número e UF.
-  - **Comprador:** nome, documento (RG, CPF, CNH, passaporte ou outro), número, órgão emissor e UF.
+  - **Comprador:** nome, documento (RG, CPF, CNH, passaporte ou outro), número, órgão emissor e UF. Obrigatório nos psicotrópicos (listas da Portaria 344); no antimicrobiano é opcional, mas vai inteiro ou não vai (migration 0056, também no complemento do SNGPC e no arquivo enviado).
   - **Paciente:** opcional; idade e sexo obrigatórios no antimicrobiano.
   - **Lote:** só os lotes com saldo e não vencidos da cópia local, o que vence primeiro antes. Quantidade acima do saldo do lote é recusada (FA988).
   - **Liberação:** código e PIN de quem tem `controlled.dispense` (perfil Farmacêutico; FA985 para os demais).

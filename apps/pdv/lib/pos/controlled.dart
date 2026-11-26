@@ -19,6 +19,12 @@ enum PrescriptionType {
 
   bool get isNotification => code.startsWith('notification');
 
+  /// Psicotrópico (listas da Portaria 344): exige o comprador com documento. O antimicrobiano não.
+  bool get requiresBuyer => this != antimicrobial;
+
+  /// Número da receita obrigatório: notificação e antimicrobiano.
+  bool get requiresNumber => isNotification || this == antimicrobial;
+
   /// Validade em dias, contados da data da receita: antimicrobiano 10, demais 30 (igual à central).
   int get validDays => this == antimicrobial ? 10 : 30;
 
@@ -86,6 +92,42 @@ class PrescriptionForm {
   String patientName;
   int? patientAge;
   String? patientSex;
+
+  /// Nenhum dado do comprador preenchido (vale no antimicrobiano).
+  bool get buyerEmpty =>
+      [buyerName, buyerDocument, buyerIssuer, buyerState].every((value) => value.trim().isEmpty);
+
+  PrescriptionForm copy() => PrescriptionForm(
+    type: type,
+    number: number,
+    date: date,
+    prescriberName: prescriberName,
+    prescriberCouncil: prescriberCouncil,
+    prescriberNumber: prescriberNumber,
+    prescriberState: prescriberState,
+    buyerName: buyerName,
+    buyerDocumentType: buyerDocumentType,
+    buyerDocument: buyerDocument,
+    buyerIssuer: buyerIssuer,
+    buyerState: buyerState,
+    patientName: patientName,
+    patientAge: patientAge,
+    patientSex: patientSex,
+  );
+}
+
+/// Receita já lançada em outro item da venda, para o item [type]. Só serve com o mesmo tipo de
+/// receita (null se não). A notificação vale para um só medicamento: prescritor, comprador e
+/// paciente vêm junto, mas o número e a data da notificação deste item ficam para preencher.
+PrescriptionForm? reusePrescription(PrescriptionForm source, PrescriptionType type) {
+  if (source.type != type) return null;
+  final copy = source.copy();
+  if (type.isNotification) {
+    copy
+      ..number = ''
+      ..date = null;
+  }
+  return copy;
 }
 
 final _prescriptionNumber = RegExp(r'^[0-9A-Za-z./-]{1,30}$');
@@ -99,8 +141,8 @@ DateTime _day(DateTime value) => DateTime(value.year, value.month, value.day);
 Map<String, String> prescriptionErrors(PrescriptionForm form, DateTime today) {
   final errors = <String, String>{};
   bool name(String value) => value.trim().length >= 3 && value.trim().length <= 150;
-  if (form.type.isNotification && !_prescriptionNumber.hasMatch(form.number.trim())) {
-    errors['number'] = 'Informe o número da notificação';
+  if (form.type.requiresNumber && !_prescriptionNumber.hasMatch(form.number.trim())) {
+    errors['number'] = form.type.isNotification ? 'Informe o número da notificação' : 'Informe o número da receita';
   } else if (form.number.trim().isNotEmpty && !_prescriptionNumber.hasMatch(form.number.trim())) {
     errors['number'] = 'Use só letras, números, ponto, barra e hífen';
   }
@@ -116,12 +158,15 @@ Map<String, String> prescriptionErrors(PrescriptionForm form, DateTime today) {
   if (!prescriberCouncils.contains(form.prescriberCouncil)) errors['prescriberCouncil'] = 'Escolha o conselho';
   if (!_councilNumber.hasMatch(form.prescriberNumber.trim())) errors['prescriberNumber'] = 'Informe o número no conselho';
   if (!brazilianStates.contains(form.prescriberState)) errors['prescriberState'] = 'Escolha a UF';
-  if (!name(form.buyerName)) errors['buyerName'] = 'Informe o nome do comprador';
-  if (!buyerDocumentTypes.containsKey(form.buyerDocumentType)) errors['buyerDocumentType'] = 'Escolha o documento';
-  if (!_document.hasMatch(form.buyerDocument.trim())) errors['buyerDocument'] = 'Informe o número do documento';
-  final issuer = form.buyerIssuer.trim();
-  if (issuer.length < 2 || issuer.length > 20) errors['buyerIssuer'] = 'Informe o órgão emissor';
-  if (!brazilianStates.contains(form.buyerState)) errors['buyerState'] = 'Escolha a UF';
+  // Antimicrobiano: o comprador é opcional, mas se começar a preencher vai inteiro.
+  if (form.type.requiresBuyer || !form.buyerEmpty) {
+    if (!name(form.buyerName)) errors['buyerName'] = 'Informe o nome do comprador';
+    if (!buyerDocumentTypes.containsKey(form.buyerDocumentType)) errors['buyerDocumentType'] = 'Escolha o documento';
+    if (!_document.hasMatch(form.buyerDocument.trim())) errors['buyerDocument'] = 'Informe o número do documento';
+    final issuer = form.buyerIssuer.trim();
+    if (issuer.length < 2 || issuer.length > 20) errors['buyerIssuer'] = 'Informe o órgão emissor';
+    if (!brazilianStates.contains(form.buyerState)) errors['buyerState'] = 'Escolha a UF';
+  }
   if (form.patientName.trim().isNotEmpty && !name(form.patientName)) errors['patientName'] = 'Nome do paciente muito curto';
   final age = form.patientAge;
   if (age != null && (age < 0 || age > 130)) errors['patientAge'] = 'Idade inválida';
@@ -191,6 +236,7 @@ class ControlledRelease {
     }
     String? optional(String value) => value.trim().isEmpty ? null : value.trim();
     final date = data.date!;
+    final buyer = !data.type.requiresBuyer && data.buyerEmpty ? null : data;
     return {
       'id': id,
       'status': 'complete',
@@ -203,11 +249,11 @@ class ControlledRelease {
       'prescriber_council': data.prescriberCouncil,
       'prescriber_number': data.prescriberNumber.trim(),
       'prescriber_state': data.prescriberState,
-      'buyer_name': data.buyerName.trim(),
-      'buyer_document_type': data.buyerDocumentType,
-      'buyer_document': data.buyerDocument.trim(),
-      'buyer_issuer': data.buyerIssuer.trim(),
-      'buyer_state': data.buyerState,
+      'buyer_name': buyer?.buyerName.trim(),
+      'buyer_document_type': buyer?.buyerDocumentType,
+      'buyer_document': buyer?.buyerDocument.trim(),
+      'buyer_issuer': buyer?.buyerIssuer.trim(),
+      'buyer_state': buyer?.buyerState,
       'patient_name': optional(data.patientName),
       'patient_age': data.patientAge,
       'patient_sex': data.patientSex,

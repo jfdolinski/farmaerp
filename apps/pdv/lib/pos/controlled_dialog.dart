@@ -5,10 +5,11 @@ import '../face/face_widgets.dart';
 import '../ui/caps.dart';
 import 'controlled.dart';
 import 'focus_kit.dart';
+import 'cart.dart';
 import 'money.dart';
 import 'pos_controller.dart';
 
-/// Aviso no caixa quando passa um controlado: abre a janela da receita ou desiste.
+/// Ao finalizar, um controlado da venda sem receita: preencher, voltar aos itens ou tirar da venda.
 class ControlledPanel extends StatelessWidget {
   const ControlledPanel({super.key, required this.controller, required this.pending, this.focusNode});
 
@@ -27,14 +28,19 @@ class ControlledPanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('${pending.product.name} é controlado (lista ${pending.product.controlledClass}).',
+            Text('Antes de receber: ${pending.product.name} é controlado (lista ${pending.product.controlledClass}).',
                 style: const TextStyle(fontWeight: FontWeight.bold)),
-            Text('A venda precisa da ${pending.suggestedType.label.toLowerCase()}, dos dados do comprador e da liberação do farmacêutico.'),
+            Text(pending.suggestedType.requiresBuyer
+                ? 'A venda precisa da ${pending.suggestedType.label.toLowerCase()}, dos dados do comprador e da liberação do farmacêutico.'
+                : 'A venda precisa da ${pending.suggestedType.label.toLowerCase()}, da idade e do sexo do paciente e da liberação do farmacêutico.'),
+            if (controller.controlledWithoutRelease.length > 1)
+              Text('Controlados sem receita nesta venda: ${controller.controlledWithoutRelease.length}.'),
             const SizedBox(height: 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                TextButton(key: const Key('controlled-cancel'), onPressed: controller.cancelControlled, child: const Text('Não vender')),
+                TextButton(key: const Key('controlled-back'), onPressed: controller.cancelControlled, child: const Text('Voltar aos itens')),
+                TextButton(key: const Key('controlled-cancel'), onPressed: controller.dropControlled, child: const Text('Não vender')),
                 FilledButton(
                   key: const Key('controlled-open'),
                   focusNode: focusNode,
@@ -96,6 +102,54 @@ class _ControlledDialogState extends State<_ControlledDialog> {
   }
 
   TextEditingController _field(String name) => _fields.putIfAbsent(name, TextEditingController.new);
+
+  String? _reuseMessage;
+
+  /// Muda quando a receita é trazida de outro item, para os campos de escolha mostrarem o valor novo.
+  int _formVersion = 0;
+
+  String _dateText(DateTime? value) => value == null
+      ? ''
+      : '${value.day.toString().padLeft(2, '0')}/${value.month.toString().padLeft(2, '0')}/${value.year}';
+
+  /// Traz a receita de outro item da venda. Só com o mesmo tipo de receita.
+  void _reuse(CartLine source) {
+    final copy = reusePrescription(source.controlled!.form!, _form.type);
+    setState(() {
+      if (copy == null) {
+        _reuseMessage = 'A receita de ${source.product.name} é ${source.controlled!.form!.type.label}; '
+            'este item pede ${_form.type.label}.';
+        return;
+      }
+      _form
+        ..number = copy.number
+        ..date = copy.date
+        ..prescriberName = copy.prescriberName
+        ..prescriberCouncil = copy.prescriberCouncil
+        ..prescriberNumber = copy.prescriberNumber
+        ..prescriberState = copy.prescriberState
+        ..buyerName = copy.buyerName
+        ..buyerDocumentType = copy.buyerDocumentType
+        ..buyerDocument = copy.buyerDocument
+        ..buyerIssuer = copy.buyerIssuer
+        ..buyerState = copy.buyerState
+        ..patientName = copy.patientName
+        ..patientAge = copy.patientAge
+        ..patientSex = copy.patientSex;
+      final values = {
+        'number': copy.number, 'date': _dateText(copy.date), 'prescriberName': copy.prescriberName,
+        'prescriberNumber': copy.prescriberNumber, 'prescriberState': copy.prescriberState, 'buyerName': copy.buyerName,
+        'buyerDocument': copy.buyerDocument, 'buyerIssuer': copy.buyerIssuer, 'buyerState': copy.buyerState,
+        'patientName': copy.patientName, 'patientAge': copy.patientAge?.toString() ?? '',
+      };
+      values.forEach((name, value) => _field(name).text = value);
+      _reuseMessage = _form.type.isNotification
+          ? 'Dados trazidos de ${source.product.name}. A notificação vale para um só medicamento: informe o número e a data desta.'
+          : 'Receita trazida de ${source.product.name}. Confira e escolha o lote.';
+      _formVersion += 1;
+    });
+    _focusProblem();
+  }
 
   int get _quantityMilli => (int.tryParse(_quantity.text) ?? 0) * 1000;
 
@@ -200,6 +254,7 @@ class _ControlledDialogState extends State<_ControlledDialog> {
         final pendingOnly = _pendingOnly;
         final errors = pendingOnly ? const <String, String>{} : prescriptionErrors(_form, DateTime.now());
         final notice = controller.notice;
+        final sources = controller.prescriptionSources(pending);
         return AlertDialog(
           key: const Key('controlled-dialog'),
           title: Text('Controlado · ${pending.product.name}'),
@@ -218,6 +273,22 @@ class _ControlledDialogState extends State<_ControlledDialog> {
                       color: Theme.of(context).colorScheme.errorContainer,
                       child: Text('${notice.message} ${notice.action}'),
                     ),
+                  if (!pendingOnly && sources.isNotEmpty) ...[
+                    Wrap(spacing: 8, runSpacing: 8, children: [
+                      for (final (index, source) in sources.indexed)
+                        OutlinedButton(
+                          key: Key('rx-reuse-$index'),
+                          onPressed: () => _reuse(source),
+                          child: Text('Usar a receita de ${source.product.name}'),
+                        ),
+                    ]),
+                    if (_reuseMessage != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(_reuseMessage!, key: const Key('rx-reuse-message')),
+                      ),
+                    const SizedBox(height: 8),
+                  ],
                   Wrap(
                     spacing: 12,
                     runSpacing: 8,
@@ -293,7 +364,7 @@ class _ControlledDialogState extends State<_ControlledDialog> {
                           onChanged: (value) => setState(() => _form.type = value ?? _form.type),
                         ),
                       ),
-                      _text('number', _form.type.isNotification ? 'Número da notificação' : 'Número (se houver)', errors: errors),
+                      _text('number', _form.type.isNotification ? 'Número da notificação' : 'Número da receita', errors: errors),
                       _text('date', 'Data da receita', errors: errors, width: 160, hint: 'dd/mm/aaaa', keyboard: TextInputType.datetime,
                           formatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d/]')), LengthLimitingTextInputFormatter(10)]),
                     ]),
@@ -305,7 +376,7 @@ class _ControlledDialogState extends State<_ControlledDialog> {
                         width: 110,
                         child: DropdownButtonFormField<String>(
                           isExpanded: true,
-                          key: const Key('rx-council'),
+                          key: Key('rx-council-$_formVersion'),
                           initialValue: _form.prescriberCouncil,
                           decoration: const InputDecoration(labelText: 'Conselho'),
                           items: [for (final council in prescriberCouncils) DropdownMenuItem(value: council, child: Text(council))],
@@ -316,14 +387,15 @@ class _ControlledDialogState extends State<_ControlledDialog> {
                       _text('prescriberState', 'UF', errors: errors, width: 70, formatters: _state),
                     ]),
                     const SizedBox(height: 12),
-                    Text('Comprador', style: Theme.of(context).textTheme.titleSmall),
+                    Text(_form.type.requiresBuyer ? 'Comprador' : 'Comprador (opcional no antimicrobiano)',
+                        style: Theme.of(context).textTheme.titleSmall),
                     Wrap(spacing: 12, runSpacing: 8, children: [
                       _text('buyerName', 'Nome', errors: errors, width: 300),
                       SizedBox(
                         width: 140,
                         child: DropdownButtonFormField<String>(
                           isExpanded: true,
-                          key: const Key('rx-document-type'),
+                          key: Key('rx-document-type-$_formVersion'),
                           initialValue: _form.buyerDocumentType,
                           decoration: const InputDecoration(labelText: 'Documento'),
                           items: [
@@ -349,7 +421,7 @@ class _ControlledDialogState extends State<_ControlledDialog> {
                         width: 140,
                         child: DropdownButtonFormField<String?>(
                           isExpanded: true,
-                          key: const Key('rx-patient-sex'),
+                          key: Key('rx-patient-sex-$_formVersion'),
                           initialValue: _form.patientSex,
                           decoration: InputDecoration(labelText: 'Sexo', errorText: _tried ? errors['patientSex'] : null),
                           items: const [

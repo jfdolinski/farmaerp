@@ -161,7 +161,7 @@ void main() {
     expect(controller.cart.lines.single.discountCents, 50);
   });
 
-  test('controlados do orçamento abrem a receita um por vez', () async {
+  test('controlados do orçamento entram na venda; a receita é pedida ao finalizar, um por vez', () async {
     await ready();
     api.quoteResponse['15'] = quoteData(items: [
       {'line': 1, 'product_id': clonazepam, 'quantity': 1, 'unit_price': 24.5, 'discount': 0, 'total': 24.5, 'release': null},
@@ -169,12 +169,18 @@ void main() {
       {'line': 3, 'product_id': dipirona, 'quantity': 1, 'unit_price': 10, 'discount': 0, 'total': 10, 'release': null},
     ]);
     await controller.loadQuote('15');
-    expect(controller.cart.lines.single.product.id, dipirona);
-    expect(controller.pendingControlled?.product.id, clonazepam);
-    controller.cancelControlled();
-    expect([controller.pendingControlled?.product.id, controller.pendingControlled?.quantityMilli], [diazepam, 2000]);
-    controller.cancelControlled();
+    expect(controller.cart.lines.map((line) => line.product.id), [clonazepam, diazepam, dipirona]);
     expect(controller.pendingControlled, isNull);
+    controller.startPayment();
+    expect(controller.paying, isFalse);
+    expect(controller.pendingControlled?.product.id, clonazepam);
+    // Não vender tira o item e passa ao próximo controlado.
+    controller.dropControlled();
+    expect([controller.pendingControlled?.product.id, controller.pendingControlled?.quantityMilli], [diazepam, 2000]);
+    // Voltar aos itens mantém o controlado na venda, ainda sem receita.
+    controller.cancelControlled();
+    expect([controller.pendingControlled, controller.paying], [null, false]);
+    expect(controller.cart.lines.map((line) => line.product.id), [diazepam, dipirona]);
   });
 
   test('erros: venda em andamento, sem internet, orçamento que já virou venda', () async {

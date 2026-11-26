@@ -43,6 +43,19 @@ describe('arquivo do SNGPC', () => {
     expect(xml).not.toContain('<paciente>');
     expect(xml).toContain('<motivoPerda>2</motivoPerda>');
     expect(xml).toContain('<cnpjDestino>11222333000262</cnpjDestino>');
+    expect(xml).toContain('<comprador><nomeComprador>João</nomeComprador>');
+  });
+
+  it('antimicrobiano sem comprador sai sem o bloco do comprador, com o paciente', () => {
+    const xml = buildSubmissionXml(data('movements', [
+      { ...base, kind: 'sale', prescription: {
+        type: 'antimicrobial', number: 'AM-1', date: '2026-11-19', prescriber_name: 'Dra. Ana', prescriber_number: '123',
+        prescriber_council: 'CRM', prescriber_state: 'SP', buyer_name: null, buyer_document_type: null, buyer_document: null,
+        buyer_issuer: null, buyer_state: null, patient_name: null, patient_age: 40, patient_sex: 'F',
+      } },
+    ]), 'usuario-sem-cpf');
+    expect(xml).not.toContain('<comprador>');
+    expect(xml).toContain('<paciente><idade>40</idade><sexo>F</sexo></paciente>');
   });
 
   it('envio real só com SNGPC_LIVE e endereço HTTPS fora do desenvolvimento', () => {
