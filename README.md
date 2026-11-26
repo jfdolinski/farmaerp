@@ -673,6 +673,12 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - **Correções (migration 0068):** o lote do reenvio pega primeiro as notas nunca tentadas; falha que não se resolve sozinha (sem certificado FA943, UF não atendida FA754, ambiente diferente FA753) e seis rodadas sem a Sefaz viram aviso e saem do lote. O resultado do reenvio (`app.fiscal_resend_result_checked`) e o cancelamento (`app.fiscal_cancel_register`, `fiscal.cancel`; `app.fiscal_consult_canceled` para a nota cancelada por fora) conferem quem pede; os núcleos ficam internos. Recusa da Sefaz volta com o código e o motivo em `detail`.
 - **Tela `/notas-fiscais` (8A-3b):** avisos (recusadas, sem certificado, canceladas por fora sem desfazer a venda), lista com filtros, consultar, reenviar (`fiscal.void`), cancelar com motivo de 15 a 255 letras e contagem do prazo (`fiscal.cancel`), XML da nota e do cancelamento; `/notas-fiscais/inutilizacao` com as faixas sugeridas (as que o caixa ainda pode usar pedem confirmação) e o histórico. Sem resposta da API a tempo, a tela orienta a consultar antes de repetir.
 
+**Descartar a venda e cadastros no PDV (parte A do lote de 26/11, migration 0070)**
+
+- **Permissões novas:** `pdv.quote_clear` (limpar a tela do orçamento), `pdv.sale_cancel` (cancelar a venda em andamento no caixa), `pdv.self_service_cancel` (no autoatendimento), `pdv.customer_create` e `pdv.prescriber_create` (cadastros no caixa). Perfis padrão: Gerente e Farmacêutico todas; Operador de caixa limpar orçamento e os dois cadastros; Balconista limpar orçamento e cadastrar cliente. Os perfis que já existiam recebem o mesmo pela migration.
+- **Venda descartada** (`pdv_cart_discard`, só sobe do terminal, tipo `cart_discard` da outbox): tela, quem estava, quem liberou, itens, total e hora. Quem respondeu sem a permissão da tela (na filial do terminal) fica com o alerta `release_permission`.
+- **Cadastros:** cliente no PDV passa a exigir `pdv.customer_create` (antes, `sales.sell`); prescritor que sobe com `created_by` exige `pdv.prescriber_create` na filial (FA002); caixas antigos, sem `created_by`, seguem aceitos.
+
 **Profissionais da saúde (prescritores)**
 
 - **Cadastro** (`health_professional`, migration 0057, por grupo): nome, conselho (CRM, CRO, CRMV, COREN, CRF, RMS), número, UF, especialidade (opcional) e situação. O mesmo conselho, número (sem zeros à esquerda, sem diferença de maiúsculas) e UF não se repete (FA733); dados inválidos: FA734.
