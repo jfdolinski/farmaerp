@@ -272,6 +272,7 @@
       "terminal_update_event_id_uuid_v7_check",
       "terminal_credential_delivery_id_uuid_v7_check",
       "health_professional_id_uuid_v7_check",
+      "fiscal_document_id_uuid_v7_check",
       "sngpc_credential_id_uuid_v7_check",
       "sngpc_submission_id_uuid_v7_check"
     ]
@@ -3284,5 +3285,53 @@
       "health_professional_state_check",
       "health_professional_specialty_check"
     ]
+  },
+  "FA735": {
+    "message": "A NFC-e recebida do caixa é inválida.",
+    "action": "A nota fica nos conflitos de sincronização. Atualize o PDV e informe o código ao suporte.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": [
+      "fiscal_document_model_check",
+      "fiscal_document_series_check",
+      "fiscal_document_number_check",
+      "fiscal_document_access_key_check",
+      "fiscal_document_environment_check",
+      "fiscal_document_emission_type_check",
+      "fiscal_document_status_check",
+      "fiscal_document_protocol_check",
+      "fiscal_document_status_code_check",
+      "fiscal_document_reason_check",
+      "fiscal_document_xml_check",
+      "fiscal_document_authorized_check",
+      "fiscal_document_sale_key",
+      "fiscal_document_access_key_key",
+      "fiscal_document_number_key"
+    ]
+  },
+  "FA736": {
+    "message": "A Sefaz recusou a NFC-e desta venda.",
+    "action": "A venda foi concluída com a nota pendente. Confira o motivo em Vendas, na retaguarda.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA737": {
+    "message": "A Sefaz não respondeu.",
+    "action": "A venda foi concluída com a nota pendente. O caixa tenta transmitir de novo.",
+    "httpStatus": 503,
+    "severity": "warning",
+    "retryable": true,
+    "dbConstraints": []
+  },
+  "FA738": {
+    "message": "O certificado da NFC-e ainda não chegou a este caixa.",
+    "action": "A venda foi concluída com a nota pendente. Confira a internet do caixa e a tela Fiscal da retaguarda.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": true,
+    "dbConstraints": []
   }
 }

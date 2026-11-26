@@ -28,6 +28,19 @@ interface SaleDetail {
   customer_code: number | null;
   fiscal_model: string | null;
   fiscal_status: string;
+  nfce: {
+    series: number;
+    number: number;
+    access_key: string;
+    environment: number;
+    emission_type: number;
+    status: string;
+    protocol: string | null;
+    status_code: string | null;
+    reason: string | null;
+    emitted_at: string;
+    authorized_at: string | null;
+  } | null;
   subtotal: number;
   discount_total: number;
   total: number;
@@ -120,6 +133,28 @@ function SaleView({ sale }: { sale: SaleDetail }) {
           {FISCAL_LABELS[sale.fiscal_status] ?? sale.fiscal_status}
           {sale.fiscal_model && ` · modelo ${sale.fiscal_model === "65" ? "NFC-e" : "NF-e"}`}
         </p>
+        {sale.nfce && (
+          <>
+            <p>
+              NFC-e série {sale.nfce.series} nº {sale.nfce.number}
+              {sale.nfce.environment === 2 && " (homologação, sem valor fiscal)"} · chave{" "}
+              <code>{sale.nfce.access_key.replace(/(\d{4})(?=\d)/g, "$1 ")}</code>
+            </p>
+            {sale.nfce.protocol && sale.nfce.authorized_at && (
+              <p>
+                Protocolo {sale.nfce.protocol} em {dateTimeText(sale.nfce.authorized_at)}
+              </p>
+            )}
+            {sale.nfce.status !== "authorized" && sale.nfce.reason && (
+              <p className={styles.warning}>
+                Sefaz{sale.nfce.status_code ? ` (${sale.nfce.status_code})` : ""}: {sale.nfce.reason}
+              </p>
+            )}
+            <p>
+              <a href={`/vendas/${sale.id}/nfce`}>Baixar o XML</a>
+            </p>
+          </>
+        )}
         {sale.quote_id && (
           <p>
             Veio do orçamento <Link href={`/orcamentos/${sale.quote_id}`}>{sale.quote_code}</Link>

@@ -1,4 +1,5 @@
-import { Controller, Get, Inject, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Inject, Param, Query, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { SessionGuard } from '../auth/session.guard.js';
 import { requireUuid } from '../common/parse.js';
 import { DatabaseService } from '../database.service.js';
@@ -32,9 +33,23 @@ export class SalesController {
   detail(@Param('id') id: string) {
     const saleId = requireUuid(id);
     return this.database.withContext(async (client) => {
-      const { rows } = await client.query<{ detail: unknown }>('SELECT app.sale_detail($1) AS detail', [saleId]);
+      const { rows } = await client.query<{ detail: Record<string, unknown> | null }>('SELECT app.sale_detail($1) AS detail', [saleId]);
       if (rows[0].detail === null) throw new AppError('FA006');
-      return rows[0].detail;
+      // NFC-e da venda (sem o XML), quando o caixa já mandou.
+      const fiscal = await client.query<{ d: unknown }>('SELECT app.sale_fiscal_document($1) AS d', [saleId]);
+      return { ...rows[0].detail, nfce: fiscal.rows[0].d };
     });
+  }
+
+  /** XML da NFC-e da venda (autorizado com o protocolo, ou o assinado quando ficou pendente). */
+  @Get(':id/nfce.xml')
+  async nfceXml(@Param('id') id: string, @Res() response: Response) {
+    const saleId = requireUuid(id);
+    const file = await this.database.withContext(async (client) => {
+      const { rows } = await client.query<{ x: { access_key: string; xml: string } | null }>('SELECT app.sale_fiscal_xml($1) AS x', [saleId]);
+      if (rows[0].x === null) throw new AppError('FA006');
+      return rows[0].x;
+    });
+    response.status(200).type('application/xml; charset=utf-8').attachment(`NFCe-${file.access_key}.xml`).send(file.xml);
   }
 }
