@@ -592,6 +592,20 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - **Dados pessoais:** vão só pela outbox e ficam no banco local criptografado e na central. Não entram no log nem no comprovante (que mostra lote, receita e farmacêutico).
 - **Seed:** Clonazepam de demonstração (lista B1, código de barras 7890000000055) com o lote CLZ01 na Loja Centro. O Administrador (PIN 2580) pode liberar.
 
+**NFC-e: motor fiscal no PDV (Etapa 8, 8A-1)**
+
+- **Onde:** `apps/pdv/lib/fiscal/`. Monta a NFC-e (modelo 65, leiaute 4.00) a partir da venda, dos dados fiscais da filial (`fiscal`) e da tributação do produto que desce do catálogo; assina; gera o QR Code. A emissão no caixa (transmissão, contingência e DANFE) é do 8A-2.
+- **Tributação atendida:** Simples (CSOSN 102, 103, 300, 400 e 500) e regime normal (CST 00, 20, 40, 41, 50 e 60); PIS e COFINS com alíquota, não tributados e outras. O resto (ST na operação, crédito do Simples etc.) dá FA723. Filial sem dado fiscal: FA724; UF fora das atendidas: FA725.
+- **Reforma tributária:** o grupo IBS/CBS (`IBSCBS` no item e `IBSCBSTot`) é montado só com `ibsCbs` ligado, por empresa, quando o contador confirmar.
+- **Homologação:** o primeiro item sai com "NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL" e o destinatário com o texto curto exigido.
+- **Assinatura:** XMLDSig envelopada (RSA-SHA1, C14N inclusiva) com a chave e o certificado que virão da central (o PDV não lê .pfx). `xml_c14n.dart` canonicaliza o que a NF-e usa.
+- **QR Code:** versão 2 (com o CSC), online e em contingência. A versão 3 (sem CSC no online) fica para depois de conferir a NT 2025.001 oficial: o formato da assinatura da contingência v3 não está publicado fora dela.
+- **Endereços por UF** (`nfce_urls.dart`): SP, PR, RS, SC e MG, homologação e produção. **Conferir no portal de cada UF antes de produção** (endereço errado é rejeição 395).
+- **Testes** (`test/nfce_test.dart`):
+  - o XML é validado contra os **schemas oficiais PL_010h v1.03** (em `test/fixtures/schemas`) pelo .NET do PowerShell (`tool/validate-xsd.ps1`), sem instalar nada;
+  - a assinatura de uma nota de referência é conferida **por outra implementação**, a `xml-crypto` da API (`apps/api/src/fiscal/nfce-signature.spec.ts`). A nota de referência é regravada com `UPDATE_NFCE_FIXTURE=1`;
+  - o certificado e a chave dos testes são autoassinados e só de teste.
+
 **SNGPC: manutenção (Etapa 8, entreposto)**
 
 - **Abertura por filial** (`app.sngpc_open`, permissão `sngpc.manage`, do Farmacêutico): o saldo de cada lote de controlado vira o inventário inicial. Saldo sem lote ou negativo fica fora e aparece no aviso, para acertar o estoque. Já aberto: FA861; ainda não aberto: FA862.

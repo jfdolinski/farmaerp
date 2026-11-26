@@ -3172,5 +3172,37 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": []
+  },
+  "FA723": {
+    "message": "Não foi possível emitir a nota de um produto desta venda.",
+    "action": "A tributação do produto não é atendida pela NFC-e. Confira o cadastro fiscal com o contador.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA724": {
+    "message": "A filial está sem os dados fiscais completos.",
+    "action": "Complete CNPJ, inscrição estadual, endereço e regime na retaguarda.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA725": {
+    "message": "A NFC-e ainda não é emitida no estado desta filial.",
+    "action": "Fale com o suporte para habilitar o estado.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA726": {
+    "message": "Os dados da nota fiscal estão incompletos.",
+    "action": "Confira a venda e tente de novo. Se continuar, informe o código ao suporte.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
   }
 }
