@@ -61,7 +61,7 @@ const pendingList = () => asUser(platform, 'SELECT * FROM app.platform_pending_i
 const resolve = (id, decision, data = {}) =>
   asUser(platform, 'SELECT app.platform_resolve_issuer($1, $2, $3::jsonb) AS r', [id, decision, JSON.stringify(data)]).then((r) => r[0].r);
 const pendingOf = async (cnpj) => (await ownerPool.query('SELECT * FROM import_pending_issuer WHERE economic_group_id = $1 AND cnpj = $2', [a.group.id, cnpj])).rows[0];
-const noteRow = async (job, k) => (await ownerPool.query("SELECT result, reason FROM document_import_note WHERE import_id = $1 AND access_key = $2 AND result <> 'duplicate'", [job, k])).rows[0];
+const noteRow = async (job, k) => (await ownerPool.query("SELECT result, reason FROM document_import_note WHERE import_id = $1 AND access_key = $2 AND result <> 'duplicate' AND entry_name <> 'canc.xml'", [job, k])).rows[0];
 const totalsOf = async (job) => (await ownerPool.query('SELECT totals FROM document_import WHERE id = $1', [job])).rows[0].totals;
 
 const issuerOf = (cnpj, overrides = {}) => ({
@@ -231,29 +231,85 @@ describe('filial nova de empresa do cliente e recusa', () => {
 });
 
 describe('cancelamento da nota que espera', () => {
-  it('na mesma importação: a nota sai da espera como cancelada, e o processamento desconta', async () => {
+  it('o cancelamento fica guardado; criada a empresa, a nota entra e já sai cancelada (estoque de volta, numeração conta)', async () => {
     const cnpj = branchCnpj(randomRoot(), 1);
     const job = await newJob();
-    const n = nfce(issuerOf(cnpj));
+    const n = nfce(issuerOf(cnpj), { number: 777 });
     expect((await importNfce(job, n)).result).toBe('waiting');
-    const [{ r }] = await asWorker('SELECT app.import_nfce_cancel($1, $2, $3, NULL) AS r', [job, 'canc.xml', n.access_key]);
-    expect(r).toEqual({ result: 'canceled', found: true, was_waiting: true });
-    expect(await noteRow(job, n.access_key)).toEqual({ result: 'canceled', reason: 'Nota cancelada enquanto esperava o destino do CNPJ.' });
-    expect((await ownerPool.query('SELECT status FROM import_waiting_note WHERE access_key = $1', [n.access_key])).rows[0].status).toBe('done');
+    const [{ r }] = await asWorker('SELECT app.import_nfce_cancel($1, $2, $3, $4) AS r', [job, 'canc.xml', n.access_key, '2026-06-10T11:00:00-03:00']);
+    expect(r).toEqual({ result: 'canceled', found: true });
+    // A nota continua esperando, com o cancelamento guardado.
+    expect(await noteRow(job, n.access_key)).toMatchObject({ result: 'waiting' });
+    const waiting = (await ownerPool.query('SELECT status, canceled_at, emitted_at FROM import_waiting_note WHERE access_key = $1', [n.access_key])).rows[0];
+    expect(waiting.status).toBe('waiting');
+    expect(waiting.canceled_at.toISOString()).toBe('2026-06-10T14:00:00.000Z');
+    expect(waiting.emitted_at.toISOString()).toBe('2026-06-10T13:00:00.000Z');
+    expect((await ownerPool.query("SELECT reason FROM document_import_note WHERE import_id = $1 AND entry_name = 'canc.xml'", [job])).rows[0].reason)
+      .toBe('Cancelamento guardado: a nota espera o destino do CNPJ e entra já cancelada.');
+    await finish(job, { waiting: 1, canceled: 1 });
+
+    await resolve((await pendingOf(cnpj)).id, 'create');
+    const [claimed] = (await asWorker('SELECT app.claim_released_import_notes(50) AS n'))[0].n.filter((x) => x.import_id === job);
+    await importNfce(claimed.import_id, claimed.note, claimed.entry);
+    const sale = (await ownerPool.query('SELECT id, branch_id, canceled_at FROM imported_sale WHERE access_key = $1', [n.access_key])).rows[0];
+    expect(sale.canceled_at.toISOString()).toBe('2026-06-10T14:00:00.000Z');
+    const stock = (await ownerPool.query(
+      'SELECT COALESCE(sum(m.quantity), 0)::numeric AS q FROM stock_movement m JOIN imported_sale_item i ON i.id = m.imported_sale_item_id OR m.reversal_of IN (SELECT id FROM stock_movement WHERE imported_sale_item_id = i.id) WHERE i.imported_sale_id = $1',
+      [sale.id],
+    )).rows[0].q;
+    expect(Number(stock)).toBe(0);
+    expect(await totalsOf(job)).toMatchObject({ waiting: 0, imported: 1, canceled: 1 });
+    // A cópia da nota não fica guardada depois que ela entra.
+    expect((await ownerPool.query('SELECT status, note FROM import_waiting_note WHERE access_key = $1', [n.access_key])).rows[0]).toEqual({ status: 'done', note: {} });
+    const report = (await asUser(a.admin, 'SELECT app.document_import_report($1) AS r', [job]))[0].r;
+    expect(report.last_numbers).toEqual(expect.arrayContaining([expect.objectContaining({ branch_id: sale.branch_id, model: '65', last_number: 777 })]));
   });
 
-  it('em importação posterior: a conta da importação que esperava muda', async () => {
+  it('cancelamento em importação posterior também fica guardado', async () => {
     const cnpj = branchCnpj(randomRoot(), 1);
     const job = await newJob();
     const n = nfce(issuerOf(cnpj));
     expect((await importNfce(job, n)).result).toBe('waiting');
-    await finish(job, { waiting: 1, canceled: 0 });
+    await finish(job, { waiting: 1 });
     const later = await newJob();
-    const [{ r }] = await asWorker('SELECT app.import_nfce_cancel($1, $2, $3, NULL) AS r', [later, 'canc.xml', n.access_key]);
-    expect(r).toEqual({ result: 'canceled', found: true, was_waiting: false });
-    expect(await totalsOf(job)).toMatchObject({ waiting: 0, canceled: 1 });
-    expect((await ownerPool.query("SELECT reason FROM document_import_note WHERE import_id = $1 AND entry_name = 'canc.xml'", [later])).rows[0].reason)
-      .toBe('Cancelamento de nota que esperava o destino do CNPJ.');
+    expect((await asWorker('SELECT app.import_nfce_cancel($1, $2, $3, NULL) AS r', [later, 'canc.xml', n.access_key]))[0].r)
+      .toEqual({ result: 'canceled', found: true });
+    expect((await ownerPool.query('SELECT canceled_at FROM import_waiting_note WHERE access_key = $1', [n.access_key])).rows[0].canceled_at).not.toBeNull();
+    expect(await totalsOf(job)).toMatchObject({ waiting: 1 });
+    // Recusada: a cópia também sai.
+    await resolve((await pendingOf(cnpj)).id, 'refuse');
+    expect((await ownerPool.query('SELECT status, note FROM import_waiting_note WHERE access_key = $1', [n.access_key])).rows[0]).toEqual({ status: 'done', note: {} });
+  });
+});
+
+describe('NF-e entre duas filiais novas', () => {
+  it('liberada uma, a nota volta a esperar pela outra; liberadas as duas, entra', async () => {
+    const root = randomRoot();
+    const from = branchCnpj(root, 1);
+    const to = branchCnpj(root, 2);
+    const job = await newJob();
+    // As duas filiais aparecem primeiro nas NFC-e (empresa nova).
+    expect((await importNfce(job, nfce(issuerOf(from)))).result).toBe('waiting');
+    expect((await importNfce(job, nfce(issuerOf(to)))).result).toBe('waiting');
+    const code = `T${randomInt(1e9)}`;
+    const transfer = nfe({ issuer: party(from, 'Origem'), dest: party(to, 'Destino'), items: [nfeItem({ code, cfop: '5152' })] });
+    expect((await importNfe(job, transfer)).result).toBe('waiting');
+    await finish(job, { waiting: 3 });
+    // Libera a de origem: a transferência volta a esperar pela de destino.
+    await resolve((await pendingOf(from)).id, 'create');
+    for (const n of (await asWorker('SELECT app.claim_released_import_notes(50) AS n'))[0].n.filter((x) => x.import_id === job)) {
+      await asWorker(`SELECT app.${n.model === '55' ? 'import_nfe' : 'import_nfce'}($1, $2, $3::jsonb)`, [n.import_id, n.entry, JSON.stringify(n.note)]);
+    }
+    const back = (await ownerPool.query('SELECT w.status, p.cnpj FROM import_waiting_note w JOIN import_pending_issuer p ON p.id = w.pending_issuer_id WHERE w.access_key = $1', [transfer.access_key])).rows[0];
+    expect(back).toEqual({ status: 'waiting', cnpj: to });
+    expect(await noteRow(job, transfer.access_key)).toMatchObject({ result: 'waiting', reason: expect.stringContaining(to.slice(12)) });
+    // Libera a de destino: entra (o produto ainda não existe, então a nota fica ignorada pelo motivo certo).
+    await resolve((await pendingOf(to)).id, 'create');
+    for (const n of (await asWorker('SELECT app.claim_released_import_notes(50) AS n'))[0].n.filter((x) => x.import_id === job)) {
+      await asWorker(`SELECT app.${n.model === '55' ? 'import_nfe' : 'import_nfce'}($1, $2, $3::jsonb)`, [n.import_id, n.entry, JSON.stringify(n.note)]);
+    }
+    expect(await noteRow(job, transfer.access_key)).toMatchObject({ result: 'ignored', reason: expect.stringContaining('Nenhum item') });
+    expect(await totalsOf(job)).toMatchObject({ waiting: 0 });
   });
 });
 

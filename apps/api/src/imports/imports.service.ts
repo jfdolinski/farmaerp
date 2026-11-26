@@ -13,8 +13,9 @@ const TICK_MS = 10_000;
 /** Uma nota tem poucos KB; acima disso a entrada não é lida (protege a memória). */
 const MAX_ENTRY_BYTES = 10 * 1024 * 1024;
 const PROGRESS_EVERY = 100;
-/** Notas liberadas pela plataforma processadas por rodada. */
-const RELEASED_PER_TICK = 50;
+/** Notas liberadas pela plataforma: reservadas de 50 em 50, por até 8 segundos a cada rodada. */
+const RELEASED_BATCH = 50;
+const RELEASED_BUDGET_MS = 8_000;
 
 interface ReleasedNote {
   import_id: string;
@@ -148,22 +149,28 @@ export class ImportsService implements OnApplicationBootstrap, OnModuleDestroy {
    * Notas que esperavam o destino do CNPJ e foram liberadas pela plataforma: entram pela
    * importação delas (NFC-e antes, que criam os produtos). Uma falha não para as outras.
    */
-  async processReleased(): Promise<number> {
-    const notes = await this.worker(async (client) =>
-      (await client.query<{ n: ReleasedNote[] }>('SELECT app.claim_released_import_notes($1) AS n', [RELEASED_PER_TICK])).rows[0].n,
-    );
-    for (const note of notes) {
-      const function_ = note.model === '55' ? 'import_nfe' : 'import_nfce';
-      try {
-        await this.worker((client) =>
-          client.query(`SELECT app.${function_}($1, $2, $3::jsonb)`, [note.import_id, note.entry, JSON.stringify(note.note)]),
-        );
-      } catch (error) {
-        this.logger.pino.warn({ context: 'ImportsService', importId: note.import_id, model: note.model, err: error }, 'nota liberada não processada');
+  async processReleased(budgetMs = RELEASED_BUDGET_MS): Promise<number> {
+    const started = Date.now();
+    let total = 0;
+    while (Date.now() - started < budgetMs) {
+      const notes = await this.worker(async (client) =>
+        (await client.query<{ n: ReleasedNote[] }>('SELECT app.claim_released_import_notes($1) AS n', [RELEASED_BATCH])).rows[0].n,
+      );
+      if (notes.length === 0) break;
+      for (const note of notes) {
+        const function_ = note.model === '55' ? 'import_nfe' : 'import_nfce';
+        try {
+          await this.worker((client) =>
+            client.query(`SELECT app.${function_}($1, $2, $3::jsonb)`, [note.import_id, note.entry, JSON.stringify(note.note)]),
+          );
+        } catch (error) {
+          this.logger.pino.warn({ context: 'ImportsService', importId: note.import_id, model: note.model, err: error }, 'nota liberada não processada');
+        }
       }
+      total += notes.length;
     }
-    if (notes.length > 0) this.logger.pino.info({ context: 'ImportsService', released: notes.length }, 'notas liberadas pela plataforma');
-    return notes.length;
+    if (total > 0) this.logger.pino.info({ context: 'ImportsService', released: total }, 'notas liberadas pela plataforma');
+    return total;
   }
 
   async process(dir: string, id: string): Promise<ImportTotals> {
@@ -230,12 +237,10 @@ export class ImportsService implements OnApplicationBootstrap, OnModuleDestroy {
         });
       }
       for (const cancel of cancels) {
-        const { rows } = await this.worker((client) =>
-          client.query<{ r: { was_waiting?: boolean } }>('SELECT app.import_nfce_cancel($1, $2, $3, $4) AS r', [id, cancel.entry, cancel.key, cancel.at]),
+        await this.worker((client) =>
+          client.query('SELECT app.import_nfce_cancel($1, $2, $3, $4)', [id, cancel.entry, cancel.key, cancel.at]),
         );
         totals.canceled += 1;
-        // A nota deste arquivo que esperava o destino saiu da espera, cancelada.
-        if (rows[0].r.was_waiting) totals.waiting -= 1;
       }
       await progress('done', null);
       await rm(importFilePath(dir, id), { force: true });

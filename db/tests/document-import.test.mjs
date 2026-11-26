@@ -179,7 +179,7 @@ describe('NFC-e importada', () => {
     // De novo não devolve duas vezes; cancelamento de nota fora da importação só fica no relatório.
     await asWorker('SELECT app.import_nfce_cancel($1, $2, $3, $4)', [job, 'cancelamento.xml', first.access_key, null]);
     expect(await balanceOf(productA)).toBe(-4);
-    expect((await asWorker('SELECT app.import_nfce_cancel($1, $2, $3, $4) AS r', [job, 'outro.xml', key(), null]))[0].r).toEqual({ result: 'canceled', found: false, was_waiting: false });
+    expect((await asWorker('SELECT app.import_nfce_cancel($1, $2, $3, $4) AS r', [job, 'outro.xml', key(), null]))[0].r).toEqual({ result: 'canceled', found: false });
 
     await asWorker('SELECT app.import_note_result($1, $2, NULL, NULL, $3, $4, $5)', [job, 'lixo.txt', 'ignored', null, 'Arquivo que não é nota']);
     await asWorker('SELECT app.document_import_progress($1, $2::jsonb, $3, NULL)', [job, JSON.stringify({ imported: 3 }), 'done']);

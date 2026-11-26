@@ -62,6 +62,9 @@ CREATE TABLE import_waiting_note (
   model text NOT NULL CONSTRAINT import_waiting_note_model_check CHECK (model IN ('55', '65')),
   note jsonb NOT NULL CONSTRAINT import_waiting_note_note_check CHECK (jsonb_typeof(note) = 'object'),
   status text NOT NULL DEFAULT 'waiting' CONSTRAINT import_waiting_note_status_check CHECK (status IN ('waiting', 'released', 'done')),
+  -- Emissão da nota (a lista da plataforma não abre o XML) e o cancelamento que chegou enquanto esperava.
+  emitted_at timestamptz NOT NULL,
+  canceled_at timestamptz,
   locked_until timestamptz,
   processed_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -73,6 +76,7 @@ CREATE TABLE import_waiting_note (
   CONSTRAINT import_waiting_note_done_check CHECK ((status = 'done') = (processed_at IS NOT NULL))
 );
 CREATE UNIQUE INDEX import_waiting_note_key ON import_waiting_note (access_key) WHERE status <> 'done' AND deleted_at IS NULL;
+CREATE INDEX import_waiting_note_access_key_idx ON import_waiting_note (access_key);
 CREATE INDEX import_waiting_note_pending_idx ON import_waiting_note (pending_issuer_id, status);
 CREATE INDEX import_waiting_note_released_idx ON import_waiting_note (created_at) WHERE status = 'released' AND deleted_at IS NULL;
 CREATE INDEX import_waiting_note_import_idx ON import_waiting_note (import_id, status);
@@ -80,7 +84,7 @@ CREATE INDEX import_waiting_note_import_note_id_idx ON import_waiting_note (impo
 CALL app.apply_table_standard('public.import_waiting_note');
 CREATE TRIGGER block_immutable_columns BEFORE UPDATE ON import_waiting_note
   FOR EACH ROW EXECUTE FUNCTION app.block_immutable_columns(
-    'economic_group_id', 'import_id', 'import_note_id', 'entry_name', 'access_key', 'model', 'note'
+    'economic_group_id', 'import_id', 'import_note_id', 'entry_name', 'access_key', 'model', 'emitted_at'
   );
 CREATE POLICY import_waiting_note_select ON import_waiting_note FOR SELECT TO farmaerp_app
   USING (economic_group_id = (SELECT app.current_user_group()));
@@ -267,9 +271,14 @@ BEGIN
     END IF;
     UPDATE public.document_import_note n SET result = p_outcome, error_code = p_code, reason = p_reason
      WHERE n.id = v_waiting.import_note_id;
-    UPDATE public.import_waiting_note w SET status = 'done', processed_at = pg_catalog.now(), locked_until = NULL
+    -- A cópia da nota não fica guardada duas vezes: o XML já está na venda ou na nota importada.
+    UPDATE public.import_waiting_note w SET status = 'done', processed_at = pg_catalog.now(), locked_until = NULL, note = '{}'::jsonb
      WHERE w.id = v_waiting.id;
     PERFORM app.import_totals_move(p_job.id, 'waiting', p_outcome, 1);
+    -- Cancelada enquanto esperava: entra e já sai cancelada, como as outras.
+    IF p_outcome = 'imported' AND v_waiting.canceled_at IS NOT NULL THEN
+      PERFORM app.import_cancel_apply(p_job.economic_group_id, p_key, v_waiting.canceled_at);
+    END IF;
     RETURN;
   END IF;
   INSERT INTO public.document_import_note (economic_group_id, import_id, entry_name, access_key, model, result, error_code, reason)
@@ -279,9 +288,10 @@ BEGIN
   ) RETURNING id INTO v_note_id;
   IF p_outcome = 'waiting' THEN
     INSERT INTO public.import_waiting_note (
-      economic_group_id, import_id, import_note_id, pending_issuer_id, entry_name, access_key, model, note
+      economic_group_id, import_id, import_note_id, pending_issuer_id, entry_name, access_key, model, note, emitted_at
     ) VALUES (
-      p_job.economic_group_id, p_job.id, v_note_id, p_pending, pg_catalog.left(COALESCE(p_entry, '?'), 300), p_key, p_model, p_note
+      p_job.economic_group_id, p_job.id, v_note_id, p_pending, pg_catalog.left(COALESCE(p_entry, '?'), 300), p_key, p_model, p_note,
+      (p_note ->> 'emitted_at')::timestamptz
     );
   END IF;
 END;
@@ -358,7 +368,7 @@ BEGIN
   SELECT * INTO job FROM public.document_import d
    WHERE d.id = p_import_id AND (d.status = 'processing' OR EXISTS (
      SELECT 1 FROM public.import_waiting_note w
-      WHERE w.import_id = d.id AND w.access_key = p_note ->> 'access_key' AND w.status = 'released'));
+      WHERE w.access_key = p_note ->> 'access_key' AND w.import_id = d.id AND w.status = 'released' AND w.deleted_at IS NULL));
   IF job.id IS NULL THEN
     RAISE EXCEPTION 'O recurso solicitado não foi encontrado.' USING ERRCODE = 'FA006', DETAIL = 'Importação fora do processamento.';
   END IF;
@@ -484,7 +494,7 @@ BEGIN
   SELECT * INTO job FROM public.document_import d
    WHERE d.id = p_import_id AND (d.status = 'processing' OR EXISTS (
      SELECT 1 FROM public.import_waiting_note w
-      WHERE w.import_id = d.id AND w.access_key = p_note ->> 'access_key' AND w.status = 'released'));
+      WHERE w.access_key = p_note ->> 'access_key' AND w.import_id = d.id AND w.status = 'released' AND w.deleted_at IS NULL));
   IF job.id IS NULL THEN
     RAISE EXCEPTION 'O recurso solicitado não foi encontrado.' USING ERRCODE = 'FA006', DETAIL = 'Importação fora do processamento.';
   END IF;
@@ -678,26 +688,21 @@ END;
 $$;
 
 
-CREATE OR REPLACE FUNCTION app.import_nfce_cancel(p_import_id uuid, p_entry text, p_key text, p_canceled_at timestamptz) RETURNS jsonb
+-- Desfaz a venda ou a nota de estoque importada com a chave: devolve o estoque e tira o custo que a
+-- compra cancelada tinha posto. Devolve se achou a nota.
+CREATE FUNCTION app.import_cancel_apply(p_group_id uuid, p_key text, p_at timestamptz) RETURNS boolean
 LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = ''
 AS $$
 DECLARE
-  job public.document_import;
   sale public.imported_sale;
   stock_note public.imported_stock_note;
   movement public.stock_movement;
   entry public.product_cost;
-  at timestamptz := COALESCE(p_canceled_at, pg_catalog.now());
-  waiting public.import_waiting_note;
+  at timestamptz := COALESCE(p_at, pg_catalog.now());
 BEGIN
-  PERFORM app.require_import_worker();
-  SELECT * INTO job FROM public.document_import d WHERE d.id = p_import_id AND d.status = 'processing';
-  IF job.id IS NULL THEN
-    RAISE EXCEPTION 'O recurso solicitado não foi encontrado.' USING ERRCODE = 'FA006', DETAIL = 'Importação fora do processamento.';
-  END IF;
   SELECT * INTO sale FROM public.imported_sale s
-   WHERE s.access_key = p_key AND s.economic_group_id = job.economic_group_id AND s.deleted_at IS NULL FOR UPDATE;
+   WHERE s.access_key = p_key AND s.economic_group_id = p_group_id AND s.deleted_at IS NULL FOR UPDATE;
   IF sale.id IS NOT NULL AND sale.canceled_at IS NULL THEN
     UPDATE public.imported_sale s SET canceled_at = at WHERE s.id = sale.id;
     FOR movement IN
@@ -711,7 +716,7 @@ BEGIN
     END LOOP;
   END IF;
   SELECT * INTO stock_note FROM public.imported_stock_note n
-   WHERE n.access_key = p_key AND n.economic_group_id = job.economic_group_id AND n.deleted_at IS NULL FOR UPDATE;
+   WHERE n.access_key = p_key AND n.economic_group_id = p_group_id AND n.deleted_at IS NULL FOR UPDATE;
   IF stock_note.id IS NOT NULL AND stock_note.canceled_at IS NULL THEN
     UPDATE public.imported_stock_note n SET canceled_at = at WHERE n.id = stock_note.id;
     FOR movement IN
@@ -744,34 +749,42 @@ BEGIN
       );
     END LOOP;
   END IF;
-  -- Nota que ainda espera o destino do CNPJ: não entra mais (cancelada).
-  IF sale.id IS NULL AND stock_note.id IS NULL THEN
-    SELECT * INTO waiting FROM public.import_waiting_note w
+  RETURN sale.id IS NOT NULL OR stock_note.id IS NOT NULL;
+END;
+$$;
+
+-- Cancelamento (evento 110111) de NFC-e ou NF-e importada. Nota que ainda espera o destino do CNPJ:
+-- o cancelamento fica guardado e vale quando ela entrar (a venda aparece cancelada, como as outras).
+CREATE OR REPLACE FUNCTION app.import_nfce_cancel(p_import_id uuid, p_entry text, p_key text, p_canceled_at timestamptz) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  job public.document_import;
+  at timestamptz := COALESCE(p_canceled_at, pg_catalog.now());
+  found boolean;
+  waiting uuid;
+BEGIN
+  PERFORM app.require_import_worker();
+  SELECT * INTO job FROM public.document_import d WHERE d.id = p_import_id AND d.status = 'processing';
+  IF job.id IS NULL THEN
+    RAISE EXCEPTION 'O recurso solicitado não foi encontrado.' USING ERRCODE = 'FA006', DETAIL = 'Importação fora do processamento.';
+  END IF;
+  found := app.import_cancel_apply(job.economic_group_id, p_key, at);
+  IF NOT found THEN
+    UPDATE public.import_waiting_note w SET canceled_at = COALESCE(w.canceled_at, at)
      WHERE w.access_key = p_key AND w.economic_group_id = job.economic_group_id AND w.status IN ('waiting', 'released')
        AND w.deleted_at IS NULL
-     FOR UPDATE;
-    IF waiting.id IS NOT NULL THEN
-      UPDATE public.import_waiting_note w SET status = 'done', processed_at = pg_catalog.now(), locked_until = NULL WHERE w.id = waiting.id;
-      UPDATE public.document_import_note n SET result = 'canceled', reason = 'Nota cancelada enquanto esperava o destino do CNPJ.'
-       WHERE n.id = waiting.import_note_id;
-      -- Na importação em andamento, quem conta é o processamento; nas anteriores, a conta muda aqui.
-      IF waiting.import_id <> job.id THEN
-        PERFORM app.import_totals_move(waiting.import_id, 'waiting', 'canceled', 1);
-      END IF;
-    END IF;
+    RETURNING w.id INTO waiting;
   END IF;
   INSERT INTO public.document_import_note (economic_group_id, import_id, entry_name, access_key, model, result, reason)
   VALUES (job.economic_group_id, job.id, pg_catalog.left(COALESCE(p_entry, '?'), 300), CASE WHEN p_key ~ '^[0-9]{44}$' THEN p_key END,
           CASE WHEN pg_catalog.substr(p_key, 21, 2) ~ '^[0-9]{2}$' THEN pg_catalog.substr(p_key, 21, 2) END, 'canceled',
-          CASE WHEN waiting.id IS NOT NULL THEN 'Cancelamento de nota que esperava o destino do CNPJ.'
-               WHEN sale.id IS NULL AND stock_note.id IS NULL THEN 'Cancelamento de nota que não está na importação.' END);
-  RETURN pg_catalog.jsonb_build_object(
-    'result', 'canceled', 'found', sale.id IS NOT NULL OR stock_note.id IS NOT NULL OR waiting.id IS NOT NULL,
-    'was_waiting', waiting.id IS NOT NULL AND waiting.import_id = job.id
-  );
+          CASE WHEN waiting IS NOT NULL THEN 'Cancelamento guardado: a nota espera o destino do CNPJ e entra já cancelada.'
+               WHEN NOT found THEN 'Cancelamento de nota que não está na importação.' END);
+  RETURN pg_catalog.jsonb_build_object('result', 'canceled', 'found', found OR waiting IS NOT NULL);
 END;
 $$;
-
 
 CREATE OR REPLACE FUNCTION app.document_import_report(p_import_id uuid) RETURNS jsonb
 LANGUAGE plpgsql STABLE SECURITY DEFINER
@@ -895,9 +908,9 @@ BEGIN
          CASE WHEN c.id IS NULL THEN 'company' ELSE 'branch' END, c.legal_name,
          (SELECT pg_catalog.count(*)::integer FROM public.import_waiting_note w
            WHERE w.pending_issuer_id = p.id AND w.status = 'waiting' AND w.deleted_at IS NULL),
-         (SELECT pg_catalog.min((w.note ->> 'emitted_at')::timestamptz) FROM public.import_waiting_note w
+         (SELECT pg_catalog.min(w.emitted_at) FROM public.import_waiting_note w
            WHERE w.pending_issuer_id = p.id AND w.status = 'waiting' AND w.deleted_at IS NULL),
-         (SELECT pg_catalog.max((w.note ->> 'emitted_at')::timestamptz) FROM public.import_waiting_note w
+         (SELECT pg_catalog.max(w.emitted_at) FROM public.import_waiting_note w
            WHERE w.pending_issuer_id = p.id AND w.status = 'waiting' AND w.deleted_at IS NULL),
          p.created_at
     FROM public.import_pending_issuer p
@@ -954,7 +967,7 @@ BEGIN
        SET result = 'ignored', reason = 'O administrador da plataforma recusou a empresa deste CNPJ.'
       FROM public.import_waiting_note w
      WHERE w.import_note_id = n.id AND w.pending_issuer_id = v_pending.id AND w.status = 'waiting' AND w.deleted_at IS NULL;
-    UPDATE public.import_waiting_note w SET status = 'done', processed_at = pg_catalog.now()
+    UPDATE public.import_waiting_note w SET status = 'done', processed_at = pg_catalog.now(), note = '{}'::jsonb
      WHERE w.pending_issuer_id = v_pending.id AND w.status = 'waiting' AND w.deleted_at IS NULL;
     GET DIAGNOSTICS v_count = ROW_COUNT;
     RETURN pg_catalog.jsonb_build_object('status', 'refused', 'notes', v_count);

@@ -51,7 +51,9 @@ export interface IssuerDecisionState {
 
 /** Destino do CNPJ que veio nas notas importadas: cria a empresa e a filial (ou só a filial) ou recusa. */
 export async function decideIssuer(_previous: IssuerDecisionState, form: FormData): Promise<IssuerDecisionState> {
-  const decision = text(form, "decision") === "refuse" ? "refuse" : "create";
+  const choice = text(form, "decision");
+  if (choice !== "create" && choice !== "refuse") return { error: { code: "FA005", message: "Alguns dados informados são inválidos.", action: "Escolha criar ou recusar.", retryable: false, traceId: null } };
+  const decision: "create" | "refuse" = choice;
   const body = {
     decision,
     legalName: optional(form, "legalName"),
