@@ -12,7 +12,7 @@ const EXPECTED_TABLES = [
   'product_price', 'product_rule', 'product_status_event', 'product_supplier', 'purchase_invoice', 'purchase_invoice_document', 'purchase_invoice_event', 'purchase_invoice_item',
   'purchase_invoice_item_batch', 'purchase_invoice_item_cost_release', 'purchase_invoice_summary', 'quote', 'quote_item', 'region', 'role', 'role_limit', 'role_permission', 'rule_type', 'sale',
   'sale_alert', 'sale_item', 'sale_item_discount', 'sale_payment', 'sale_return', 'sale_return_item', 'sales_channel', 'service_invoice', 'sngpc_branch', 'sngpc_credential', 'sngpc_dispensing_complement', 'sngpc_movement', 'sngpc_submission', 'stock_balance', 'stock_movement', 'supervisor_release', 'supplier', 'sync_change',
-  'sync_conflict', 'sync_receipt', 'terminal', 'terminal_event', 'terminal_fiscal_series', 'terminal_fiscal_series_event', 'terminal_log', 'terminal_pairing_request', 'terminal_status', 'terminal_update_event',
+  'sync_conflict', 'sync_receipt', 'terminal', 'terminal_credential_delivery', 'terminal_event', 'terminal_fiscal_series', 'terminal_fiscal_series_event', 'terminal_log', 'terminal_pairing_request', 'terminal_status', 'terminal_update_event',
   'user_account', 'user_branch', 'user_credential', 'user_pin', 'user_role', 'user_session',
 ];
 
@@ -76,7 +76,7 @@ describe('migrations', () => {
       '0037_quotes',
       '0038_quote_checkout',
       '0039_sale_returns',
-      '0040_return_credit', '0041_pdv_auth', '0042_face', '0043_discounts', '0044_sale_discounts', '0045_sync_retry', '0046_store_credit', '0047_store_credit_pdv', '0048_platform', '0049_cashback', '0050_cashback_pdv', '0051_agreement_invoice', '0052_sngpc_maintenance', '0053_app_release', '0054_sngpc_submission', '0056_controlled_antimicrobial_buyer',
+      '0040_return_credit', '0041_pdv_auth', '0042_face', '0043_discounts', '0044_sale_discounts', '0045_sync_retry', '0046_store_credit', '0047_store_credit_pdv', '0048_platform', '0049_cashback', '0050_cashback_pdv', '0051_agreement_invoice', '0052_sngpc_maintenance', '0053_app_release', '0054_sngpc_submission', '0055_nfce_terminal_credentials', '0056_controlled_antimicrobial_buyer',
     ]);
   });
 });

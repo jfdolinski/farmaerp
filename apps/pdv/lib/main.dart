@@ -15,6 +15,7 @@ import 'customers/customer_service.dart';
 import 'face/face_camera.dart';
 import 'face/face_engine.dart';
 import 'face/face_service.dart';
+import 'fiscal/nfce_credentials.dart';
 import 'local/local_database.dart';
 import 'pos/display_settings.dart';
 import 'pos/pdv_home.dart';
@@ -134,10 +135,15 @@ Future<void> main() async {
   // Avisos e erros sobem para a central pela outbox.
   logger.onEntry = (entry) => database.enqueueLog(entry, now: DateTime.now());
 
+  // NFC-e: o certificado e o CSC chegam cifrados para a chave deste caixa.
+  final nfceCredentials = NfceCredentialService(api: api, database: database, store: store, logger: logger);
+
   final controller = terminal = TerminalController(
     api: api,
     store: store,
     sync: SyncService(api: api, database: database, logger: logger),
+    afterSync: (accessToken, terminalId, sign) =>
+        nfceCredentials.refresh(accessToken: accessToken, terminalId: terminalId, sign: sign),
     platform: Platform.operatingSystem,
     deviceName: Platform.localHostname,
     appVersion: _appVersion,

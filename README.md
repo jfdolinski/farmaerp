@@ -608,6 +608,16 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - a assinatura de uma nota de referência é conferida **por outra implementação**, a `xml-crypto` da API (`apps/api/src/fiscal/nfce-signature.spec.ts`). A nota de referência é regravada com `UPDATE_NFCE_FIXTURE=1`;
   - o certificado e a chave dos testes são autoassinados e só de teste.
 
+**NFC-e: certificado no caixa (Etapa 8, 8A-2a)**
+
+- **Emitir NFC-e por filial** (tela Fiscal, permissão `fiscal.manage`; `app.set_branch_nfce`): ligado ou não, ambiente (homologação por padrão, ou produção) e prazo da contingência (1 a 168 horas, padrão 24; o caixa avisa na metade). Para ligar: estado atendido (FA725), inscrição estadual, regime e CSC (FA727) e certificado dentro da validade (FA943). Valores fora disso: FA728. Desligar não pede nada.
+- **Chave do caixa:** cada caixa cria uma chave X25519 só para receber o certificado (guardada como a chave do terminal) e a registra em `POST /terminals/nfce/key`, assinada pela chave Ed25519 do terminal (`farmaerp-terminal-fiscal-key:{terminal}:{chave}`). Assinatura que não confere: FA731.
+- **Entrega** (`POST /terminals/nfce/credentials`, `app.terminal_nfce_credentials`): só para caixa ou autoatendimento (FA729) de filial com a NFC-e ligada (FA730). A API abre o .pfx e o CSC só durante a chamada e devolve chave privada (PKCS#8), certificado do titular e CSC cifrados para aquele caixa: X25519 com chave temporária, HKDF-SHA256 e AES-256-GCM, com o terminal e a versão autenticados junto. Cada entrega fica em `terminal_credential_delivery` (sem o conteúdo).
+- **Troca:** certificado ou CSC novo muda a `credential_version` que desce nos dados fiscais (`nfce`); o caixa busca de novo na sincronização seguinte. Filial desligada: o caixa apaga o que guardou.
+- **No PDV** (`lib/fiscal/nfce_credentials.dart`): a entrega fica no banco local como chegou, ainda cifrada (tabela `nfce_credential`), e só é aberta em memória para emitir. A barra inferior mostra "NFC-e: aguardando o certificado", "pronta" ou "certificado vencido". Entrega que não abre: FA732.
+- **Tela Fiscal:** o que falta para ligar e quantos caixas já receberam o certificado em uso.
+- **Testes:** a entrega de referência (`apps/pdv/test/fixtures/fiscal/entrega-certificado.json`, chave e certificado só de teste) é gerada com o código da API e aberta tanto pelo PDV (Dart) quanto pela API.
+
 **SNGPC: manutenção (Etapa 8, entreposto)**
 
 - **Abertura por filial** (`app.sngpc_open`, permissão `sngpc.manage`, do Farmacêutico): o saldo de cada lote de controlado vira o inventário inicial. Saldo sem lote ou negativo fica fora e aparece no aviso, para acertar o estoque. Já aberto: FA861; ainda não aberto: FA862.

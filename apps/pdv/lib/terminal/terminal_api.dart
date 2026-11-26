@@ -127,6 +127,12 @@ abstract class TerminalApi {
   /// Orçamento pela plaquinha ou pelo código do cupom (com internet).
   Future<Map<String, dynamic>> quote({required String accessToken, required String key});
 
+  /// Registra a chave de criptografia do caixa (NFC-e), assinada pela chave do terminal.
+  Future<void> registerFiscalKey({required String accessToken, required String publicKey, required String signature});
+
+  /// Certificado e CSC da NFC-e, cifrados para a chave do caixa.
+  Future<Map<String, dynamic>> nfceCredentials({required String accessToken});
+
   /// Um pacote da descida. Sem cursor, a carga inteira.
   Future<PullPage> pull({
     required String accessToken,
@@ -431,4 +437,13 @@ class HttpTerminalApi implements TerminalApi {
     );
     return PullPage.fromJson(json);
   }
+
+  @override
+  Future<void> registerFiscalKey({required String accessToken, required String publicKey, required String signature}) async {
+    await _post('/terminals/nfce/key', {'publicKey': publicKey, 'signature': signature}, accessToken: accessToken);
+  }
+
+  @override
+  Future<Map<String, dynamic>> nfceCredentials({required String accessToken}) =>
+      _post('/terminals/nfce/credentials', const {}, accessToken: accessToken);
 }

@@ -50,6 +50,30 @@ export class FiscalController {
     });
   }
 
+  @Get('nfce')
+  nfce() {
+    return this.database.withContext(async (client) => {
+      const { rows } = await client.query('SELECT * FROM app.nfce_settings()');
+      return rows;
+    });
+  }
+
+  /** "Emitir NFC-e" da filial: ligado, ambiente (1 produção, 2 homologação) e prazo da contingência. */
+  @Put('branches/:id/nfce')
+  async setNfce(@Param('id') id: string, @RequestBody() rawBody: unknown) {
+    const branchId = requireUuid(id);
+    const { enabled, environment, contingencyHours } = asBody(rawBody);
+    if (typeof enabled !== 'boolean' || !isWholeNumber(environment, 32767) || !isWholeNumber(contingencyHours, 32767)) {
+      throw new AppError('FA728');
+    }
+    await this.database.withContext((client) =>
+      client.query('SELECT app.set_branch_nfce($1, $2, $3::smallint, $4::smallint)', [
+        branchId, enabled, environment, contingencyHours,
+      ]),
+    );
+    return { status: 'ok' };
+  }
+
   @Get('series')
   series() {
     return this.database.withContext(async (client) => {

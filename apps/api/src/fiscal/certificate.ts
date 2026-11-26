@@ -30,35 +30,58 @@ function bagsOf(p12: forge.pkcs12.Pkcs12Pfx, bagType: string): forge.pkcs12.Bag[
   return p12.getBags({ bagType })[bagType] ?? [];
 }
 
-/**
- * Abre o .pfx e devolve os dados de exibição. O certificado escolhido é o que corresponde à
- * chave privada do arquivo, porque a cadeia da certificadora vem junto. Nada do titular além
- * do nome e do CNPJ é lido: o CPF do responsável, que também está no arquivo, não sai daqui.
- */
-export function readCertificate(pfx: Buffer, password: string): CertificateInfo {
+/** Chave privada e o certificado que corresponde a ela (a cadeia da certificadora vem junto). */
+function openPfx(pfx: Buffer, password: string): { key: forge.pki.rsa.PrivateKey; certificate: forge.pki.Certificate } {
+  let key: forge.pki.rsa.PrivateKey | undefined;
   let certificate: forge.pki.Certificate | undefined;
   try {
     const asn1 = forge.asn1.fromDer(forge.util.createBuffer(pfx.toString('binary')));
     const p12 = forge.pkcs12.pkcs12FromAsn1(asn1, true, password);
     const { pkcs8ShroudedKeyBag, keyBag, certBag } = forge.pki.oids;
-    const key = [...bagsOf(p12, pkcs8ShroudedKeyBag), ...bagsOf(p12, keyBag)][0]?.key as
+    key = [...bagsOf(p12, pkcs8ShroudedKeyBag), ...bagsOf(p12, keyBag)][0]?.key as
       | forge.pki.rsa.PrivateKey
       | undefined;
     if (key) {
+      const privateKey = key;
       certificate = bagsOf(p12, certBag)
         .map((bag) => bag.cert)
         .find((cert): cert is forge.pki.Certificate => {
           const publicKey = cert?.publicKey as forge.pki.rsa.PublicKey | undefined;
-          return publicKey?.n?.equals(key.n) === true && publicKey.e.equals(key.e);
+          return publicKey?.n?.equals(privateKey.n) === true && publicKey.e.equals(privateKey.e);
         });
     }
   } catch (cause) {
     throw new AppError('FA912', { cause });
   }
-  if (!certificate) {
+  if (!key || !certificate) {
     throw new AppError('FA912');
   }
+  return { key, certificate };
+}
 
+export interface SigningMaterial {
+  /** Chave privada em PKCS#8 (PEM), para a assinatura da nota no caixa. */
+  privateKey: string;
+  /** Só o certificado do titular (PEM); vai dentro da assinatura. */
+  certificate: string;
+}
+
+/** O que o caixa precisa para assinar a NFC-e. Só existe aberto durante a entrega ao caixa. */
+export function signingMaterial(pfx: Buffer, password: string): SigningMaterial {
+  const { key, certificate } = openPfx(pfx, password);
+  const pkcs8 = forge.pki.wrapRsaPrivateKey(forge.pki.privateKeyToAsn1(key));
+  return {
+    privateKey: forge.pki.privateKeyInfoToPem(pkcs8),
+    certificate: forge.pki.certificateToPem(certificate),
+  };
+}
+
+/**
+ * Abre o .pfx e devolve os dados de exibição. Nada do titular além do nome e do CNPJ é lido:
+ * o CPF do responsável, que também está no arquivo, não sai daqui.
+ */
+export function readCertificate(pfx: Buffer, password: string): CertificateInfo {
+  const { certificate } = openPfx(pfx, password);
   const commonName = String(certificate.subject.getField('CN')?.value ?? '').trim();
   const cnpj = cnpjOf(certificate, commonName);
   if (!cnpj) {
