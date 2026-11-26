@@ -286,7 +286,8 @@
       "stock_count_id_uuid_v7_check",
       "stock_count_item_id_uuid_v7_check",
       "fiscal_event_id_uuid_v7_check",
-      "fiscal_number_void_id_uuid_v7_check"
+      "fiscal_number_void_id_uuid_v7_check",
+      "pdv_cart_discard_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -2035,7 +2036,12 @@
       "credit_allocation_principal_check",
       "credit_allocation_open_check",
       "credit_allocation_total_check",
-      "credit_payment_return_check"
+      "credit_payment_return_check",
+      "pdv_cart_discard_screen_check",
+      "pdv_cart_discard_items_count_check",
+      "pdv_cart_discard_total_check",
+      "pdv_cart_discard_alert_check",
+      "pdv_cart_discard_self_check"
     ]
   },
   "FA963": {
