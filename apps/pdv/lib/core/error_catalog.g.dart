@@ -592,6 +592,30 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Confira o usuário e a senha do SNGPC do farmacêutico responsável e cadastre de novo.',
     retryable: false,
   ),
+  'FA723': ErrorCatalogEntry(
+    code: 'FA723',
+    message: 'Não foi possível emitir a nota de um produto desta venda.',
+    action: 'A tributação do produto não é atendida pela NFC-e. Confira o cadastro fiscal com o contador.',
+    retryable: false,
+  ),
+  'FA724': ErrorCatalogEntry(
+    code: 'FA724',
+    message: 'A filial está sem os dados fiscais completos.',
+    action: 'Complete CNPJ, inscrição estadual, endereço e regime na retaguarda.',
+    retryable: false,
+  ),
+  'FA725': ErrorCatalogEntry(
+    code: 'FA725',
+    message: 'A NFC-e ainda não é emitida no estado desta filial.',
+    action: 'Fale com o suporte para habilitar o estado.',
+    retryable: false,
+  ),
+  'FA726': ErrorCatalogEntry(
+    code: 'FA726',
+    message: 'Os dados da nota fiscal estão incompletos.',
+    action: 'Confira a venda e tente de novo. Se continuar, informe o código ao suporte.',
+    retryable: false,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',
