@@ -581,6 +581,29 @@ class LocalNfce {
 
   bool get authorized => status == 'authorized';
 
+  LocalNfce copyWith({required String status, String? protocol, String? statusCode, String? reason, String? xml, DateTime? authorizedAt}) =>
+      LocalNfce(
+        id: id,
+        saleId: saleId,
+        series: series,
+        number: number,
+        accessKey: accessKey,
+        environment: environment,
+        emissionType: emissionType,
+        status: status,
+        protocol: protocol,
+        statusCode: statusCode,
+        reason: reason,
+        xml: xml ?? this.xml,
+        qrCode: qrCode,
+        consultUrl: consultUrl,
+        emittedAt: emittedAt,
+        authorizedAt: authorizedAt,
+      );
+
+  /// Vale como DANFE: autorizada ou emitida em contingência.
+  bool get printable => authorized || status == 'contingency';
+
   /// O que sobe para a central (item "nfce" da outbox).
   Map<String, Object?> toPayload() => {
     'id': id,
@@ -1805,8 +1828,47 @@ class LocalDatabase {
   /// NFC-e de uma venda deste caixa, se houver.
   LocalNfce? nfceOfSale(String saleId) {
     final rows = _db.select('SELECT * FROM nfce_document WHERE sale_id = ?', [uuidBytes(saleId)]);
-    if (rows.isEmpty) return null;
-    final row = rows.first;
+    return rows.isEmpty ? null : _nfce(rows.first);
+  }
+
+  /// Notas a transmitir: em contingência ou pendentes (sem resposta), as mais antigas primeiro.
+  List<LocalNfce> nfceToTransmit({int limit = 20}) => [
+    for (final row in _db.select(
+      "SELECT * FROM nfce_document WHERE status IN ('contingency', 'pending') ORDER BY emitted_at LIMIT ?",
+      [limit],
+    ))
+      _nfce(row),
+  ];
+
+  /// Notas em contingência ainda não transmitidas: quantas e desde quando (a mais antiga).
+  ({int count, DateTime? oldest}) nfceContingency() {
+    final row = _db.select("SELECT count(*) AS n, min(emitted_at) AS oldest FROM nfce_document WHERE status = 'contingency'").first;
+    final oldest = row['oldest'] as String?;
+    return (count: row['n'] as int, oldest: oldest == null ? null : DateTime.parse(oldest));
+  }
+
+  /// Resultado da transmissão: muda a situação (e o XML, quando autorizada) e sobe de novo pela
+  /// outbox, com o mesmo id (a central atualiza a nota).
+  void updateNfce(LocalNfce nfce, {required DateTime now}) => _transaction(() {
+    _db.execute(
+      'UPDATE nfce_document SET status = ?, protocol = ?, status_code = ?, reason = ?, xml = ?, authorized_at = ?, '
+      'attempts = attempts + 1, updated_at = ? WHERE id = ?',
+      [
+        nfce.status, nfce.protocol, nfce.statusCode, nfce.reason, nfce.xml, nfce.authorizedAt?.toUtc().toIso8601String(),
+        now.toUtc().toIso8601String(), uuidBytes(nfce.id),
+      ],
+    );
+    enqueue('nfce', nfce.toPayload(), now: now);
+  });
+
+  /// Tentativa sem resposta: só conta, sem subir nada.
+  void countNfceAttempt(String id, {required DateTime now}) => _db.execute(
+    'UPDATE nfce_document SET attempts = attempts + 1, updated_at = ? WHERE id = ?',
+    [now.toUtc().toIso8601String(), uuidBytes(id)],
+  );
+
+  LocalNfce _nfce(Row row) {
+    final saleId = uuidText(row['sale_id'] as List<int>);
     DateTime? when(Object? value) => value == null ? null : DateTime.parse(value as String);
     return LocalNfce(
       id: uuidText(row['id'] as List<int>),

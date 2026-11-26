@@ -17,6 +17,7 @@ import 'face/face_engine.dart';
 import 'face/face_service.dart';
 import 'fiscal/nfce_credentials.dart';
 import 'fiscal/nfce_emitter.dart';
+import 'fiscal/nfce_retransmitter.dart';
 import 'fiscal/sefaz.dart';
 import 'local/local_database.dart';
 import 'pos/display_settings.dart';
@@ -139,13 +140,24 @@ Future<void> main() async {
 
   // NFC-e: o certificado e o CSC chegam cifrados para a chave deste caixa.
   final nfceCredentials = NfceCredentialService(api: api, database: database, store: store, logger: logger);
+  final sefaz = SefazClient();
+  late final TerminalController controller;
+  final nfceRetransmitter = NfceRetransmitter(
+    database: database,
+    credentials: nfceCredentials,
+    sefaz: sefaz,
+    terminalId: () => controller.terminalId,
+    logger: logger,
+  );
 
-  final controller = terminal = TerminalController(
+  controller = terminal = TerminalController(
     api: api,
     store: store,
     sync: SyncService(api: api, database: database, logger: logger),
     afterSync: (accessToken, terminalId, sign) async {
       await nfceCredentials.refresh(accessToken: accessToken, terminalId: terminalId, sign: sign);
+      // Com internet: transmite as notas em contingência ou pendentes.
+      unawaited(nfceRetransmitter.tick());
       // Ao abrir, a primeira verificação de versão roda aqui, com o terminal já pronto.
       unawaited(updates.tickIfDue());
     },
@@ -163,7 +175,7 @@ Future<void> main() async {
     nfce: NfceEmitter(
       database: database,
       credentials: nfceCredentials,
-      sefaz: SefazClient(),
+      sefaz: sefaz,
       terminalId: () => controller.terminalId,
       appVersion: _appVersion,
       logger: logger,

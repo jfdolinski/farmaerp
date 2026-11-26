@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 
 import '../fiscal/nfce_credentials.dart';
+import '../fiscal/nfce_retransmitter.dart';
 import '../ui/caps.dart';
 import 'display_settings.dart';
 import 'pos_controller.dart';
@@ -52,6 +53,7 @@ class _PosStatusBarState extends State<PosStatusBar> {
     final pending = database.outboxPending;
     final colors = Theme.of(context).colorScheme;
     final nfce = controller.quoteMode ? null : nfceStatusText(database, now);
+    final contingency = controller.quoteMode ? null : nfceContingencyAlert(database, now, limit: contingencyLimitOf(database));
     final parts = <(String, String)>[
       ('loja', '${branch ?? 'Loja'} · ${TerminalKind.of(database.terminalProfile).label} ${number ?? '-'}'),
       if (!controller.quoteMode)
@@ -65,6 +67,7 @@ class _PosStatusBarState extends State<PosStatusBar> {
         if (lastSync != null) 'sincronizado às ${_time(lastSync)}',
       ].join(' · ')),
       if (nfce != null) ('nfce', nfce),
+      if (contingency != null) ('nfce-contingencia', contingency.text),
       ('agora', '${_two(now.day)}/${_two(now.month)}/${now.year} ${_time(now)}'),
       if (widget.appVersion != null) ('versao', 'v${widget.appVersion}'),
     ];
@@ -80,7 +83,13 @@ class _PosStatusBarState extends State<PosStatusBar> {
             runSpacing: 4,
             children: [
               for (final (key, text) in parts)
-                Text(text, key: Key('status-$key'), style: key == 'internet' && !widget.online ? const TextStyle(fontWeight: FontWeight.bold) : null),
+                Text(
+                  text,
+                  key: Key('status-$key'),
+                  style: (key == 'internet' && !widget.online) || (key == 'nfce-contingencia' && contingency!.warning)
+                      ? TextStyle(fontWeight: FontWeight.bold, color: key == 'nfce-contingencia' && contingency!.overdue ? colors.error : null)
+                      : null,
+                ),
             ],
           ),
         ),
