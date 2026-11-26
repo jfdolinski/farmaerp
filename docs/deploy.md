@@ -63,6 +63,8 @@ Variáveis:
 | `FARMAERP_APP_PASSWORD` | Segredo gerado |
 | `TERMINAL_TOKEN_SECRET` | Segredo gerado |
 | `FISCAL_ENCRYPTION_KEY` | Chave gerada, 32 bytes em base64 (veja "Atualizar para a configuração fiscal") |
+| `RELEASES_DIR` | `/data/releases` (volume das versões do PDV; veja "Atualizar para as versões do PDV") |
+| `RELEASE_UPLOAD_TOKEN` | Segredo gerado, com ao menos 32 caracteres (o mesmo do segredo do GitHub) |
 | `POSTGRES_ADMIN_PASSWORD` | Senha do banco (passo 2). **Só no primeiro deploy** |
 | `BOOTSTRAP_ADMIN_EMAIL` | E-mail do primeiro administrador. **Só no primeiro deploy** |
 | `BOOTSTRAP_ADMIN_PASSWORD` | Senha inicial, com ao menos 10 caracteres. **Só no primeiro deploy** |
@@ -217,6 +219,27 @@ Cuidados com a chave:
 
 Sem a variável, a API sobe normalmente: só o envio de certificado e de CSC fica indisponível, com o código FA915.
 
+## Atualizar para as versões do PDV
+
+A central passa a guardar as versões do PDV e a entregar a atualização aos terminais. São **um volume e duas variáveis novas** no serviço `api`. Sem elas, a API sobe normalmente: só o envio de versões (FA876) e o download pelos PDVs (FA875) ficam indisponíveis.
+
+1. No serviço `api`, em **Montagens** (Mounts), crie um **volume** com o nome `releases` e o caminho de montagem `/data/releases`. O volume guarda os instaladores entre um deploy e outro.
+2. Gere o token de envio no seu computador. O valor aparece só no seu terminal:
+
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
+
+3. Em **Ambiente**, inclua `RELEASES_DIR` com `/data/releases` e `RELEASE_UPLOAD_TOKEN` com o token. Salve.
+4. Implante a API, confira e implante a retaguarda.
+5. No GitHub (Settings → Secrets and variables → Actions), cadastre o mesmo token no segredo `RELEASE_UPLOAD_TOKEN`. A chave de assinatura (`UPDATE_SIGNING_KEY`) vem com o instalador do PDV.
+
+Cuidados:
+
+- Use um token diferente em cada ambiente e nunca o versione.
+- Quem tem o token consegue enviar arquivos, mas não consegue publicar versão que o PDV aceite: o PDV só instala o que estiver assinado com a chave que só o CI tem.
+- As versões ficam em `/plataforma/versoes`, só para o administrador da plataforma: liberar para a rede ou retirar. Em Terminais, cada cliente marca os terminais de teste, que recebem a versão primeiro.
+
 ## Antes de publicar a produção
 
 A produção usa os mesmos passos, em um projeto próprio e com segredos próprios, mas depende destes itens:
@@ -227,6 +250,8 @@ A produção usa os mesmos passos, em um projeto próprio e com segredos própri
 - [ ] Restauração testada: recupere um backup em um banco separado e confira os dados. Backup sem restauração testada não é garantia.
 - [ ] Prazo de retenção do IP nos logins (90 dias hoje) confirmado com o jurídico ou a contabilidade.
 - [ ] `FISCAL_ENCRYPTION_KEY` própria da produção, com cópia guardada fora da VPS.
+- [ ] Volume `/data/releases` e `RELEASE_UPLOAD_TOKEN` próprios da produção.
+- [ ] Certificado de assinatura de código (Authenticode) para o instalador do PDV, para o Windows não mostrar "Editor desconhecido" na primeira instalação.
 
 O seed se recusa a rodar em produção, e a senha de exemplo existe só em desenvolvimento.
 

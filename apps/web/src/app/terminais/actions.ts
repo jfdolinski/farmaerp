@@ -90,6 +90,13 @@ export async function setTerminalProfile(
   return post(`/admin/terminals/${text(form, "id")}/profile`, { profile: text(form, "profile") });
 }
 
+export async function setUpdateRing(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  return post(`/admin/terminals/${text(form, "id")}/update-ring`, { ring: text(form, "ring") });
+}
+
 export async function setReturnDays(
   _previous: ActionState,
   form: FormData,

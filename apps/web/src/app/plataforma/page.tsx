@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 import { apiFetch, redirectIfNeeded, requireUser } from "@/lib/api";
 import { AppHeader } from "../app-header";
@@ -51,7 +52,10 @@ async function PlatformContent() {
   return (
     <>
       <AppHeader user={user} />
-      <h1>Plataforma</h1>
+      <div className={styles.header}>
+        <h1>Plataforma</h1>
+        <Link href="/plataforma/versoes">Versões do PDV</Link>
+      </div>
       <section className={styles.card}>
         <h2>Nova empresa</h2>
         <p className={styles.hint}>

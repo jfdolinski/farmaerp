@@ -267,7 +267,9 @@
       "agreement_invoice_item_id_uuid_v7_check",
       "sngpc_branch_id_uuid_v7_check",
       "sngpc_movement_id_uuid_v7_check",
-      "sngpc_dispensing_complement_id_uuid_v7_check"
+      "sngpc_dispensing_complement_id_uuid_v7_check",
+      "app_release_id_uuid_v7_check",
+      "terminal_update_event_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -3060,5 +3062,70 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": []
+  },
+  "FA869": {
+    "message": "Os dados da versão enviada são inválidos.",
+    "action": "Confira a versão, o arquivo e a assinatura gerados pelo CI.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "app_release_app_check",
+      "app_release_platform_check",
+      "app_release_version_check",
+      "app_release_file_name_check",
+      "app_release_size_check",
+      "app_release_sha256_check",
+      "app_release_signature_check",
+      "app_release_notes_check",
+      "app_release_status_check",
+      "app_release_state_check",
+      "terminal_update_event_status_check",
+      "terminal_update_event_detail_check"
+    ]
+  },
+  "FA874": {
+    "message": "Esta versão já foi publicada.",
+    "action": "Gere uma versão com número novo.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "app_release_version_key"
+    ]
+  },
+  "FA875": {
+    "message": "O arquivo desta versão não está disponível.",
+    "action": "O PDV tenta de novo mais tarde, sozinho.",
+    "httpStatus": 404,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA876": {
+    "message": "O envio de versões não está liberado.",
+    "action": "Confira o token de envio do CI e a pasta das versões na API.",
+    "httpStatus": 403,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA877": {
+    "message": "Esta versão não pode mudar para essa situação.",
+    "action": "A versão vai de teste para a rede; retirada não volta.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA878": {
+    "message": "O anel de atualização do terminal é inválido.",
+    "action": "Escolha \"teste\" ou \"rede\".",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "terminal_update_ring_check"
+    ]
   }
 }

@@ -105,6 +105,17 @@ export class TerminalAdminController {
     return { status: 'ok' };
   }
 
+  /** Anel de atualização: "test" recebe a versão nova antes da rede ("general"). */
+  @Post('terminals/:id/update-ring')
+  @HttpCode(200)
+  async updateRing(@Param('id') id: string, @RequestBody() rawBody: unknown) {
+    const terminalId = requireUuid(id);
+    const value = asBody(rawBody).ring;
+    if (typeof value !== 'string') throw new AppError('FA878');
+    await this.database.withContext((client) => client.query('SELECT app.set_terminal_update_ring($1, $2)', [terminalId, value]));
+    return { status: 'ok' };
+  }
+
   @Post('terminals/:id/block')
   @HttpCode(200)
   block(@Param('id') id: string, @RequestBody() rawBody: unknown) {

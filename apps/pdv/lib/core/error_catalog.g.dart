@@ -970,6 +970,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Compras, vendas, perdas e transferências precisam ser conferidas.',
     retryable: false,
   ),
+  'FA869': ErrorCatalogEntry(
+    code: 'FA869',
+    message: 'Os dados da versão enviada são inválidos.',
+    action: 'Confira a versão, o arquivo e a assinatura gerados pelo CI.',
+    retryable: false,
+  ),
   'FA870': ErrorCatalogEntry(
     code: 'FA870',
     message: 'Informe o motivo da devolução.',
@@ -992,6 +998,36 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     code: 'FA873',
     message: 'O valor passa do saldo do crédito de devolução.',
     action: 'Use até o saldo e complete com outra forma de pagamento.',
+    retryable: false,
+  ),
+  'FA874': ErrorCatalogEntry(
+    code: 'FA874',
+    message: 'Esta versão já foi publicada.',
+    action: 'Gere uma versão com número novo.',
+    retryable: false,
+  ),
+  'FA875': ErrorCatalogEntry(
+    code: 'FA875',
+    message: 'O arquivo desta versão não está disponível.',
+    action: 'O PDV tenta de novo mais tarde, sozinho.',
+    retryable: false,
+  ),
+  'FA876': ErrorCatalogEntry(
+    code: 'FA876',
+    message: 'O envio de versões não está liberado.',
+    action: 'Confira o token de envio do CI e a pasta das versões na API.',
+    retryable: false,
+  ),
+  'FA877': ErrorCatalogEntry(
+    code: 'FA877',
+    message: 'Esta versão não pode mudar para essa situação.',
+    action: 'A versão vai de teste para a rede; retirada não volta.',
+    retryable: false,
+  ),
+  'FA878': ErrorCatalogEntry(
+    code: 'FA878',
+    message: 'O anel de atualização do terminal é inválido.',
+    action: 'Escolha "teste" ou "rede".',
     retryable: false,
   ),
   'FA880': ErrorCatalogEntry(
