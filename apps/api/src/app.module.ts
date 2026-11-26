@@ -51,6 +51,7 @@ import { NfceActionsService } from './fiscal/nfce-actions.service.js';
 import { OfflineRulesController, TerminalStockController } from './terminals/offline-rules.controller.js';
 import { TerminalNfceController } from './terminals/terminal-nfce.controller.js';
 import { HealthProfessionalsController } from './sales/health-professionals.controller.js';
+import { ImportIssuersController } from './imports/import-issuers.controller.js';
 import { ImportsController } from './imports/imports.controller.js';
 import { ImportsService } from './imports/imports.service.js';
 import { TerminalCashbackController } from './terminals/terminal-cashback.controller.js';
@@ -111,6 +112,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     TerminalNfceController,
     HealthProfessionalsController,
     ImportsController,
+    ImportIssuersController,
     SyncConflictsController,
     TerminalAdminController,
   ],

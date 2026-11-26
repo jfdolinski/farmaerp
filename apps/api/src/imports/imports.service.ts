@@ -13,6 +13,15 @@ const TICK_MS = 10_000;
 /** Uma nota tem poucos KB; acima disso a entrada não é lida (protege a memória). */
 const MAX_ENTRY_BYTES = 10 * 1024 * 1024;
 const PROGRESS_EVERY = 100;
+/** Notas liberadas pela plataforma processadas por rodada. */
+const RELEASED_PER_TICK = 50;
+
+interface ReleasedNote {
+  import_id: string;
+  entry: string;
+  model: '55' | '65';
+  note: unknown;
+}
 
 /** Volume padrão no servidor (EasyPanel): basta montar o volume, sem variável. */
 export const DEFAULT_IMPORTS_DIR = '/data/imports';
@@ -37,6 +46,8 @@ export interface ImportTotals {
   ignored: number;
   failed: number;
   canceled: number;
+  /** Notas de CNPJ que o cliente ainda não tem: esperam o administrador da plataforma. */
+  waiting: number;
 }
 
 /** Texto da entrada: UTF-8, ou ISO-8859-1 quando o XML declara. */
@@ -124,6 +135,7 @@ export class ImportsService implements OnApplicationBootstrap, OnModuleDestroy {
           (await client.query<{ j: { id: string } | null }>('SELECT app.claim_document_import() AS j')).rows[0].j,
         );
         if (job) await this.process(dir, job.id);
+        await this.processReleased();
       });
     } catch (error) {
       this.logger.pino.error({ context: 'ImportsService', err: error }, 'falha no processamento da importação');
@@ -132,8 +144,30 @@ export class ImportsService implements OnApplicationBootstrap, OnModuleDestroy {
     }
   }
 
+  /**
+   * Notas que esperavam o destino do CNPJ e foram liberadas pela plataforma: entram pela
+   * importação delas (NFC-e antes, que criam os produtos). Uma falha não para as outras.
+   */
+  async processReleased(): Promise<number> {
+    const notes = await this.worker(async (client) =>
+      (await client.query<{ n: ReleasedNote[] }>('SELECT app.claim_released_import_notes($1) AS n', [RELEASED_PER_TICK])).rows[0].n,
+    );
+    for (const note of notes) {
+      const function_ = note.model === '55' ? 'import_nfe' : 'import_nfce';
+      try {
+        await this.worker((client) =>
+          client.query(`SELECT app.${function_}($1, $2, $3::jsonb)`, [note.import_id, note.entry, JSON.stringify(note.note)]),
+        );
+      } catch (error) {
+        this.logger.pino.warn({ context: 'ImportsService', importId: note.import_id, model: note.model, err: error }, 'nota liberada não processada');
+      }
+    }
+    if (notes.length > 0) this.logger.pino.info({ context: 'ImportsService', released: notes.length }, 'notas liberadas pela plataforma');
+    return notes.length;
+  }
+
   async process(dir: string, id: string): Promise<ImportTotals> {
-    const totals: ImportTotals = { entries: 0, models: {}, imported: 0, duplicate: 0, ignored: 0, failed: 0, canceled: 0 };
+    const totals: ImportTotals = { entries: 0, models: {}, imported: 0, duplicate: 0, ignored: 0, failed: 0, canceled: 0, waiting: 0 };
     const cancels: { entry: string; key: string; at: string | null }[] = [];
     const record = (entry: string, key: string | null, model: string | null, result: string, reason: string) =>
       this.worker((client) =>
@@ -146,7 +180,9 @@ export class ImportsService implements OnApplicationBootstrap, OnModuleDestroy {
         ]),
       );
       const result = rows[0].r.result;
-      if (result === 'imported' || result === 'duplicate' || result === 'ignored' || result === 'failed') totals[result] += 1;
+      if (result === 'imported' || result === 'duplicate' || result === 'ignored' || result === 'failed' || result === 'waiting') {
+        totals[result] += 1;
+      }
     };
     let pendingNfe = 0;
     const progress = (status: string | null, error: string | null) =>
@@ -194,10 +230,12 @@ export class ImportsService implements OnApplicationBootstrap, OnModuleDestroy {
         });
       }
       for (const cancel of cancels) {
-        await this.worker((client) =>
-          client.query('SELECT app.import_nfce_cancel($1, $2, $3, $4)', [id, cancel.entry, cancel.key, cancel.at]),
+        const { rows } = await this.worker((client) =>
+          client.query<{ r: { was_waiting?: boolean } }>('SELECT app.import_nfce_cancel($1, $2, $3, $4) AS r', [id, cancel.entry, cancel.key, cancel.at]),
         );
         totals.canceled += 1;
+        // A nota deste arquivo que esperava o destino saiu da espera, cancelada.
+        if (rows[0].r.was_waiting) totals.waiting -= 1;
       }
       await progress('done', null);
       await rm(importFilePath(dir, id), { force: true });
