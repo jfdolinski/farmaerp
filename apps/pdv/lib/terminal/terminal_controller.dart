@@ -304,8 +304,12 @@ class TerminalController extends ChangeNotifier {
     }
   }
 
-  /// Token válido do terminal, para as consultas com internet (ex.: busca de cliente).
-  Future<String> accessToken() async => (await _validToken()).value;
+  /// Token válido do terminal, para as consultas com internet (ex.: busca de cliente). Antes de
+  /// o terminal carregar a identidade (ou sem pareamento), FA306.
+  Future<String> accessToken() async {
+    if (_terminalId == null || _identity == null) throw const ApiException('FA306');
+    return (await _validToken()).value;
+  }
 
   Future<AccessToken> _validToken() async {
     final current = _token;

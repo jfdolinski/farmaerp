@@ -56,6 +56,7 @@ class UpdateService {
   Map<String, dynamic> _state = {};
   Timer? _timer;
   bool _running = false;
+  DateTime? _lastCheckAt;
 
   File get _stateFile => File(_join(directory.path, 'state.json'));
 
@@ -190,6 +191,14 @@ class UpdateService {
 
   void stop() => _timer?.cancel();
 
+  /// Chamado depois de cada sincronização: verifica se a última verificação não deu certo ou já
+  /// passou do intervalo. É o que faz o PDV perguntar logo que o terminal fica pronto ao abrir.
+  Future<void> tickIfDue({DateTime? now}) async {
+    final last = _lastCheckAt;
+    if (last != null && (now ?? DateTime.now()).difference(last) < interval) return;
+    await tick();
+  }
+
   /// Envia o que ficou pendente, pergunta pela versão nova e baixa.
   Future<void> tick() async {
     if (!supported || _running) return;
@@ -199,6 +208,7 @@ class UpdateService {
       await _flushReports(token);
       if (_state['ready'] != null || _state['applying'] != null) return;
       final release = await api.check(accessToken: token, platform: platform, current: currentVersion);
+      _lastCheckAt = DateTime.now();
       if (release == null) return;
       final refused = ((_state['refused'] as List?) ?? const []).cast<String>();
       if (refused.contains(release.id)) return;
