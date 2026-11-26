@@ -452,8 +452,17 @@ class _CustomerDialogState extends State<_CustomerDialog> {
     super.dispose();
   }
 
-  /// Abre o cadastro aproveitando o que foi digitado na busca (CPF ou nome).
-  void _startCreating() {
+  /// Supervisor que liberou o cadastro (quem está no terminal não tem "Cadastrar cliente no PDV").
+  String? _authorizedBy;
+
+  /// Abre o cadastro aproveitando o que foi digitado na busca (CPF ou nome). Sem a permissão,
+  /// pede antes a liberação de um supervisor.
+  Future<void> _startCreating() async {
+    if (!widget.controller.can('pdv.customer_create') && _authorizedBy == null) {
+      final released = await showRegistrationRelease(context, widget.controller, permission: 'pdv.customer_create', what: 'cliente');
+      if (!mounted || released == null) return;
+      _authorizedBy = released;
+    }
     final typed = _query.text.trim();
     final digits = typed.replaceAll(RegExp(r'[^0-9]'), '');
     setState(() {
@@ -499,6 +508,7 @@ class _CustomerDialogState extends State<_CustomerDialog> {
       birthDate: _birth,
       cashbackConsent: _cashbackConsent,
       marketingConsent: _marketingConsent,
+      authorizedBy: _authorizedBy,
     );
     if (!mounted) return;
     if (code == null) {
@@ -805,4 +815,152 @@ class _CancelSaleDialogState extends State<_CancelSaleDialog> {
       ],
     );
   }
+}
+
+/// Pede o que falta para uma operação com permissão: quem está no terminal e tem a permissão só
+/// confirma; quem não tem chama um supervisor (código e PIN). [onConfirm] recebe o código e o PIN
+/// (vazios quando não precisa) e devolve true quando deu certo; o erro vem do aviso do controller.
+class ReleaseDialog extends StatefulWidget {
+  const ReleaseDialog({
+    super.key,
+    required this.controller,
+    required this.title,
+    required this.message,
+    required this.needsSupervisor,
+    required this.confirmLabel,
+    required this.onConfirm,
+  });
+
+  final PosController controller;
+  final String title;
+  final String message;
+  final bool needsSupervisor;
+  final String confirmLabel;
+  final Future<bool> Function(String code, String pin) onConfirm;
+
+  @override
+  State<ReleaseDialog> createState() => _ReleaseDialogState();
+}
+
+class _ReleaseDialogState extends State<ReleaseDialog> {
+  final _code = TextEditingController();
+  final _pin = TextEditingController();
+  final _pinFocus = FocusNode();
+  String? _error;
+  bool _working = false;
+
+  @override
+  void dispose() {
+    _code.dispose();
+    _pin.dispose();
+    _pinFocus.dispose();
+    super.dispose();
+  }
+
+  Future<void> _confirm() async {
+    if (_working) return;
+    setState(() => _working = true);
+    final ok = await widget.onConfirm(_code.text, _pin.text);
+    if (!mounted) return;
+    if (ok) {
+      Navigator.pop(context, true);
+      return;
+    }
+    final notice = widget.controller.notice;
+    setState(() {
+      _working = false;
+      _error = notice == null ? null : '${notice.message} ${notice.action}';
+      _pin.clear();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(widget.message, key: const Key('release-message')),
+            if (widget.needsSupervisor) ...[
+              const SizedBox(height: 8),
+              const Text('Você não tem esta permissão: chame um supervisor para liberar.'),
+              TextField(
+                key: const Key('release-code'),
+                controller: _code,
+                autofocus: true,
+                onSubmitted: (_) => _pinFocus.requestFocus(),
+                decoration: const InputDecoration(labelText: 'Código do supervisor'),
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              ),
+              TextField(
+                key: const Key('release-pin'),
+                controller: _pin,
+                focusNode: _pinFocus,
+                obscureText: true,
+                onSubmitted: (_) => _confirm(),
+                decoration: const InputDecoration(labelText: 'PIN do supervisor'),
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
+              ),
+            ],
+            if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, key: const Key('release-error'))),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(key: const Key('release-back'), onPressed: () => Navigator.pop(context, false), child: const Text('Voltar')),
+        FilledButton(
+          key: const Key('release-confirm'),
+          autofocus: !widget.needsSupervisor,
+          onPressed: _working ? null : _confirm,
+          child: Text(widget.confirmLabel),
+        ),
+      ],
+    );
+  }
+}
+
+/// "Limpar tela" (orçamento) ou "Cancelar venda" (caixa e autoatendimento) da venda em andamento.
+Future<void> showDiscardCartDialog(BuildContext context, PosController controller) {
+  final cart = controller.cart;
+  final count = cart.lines.length;
+  final what = controller.quoteMode ? 'o orçamento em andamento' : 'a venda em andamento';
+  return showDialog<bool>(
+    context: context,
+    builder: (_) => ReleaseDialog(
+      controller: controller,
+      title: controller.discardLabel,
+      message: 'Descartar $what? ${count == 1 ? '1 item' : '$count itens'}, total ${formatCents(cart.totalCents)}. '
+          'Os itens, o cliente e os pagamentos saem da tela.',
+      needsSupervisor: !controller.can(controller.discardPermission),
+      confirmLabel: controller.discardLabel,
+      onConfirm: (code, pin) => controller.discardCart(supervisorCode: code, supervisorPin: pin),
+    ),
+  );
+}
+
+/// Liberação de um cadastro feito no PDV por quem não tem a permissão. Devolve o id de quem
+/// liberou, ou null quando desistiu.
+Future<String?> showRegistrationRelease(BuildContext context, PosController controller, {required String permission, required String what}) async {
+  String? released;
+  await showDialog<bool>(
+    context: context,
+    builder: (_) => ReleaseDialog(
+      controller: controller,
+      title: 'Liberar o cadastro',
+      message: 'Cadastrar $what no PDV precisa de liberação.',
+      needsSupervisor: true,
+      confirmLabel: 'Liberar',
+      onConfirm: (code, pin) async {
+        released = (await controller.authorize(permission, code, pin))?.id;
+        return released != null;
+      },
+    ),
+  );
+  return released;
 }

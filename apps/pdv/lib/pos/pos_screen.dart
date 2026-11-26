@@ -1014,6 +1014,14 @@ class _TotalsPanel extends StatelessWidget {
               icon: const Icon(Icons.payments),
               label: const Text('Pagamento (F10)'),
             ),
+            // Descarta a venda (ou o orçamento) em andamento; quem não tem a permissão chama o supervisor.
+            if (!cart.isEmpty)
+              OutlinedButton.icon(
+                key: const Key('discard-cart'),
+                onPressed: controller.busy ? null : () => dialog(() => showDiscardCartDialog(context, controller)),
+                icon: Icon(controller.quoteMode ? Icons.cleaning_services : Icons.remove_shopping_cart),
+                label: Text(controller.discardLabel),
+              ),
             if (last != null) ...[
               const SizedBox(height: 16),
               const Divider(),
@@ -1039,7 +1047,7 @@ class _TotalsPanel extends StatelessWidget {
                   key: const Key('cancel-sale'),
                   onPressed: controller.busy ? null : () => showCancelSaleDialog(context, controller),
                   icon: const Icon(Icons.undo),
-                  label: const Text('Cancelar venda'),
+                  label: const Text('Cancelar última venda'),
                 ),
             ],
           ],
@@ -1496,6 +1504,12 @@ class _PaymentPanelState extends State<_PaymentPanel> {
             TextButton(
               onPressed: controller.backToItems,
               child: const Text('Voltar aos itens (Esc)'),
+            ),
+            TextButton.icon(
+              key: const Key('discard-cart-paying'),
+              onPressed: controller.busy ? null : () => showDiscardCartDialog(context, controller),
+              icon: const Icon(Icons.remove_shopping_cart),
+              label: Text(controller.discardLabel),
             ),
           ],
         ),

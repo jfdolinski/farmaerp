@@ -315,7 +315,7 @@ void main() {
     expect(await controller.cancelLastSale(reason: 'curto', supervisorCode: '7', supervisorPin: '2468'), isFalse);
     expect(noticeCode(), 'FA005');
     expect(await controller.cancelLastSale(reason: 'Cliente desistiu da compra', supervisorCode: '3', supervisorPin: '2468'), isFalse);
-    expect(noticeCode(), 'FA969');
+    expect(noticeCode(), 'FA757');
     // A venda ainda está na fila: espera a central receber.
     expect(await controller.cancelLastSale(reason: 'Cliente desistiu da compra', supervisorCode: '7', supervisorPin: '2468'), isFalse);
     expect(noticeCode(), 'FA756');

@@ -225,6 +225,13 @@ class _QuotePanelState extends State<QuotePanel> {
               icon: const Icon(Icons.assignment_turned_in),
               label: const Text('Concluir orçamento'),
             ),
+            if (!cart.isEmpty)
+              OutlinedButton.icon(
+                key: const Key('discard-cart'),
+                onPressed: controller.busy ? null : () => (widget.dialog ?? (open) => open())(() => showDiscardCartDialog(context, controller)),
+                icon: const Icon(Icons.cleaning_services),
+                label: Text(controller.discardLabel),
+              ),
             if (last != null) ...[
               const SizedBox(height: 16),
               const Divider(),

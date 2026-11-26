@@ -52,7 +52,7 @@ LocalDatabase seeded() {
         'last_sale_number': null,
       }),
       PullItem(type: 'user', id: operatorId, data: {
-        'code': 3, 'name': 'Operador Centro', 'is_admin': false, 'roles': const [], 'permissions': const ['sales.sell'],
+        'code': 3, 'name': 'Operador Centro', 'is_admin': false, 'roles': const [], 'permissions': const ['sales.sell', 'pdv.customer_create'],
         'limits': const {'sale_discount': 5}, 'pin_hash': pin,
       }),
       product(dipirona, 1, 'Dipirona Sódica 500 mg', '7890000000017', ingredient: 'Dipirona', manufacturer: 'EMS'),

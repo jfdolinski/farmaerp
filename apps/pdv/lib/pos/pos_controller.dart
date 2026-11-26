@@ -711,7 +711,12 @@ class PosController extends ChangeNotifier {
 
   /// Cadastro rápido do prescritor digitado na receita. Sobe para a central pela outbox; já
   /// cadastrado devolve o que existe. Campos do prescritor com problema: FA734.
-  LocalProfessional? registerPrescriber(PrescriptionForm form) {
+  LocalProfessional? registerPrescriber(PrescriptionForm form, {String? authorizedBy}) {
+    final responsible = authorizedBy ?? actor?.id;
+    if (responsible == null || (authorizedBy == null && !can('pdv.prescriber_create'))) {
+      _fail('FA002');
+      return null;
+    }
     final errors = prescriptionErrors(form, _clock());
     if (const ['prescriberName', 'prescriberCouncil', 'prescriberNumber', 'prescriberState'].any(errors.containsKey)) {
       _fail('FA734');
@@ -724,6 +729,7 @@ class PosController extends ChangeNotifier {
       council: form.prescriberCouncil,
       registration: form.prescriberNumber,
       state: form.prescriberState,
+      createdBy: responsible,
       now: _clock(),
     );
     notice = null;
@@ -1582,10 +1588,16 @@ class PosController extends ChangeNotifier {
     DateTime? birthDate,
     bool cashbackConsent = false,
     bool marketingConsent = false,
+    String? authorizedBy,
   }) async {
     final service = customers;
-    final current = operator;
-    if (service == null || current == null || busy) return 'FA000';
+    // Quem responde pelo cadastro: o supervisor que liberou, ou quem está no terminal (o vendedor no orçamento).
+    final responsible = authorizedBy ?? actor?.id;
+    if (service == null || responsible == null || busy) return 'FA000';
+    if (authorizedBy == null && !can('pdv.customer_create')) {
+      _fail('FA002');
+      return 'FA002';
+    }
     busy = true;
     notice = null;
     notifyListeners();
@@ -1593,7 +1605,7 @@ class PosController extends ChangeNotifier {
     try {
       String two(int value) => value.toString().padLeft(2, '0');
       id = await service.create(
-        operatorId: current.id,
+        operatorId: responsible,
         name: name,
         document: document,
         phone: phone,
@@ -1875,6 +1887,80 @@ class PosController extends ChangeNotifier {
     }
   }
 
+  /// Tela do terminal para as permissões do PDV: orçamento, caixa ou autoatendimento.
+  String get screen => quoteMode ? 'quote' : (database.terminalProfile == 'self_service' ? 'self_service' : 'cashier');
+
+  /// Permissão de descartar a venda em andamento nesta tela.
+  String get discardPermission => switch (screen) {
+    'quote' => 'pdv.quote_clear',
+    'self_service' => 'pdv.self_service_cancel',
+    _ => 'pdv.sale_cancel',
+  };
+
+  /// Nome do botão de descartar: "Limpar tela" no orçamento, "Cancelar venda" no caixa e no autoatendimento.
+  String get discardLabel => quoteMode ? 'Limpar tela' : 'Cancelar venda';
+
+  /// Quem está no terminal (operador ou vendedor) pode fazer sozinho?
+  bool can(String permission) => actor?.can(permission) ?? false;
+
+  /// Supervisor libera o que quem está no terminal não pode: código e PIN, a permissão e outra
+  /// pessoa. Devolve quem liberou, ou null com o aviso.
+  Future<LocalUser?> authorize(String permission, String code, String pin) async {
+    try {
+      final supervisor = await auth.verify(code, pin);
+      if (!supervisor.can(permission)) throw const PosException('FA757');
+      if (supervisor.id == actor?.id) throw const PosException('FA982');
+      return supervisor;
+    } on PosException catch (error) {
+      _fail(error.code);
+      return null;
+    }
+  }
+
+  /// Descarta a venda (ou o orçamento) em andamento: itens, cliente, pagamentos e orçamento puxado;
+  /// a reserva de cashback volta. Quem está no terminal sem a permissão da tela precisa do
+  /// supervisor. Fica registrado para a central (sem dados do cliente). Devolve true quando descartou.
+  Future<bool> discardCart({String supervisorCode = '', String supervisorPin = ''}) async {
+    if (busy || cart.isEmpty) return false;
+    final user = actor;
+    LocalUser? supervisor;
+    if (user == null || !user.can(discardPermission)) {
+      supervisor = await authorize(discardPermission, supervisorCode, supervisorPin);
+      if (supervisor == null) return false;
+    }
+    final responsible = user ?? supervisor!;
+    final items = cart.lines.length;
+    final totalCents = cart.totalCents;
+    database.enqueue('cart_discard', {
+      'id': const Uuid().v7(),
+      'screen': screen,
+      'user_id': responsible.id,
+      'authorized_by': user == null ? null : supervisor?.id,
+      'items_count': items,
+      'total': totalCents / 100,
+      'discarded_at': _clock().toUtc().toIso8601String(),
+    }, now: _clock());
+    pendingControlled = null;
+    _payAfterControlled = false;
+    pendingZeroStock = null;
+    _releaseCashback(cart.payments.where((payment) => payment.method == PaymentMethod.cashback));
+    saleCashback = null;
+    cart.clear();
+    _applyFixedSeller();
+    paying = false;
+    results = const [];
+    notice = null;
+    info = quoteMode ? 'Tela limpa.' : 'Venda cancelada.';
+    logger?.info('Venda descartada no PDV', fields: {
+      'screen': screen,
+      'items': items,
+      if (supervisor != null) 'supervisor_code': supervisor.code,
+    });
+    onSaleSaved?.call();
+    notifyListeners();
+    return true;
+  }
+
   /// O que dizer ao operador depois do cancelamento. Sempre lembra de devolver o que foi pago.
   static String cancelMessage(String code, Map<String, dynamic> result) {
     const others = 'Cartão ou PIX: estorne na maquininha ou pelo banco.';
@@ -1922,7 +2008,8 @@ class PosController extends ChangeNotifier {
     try {
       final text = reason.trim();
       if (text.length < 15 || text.length > 255) throw const PosException('FA005');
-      final supervisor = await auth.verify(supervisorCode, supervisorPin, permission: 'fiscal.cancel');
+      final supervisor = await auth.verify(supervisorCode, supervisorPin);
+      if (!supervisor.can('fiscal.cancel')) throw const PosException('FA757');
       if (supervisor.id == current.id) throw const PosException('FA982');
       await syncNow?.call();
       if (database.outboxHasSale(sale.saleId!)) throw const PosException('FA756');

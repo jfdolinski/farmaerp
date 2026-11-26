@@ -796,6 +796,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Aguarde o caixa sincronizar (com internet) e tente cancelar de novo.',
     retryable: true,
   ),
+  'FA757': ErrorCatalogEntry(
+    code: 'FA757',
+    message: 'Esta pessoa não pode autorizar esta operação.',
+    action: 'Chame quem tem a permissão no perfil (o supervisor ou o gerente) para digitar o código e o PIN.',
+    retryable: false,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',

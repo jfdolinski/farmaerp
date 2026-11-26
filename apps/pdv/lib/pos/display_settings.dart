@@ -114,19 +114,35 @@ class DisplaySettings extends ChangeNotifier {
   /// Pinta um tema pronto com o tom do tipo do terminal (a tela do caixa usa o tipo que veio da central).
   static ThemeData tinted(ThemeData base, String color, TerminalKind kind) {
     final tone = toneOf(color, kind);
+    final scheme = ColorScheme.fromSeed(seedColor: tone);
     return base.copyWith(
-      colorScheme: ColorScheme.fromSeed(seedColor: tone),
+      colorScheme: scheme,
       appBarTheme: AppBarTheme(backgroundColor: tone, foregroundColor: onTone(tone)),
+      cardTheme: cardThemeFor(scheme),
     );
   }
+
+  /// Cards com sombra forte e contorno leve: cada setor da tela se destaca do fundo.
+  static CardThemeData cardThemeFor(ColorScheme scheme) => CardThemeData(
+    elevation: 6,
+    shadowColor: Colors.black.withValues(alpha: 0.45),
+    surfaceTintColor: Colors.transparent,
+    color: scheme.surface,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(12),
+      side: BorderSide(color: scheme.outlineVariant),
+    ),
+  );
 
   /// Tema de um tipo de terminal: a cor base no tom dele, na barra do topo e nos destaques.
   static ThemeData themeFor({required String color, required TerminalKind kind, String family = '', bool bold = false}) {
     final tone = toneOf(color, kind);
+    final scheme = ColorScheme.fromSeed(seedColor: tone);
     final base = ThemeData(
       fontFamily: family.isEmpty ? null : family,
-      colorScheme: ColorScheme.fromSeed(seedColor: tone),
+      colorScheme: scheme,
       appBarTheme: AppBarTheme(backgroundColor: tone, foregroundColor: onTone(tone)),
+      cardTheme: cardThemeFor(scheme),
     );
     if (!bold) return base;
     TextStyle? heavy(TextStyle? style) => style?.copyWith(fontWeight: FontWeight.bold);
