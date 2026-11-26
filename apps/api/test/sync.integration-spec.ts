@@ -193,6 +193,29 @@ describe('descida para o PDV contra o banco real', () => {
     expect(resolved).toMatchObject({ status: 'resolved', resolution_note: 'PDV antigo, atualizado.', resolved_by_name: expect.any(String) });
   });
 
+  it('cliente cadastrado no caixa: o operador cadastra; CPF repetido e dados errados dão o código certo', async () => {
+    const auth = (call: request.Test) => call.set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`);
+    const operatorId = '019a0000-0000-7000-8000-000000000009';
+    const base = Array.from({ length: 9 }, (_, i) => (Number(Date.now().toString().slice(-9)[i]) + i) % 10);
+    if (new Set(base).size === 1) base[0] = (base[0] + 1) % 10;
+    for (const size of [9, 10]) {
+      const sum = base.slice(0, size).reduce((total, digit, index) => total + digit * (size + 1 - index), 0);
+      base.push((sum * 10) % 11 === 10 ? 0 : (sum * 10) % 11);
+    }
+    const document = base.join('');
+    const created = (await auth(request(server()).post('/terminals/customers'))
+      .send({ operatorId, name: 'Cliente Do Caixa', document, phone: '11977776666', consents: { marketing: true } }).expect(201)).body as Json;
+    expect(created).toMatchObject({ id: expect.any(String), data: { name: 'Cliente Do Caixa', document } });
+    expect((await auth(request(server()).post('/terminals/customers')).send({ operatorId, name: 'Outro Nome', document }).expect(409)).body)
+      .toMatchObject({ code: 'FA901' });
+    expect((await auth(request(server()).post('/terminals/customers')).send({ name: 'Sem Operador', document }).expect(422)).body)
+      .toMatchObject({ code: 'FA005' });
+    expect((await auth(request(server()).post('/terminals/customers')).send({ operatorId, name: 'Consentimento', document, consents: { cashback: 'sim' } }).expect(422)).body)
+      .toMatchObject({ code: 'FA905' });
+    expect((await auth(request(server()).post('/terminals/customers')).send({ operatorId, name: 'Nascimento', document, birthDate: '20/05/1990' }).expect(422)).body)
+      .toMatchObject({ code: 'FA904' });
+  });
+
   it('clientes: busca mascarada, escolha completa, descida acompanhada e situação na retaguarda', async () => {
     const auth = (call: request.Test) => call.set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`);
     const found = (await auth(request(server()).post('/terminals/customers/search')).send({ query: 'demonstra' }).expect(200)).body as Json[];

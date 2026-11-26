@@ -1560,6 +1560,46 @@ class PosController extends ChangeNotifier {
   }
 
   /// Cliente escolhido na busca: os dados completos ficam guardados no terminal.
+  /// Cadastra o cliente na tela de vendas e já o escolhe para a venda. Devolve o código do erro
+  /// (null quando deu certo): sem internet, FA984 (a venda segue sem cliente).
+  Future<String?> createCustomer({
+    required String name,
+    required String document,
+    String? phone,
+    DateTime? birthDate,
+    bool cashbackConsent = false,
+    bool marketingConsent = false,
+  }) async {
+    final service = customers;
+    final current = operator;
+    if (service == null || current == null || busy) return 'FA000';
+    busy = true;
+    notice = null;
+    notifyListeners();
+    String? id;
+    try {
+      String two(int value) => value.toString().padLeft(2, '0');
+      id = await service.create(
+        operatorId: current.id,
+        name: name,
+        document: document,
+        phone: phone,
+        birthDate: birthDate == null ? null : '${birthDate.year}-${two(birthDate.month)}-${two(birthDate.day)}',
+        cashbackConsent: cashbackConsent,
+        marketingConsent: marketingConsent,
+      );
+    } on ApiException catch (error) {
+      final code = const {'FA001', 'FA008', 'FA009'}.contains(error.code) ? 'FA984' : error.code;
+      notice = ErrorDisplay.fromCode(code, traceId: error.traceId);
+      return code;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+    await selectCustomer(id);
+    return null;
+  }
+
   Future<void> selectCustomer(String id) async {
     final service = customers;
     if (service == null || busy) return;
