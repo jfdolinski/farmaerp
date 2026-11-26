@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:sqlite3/sqlite3.dart';
 import 'package:uuid/uuid.dart';
 
@@ -460,8 +461,7 @@ const _migrations = <String>[
   '''
   ALTER TABLE customer ADD COLUMN credit TEXT;
   -- Devolução que abate o crediário: o destino novo pede refazer a tabela (o SQLite não muda CHECK).
-  -- As chaves estrangeiras só são conferidas no fim da transação, com a tabela já no lugar.
-  PRAGMA defer_foreign_keys = ON;
+  -- As chaves estrangeiras ficam desligadas na migração e são conferidas no fim (veja _migrateTo).
   CREATE TABLE sale_return_new (
     id BLOB PRIMARY KEY CHECK (length(id) = 16),
     number INTEGER NOT NULL UNIQUE CHECK (number > 0),
@@ -783,15 +783,48 @@ class LocalDatabase {
 
   int get schemaVersion => _db.select('PRAGMA user_version').first.columnAt(0) as int;
 
-  void _migrate() {
-    final current = schemaVersion;
-    for (var index = current; index < _migrations.length; index += 1) {
-      _transaction(() {
-        _db.execute(_migrations[index]);
-        _db.execute('PRAGMA user_version = ${index + 1}');
-      });
+  void _migrate() => _migrateTo(_db, _migrations.length);
+
+  /// Aplica as migrações até [version]. As chaves estrangeiras ficam desligadas durante a migração
+  /// (como manda o SQLite para refazer tabela): o DROP da tabela antiga contaria violação nas tabelas
+  /// filhas mesmo com a nova no lugar. No fim de cada migração, dentro da transação, tudo é conferido
+  /// (foreign_key_check): se sobrar referência quebrada, a migração volta inteira.
+  static void _migrateTo(Database db, int version) {
+    final current = db.select('PRAGMA user_version').first.columnAt(0) as int;
+    if (current >= version) return;
+    db.execute('PRAGMA foreign_keys = OFF');
+    try {
+      for (var index = current; index < version; index += 1) {
+        db.execute('BEGIN');
+        try {
+          db.execute(_migrations[index]);
+          final broken = db.select('PRAGMA foreign_key_check');
+          if (broken.isNotEmpty) {
+            throw StateError('Migração ${index + 1} deixou referência quebrada em ${broken.first['table']}.');
+          }
+          db.execute('PRAGMA user_version = ${index + 1}');
+          db.execute('COMMIT');
+        } catch (_) {
+          db.execute('ROLLBACK');
+          rethrow;
+        }
+      }
+    } finally {
+      db.execute('PRAGMA foreign_keys = ON');
     }
   }
+
+  /// Só para testes: um banco em memória parado numa versão antiga, para conferir a atualização.
+  @visibleForTesting
+  static Database migratedInMemory(int version) {
+    final db = sqlite3.openInMemory();
+    _migrateTo(db, version);
+    return db;
+  }
+
+  /// Só para testes: abre (e atualiza) um banco montado pelo teste.
+  @visibleForTesting
+  factory LocalDatabase.fromDatabase(Database db) => LocalDatabase._(db);
 
   void close() => _db.close();
 
