@@ -14,15 +14,24 @@ INSERT INTO permission (code, module, name) VALUES
   ('pdv.customer_create', 'Vendas', 'Cadastrar cliente no PDV'),
   ('pdv.prescriber_create', 'Controlados', 'Cadastrar prescritor no PDV');
 
--- Perfis que já existem: a mesma distribuição dos perfis padrão. O Administrador tem tudo.
+-- Perfis que já existem: pela capacidade que já tinham, para perfil criado ou renomeado pelo
+-- cliente não perder o que fazia (antes, cadastrar cliente no caixa pedia só "Vender").
+-- Cancelar no caixa e no autoatendimento: só Gerente e Farmacêutico, como nos perfis padrão.
+-- O Administrador tem tudo.
 INSERT INTO role_permission (role_id, permission_id)
-SELECT r.id, p.id
+SELECT DISTINCT r.id, p.id
   FROM role r
   JOIN permission p ON (
-       (r.name IN ('Gerente', 'Farmacêutico') AND p.code IN (
-         'pdv.quote_clear', 'pdv.sale_cancel', 'pdv.self_service_cancel', 'pdv.customer_create', 'pdv.prescriber_create'))
-    OR (r.name = 'Operador de caixa' AND p.code IN ('pdv.quote_clear', 'pdv.customer_create', 'pdv.prescriber_create'))
-    OR (r.name = 'Balconista' AND p.code IN ('pdv.quote_clear', 'pdv.customer_create'))
+       (p.code = 'pdv.quote_clear' AND EXISTS (
+         SELECT 1 FROM role_permission rp JOIN permission had ON had.id = rp.permission_id
+          WHERE rp.role_id = r.id AND rp.deleted_at IS NULL AND had.code = 'sales.quote'))
+    OR (p.code = 'pdv.customer_create' AND EXISTS (
+         SELECT 1 FROM role_permission rp JOIN permission had ON had.id = rp.permission_id
+          WHERE rp.role_id = r.id AND rp.deleted_at IS NULL AND had.code IN ('sales.sell', 'sales.quote')))
+    OR (p.code = 'pdv.prescriber_create' AND EXISTS (
+         SELECT 1 FROM role_permission rp JOIN permission had ON had.id = rp.permission_id
+          WHERE rp.role_id = r.id AND rp.deleted_at IS NULL AND had.code = 'sales.sell'))
+    OR (p.code IN ('pdv.sale_cancel', 'pdv.self_service_cancel') AND r.name IN ('Gerente', 'Farmacêutico'))
   )
  WHERE r.deleted_at IS NULL AND r.system_key IS NULL
    AND NOT EXISTS (
