@@ -138,6 +138,24 @@ describe('importação das notas contra o banco real', () => {
     });
     expect(((await call('get', '/admin/imports').expect(200)).body as Json[]).map((row) => row.id)).toContain(id);
 
+    // A venda importada aparece na consulta, com o detalhe e o XML.
+    const sales = (await call('get', '/admin/imported-sales?from=2026-06-10&to=2026-06-10').expect(200)).body as Json[];
+    let found: Json | null = null;
+    for (const row of sales) {
+      const detail = (await call('get', `/admin/imported-sales/${row.id as string}`).expect(200)).body as Json;
+      if (detail.access_key === key) {
+        found = detail;
+        break;
+      }
+    }
+    expect(found).toMatchObject({ number: 42, model: '65', canceled_at: null, items: [{ legacy_code: codeA }, { legacy_code: `${codeA}B` }] });
+    const xml = await call('get', `/admin/imported-sales/${found?.id as string}/xml`).expect(200);
+    expect(xml.headers['content-type']).toContain('application/xml');
+    expect(xml.headers['content-disposition']).toContain(`NFCe-${key}.xml`);
+    expect(xml.text).toContain('<nfeProc');
+    expect(codeOf(await call('get', '/admin/imported-sales?from=10-06-2026').expect(422))).toBe('FA005');
+    expect(codeOf(await call('get', '/admin/imported-sales/01900000-0000-7000-8000-000000000000').expect(404))).toBe('FA006');
+
     // O mesmo arquivo de novo: tudo repetido.
     const again = (await call('post', '/admin/imports').send({ fileName: 'notas.zip', size: content.length }).expect(201)).body as { id: string };
     await call('put', `/admin/imports/${again.id}/parts/1`).set('Content-Type', 'application/octet-stream').send(content).expect(200);

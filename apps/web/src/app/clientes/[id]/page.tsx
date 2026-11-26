@@ -122,6 +122,11 @@ async function CustomerContent({ params }: { params: Params }) {
       <section className={styles.card}>
         <h2>Compras</h2>
         <CustomerHistorySection customerId={customer.id} canSeeSales={can(user, "sales.view")} />
+        {can(user, "sales.view") && (
+          <p className={styles.hint}>
+            <Link href={`/vendas-importadas?cliente=${customer.id}`}>Ver todas as vendas importadas deste cliente</Link>
+          </p>
+        )}
       </section>
 
       <section className={styles.card}>

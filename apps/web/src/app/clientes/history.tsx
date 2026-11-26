@@ -9,7 +9,7 @@ export interface CustomerHistory {
   total_12m: number | string;
   average_ticket: number | string | null;
   last_purchase_at: string | null;
-  last_30_days: { sale_id: string; code: string; sold_at: string; branch_name: string; total: number | string; items: number }[];
+  last_30_days: { sale_id: string; code: string; sold_at: string; branch_name: string; total: number | string; items: number; imported?: boolean }[];
   recurring: { product_id: string; name: string; purchases: number; quantity: number | string; last_at: string }[];
 }
 
@@ -22,7 +22,7 @@ export async function CustomerHistorySection({ customerId, canSeeSales }: { cust
   const history = result.data;
   return (
     <>
-      <p className={styles.hint}>Nas filiais que você vê. Ticket médio dos últimos 12 meses; recorrentes: em 2 ou mais compras nos últimos 180 dias.</p>
+      <p className={styles.hint}>Nas filiais que você vê, incluindo as vendas importadas do sistema anterior. Ticket médio dos últimos 12 meses; recorrentes: em 2 ou mais compras nos últimos 180 dias.</p>
       <p>
         <strong>Ticket médio:</strong> {history.average_ticket === null ? "—" : brl(history.average_ticket)} ·{" "}
         {history.sales_12m === 1 ? "1 compra" : `${history.sales_12m.toLocaleString("pt-BR")} compras`} em 12 meses (
@@ -48,7 +48,16 @@ export async function CustomerHistorySection({ customerId, canSeeSales }: { cust
               {history.last_30_days.map((sale) => (
                 <tr key={sale.sale_id}>
                   <td>{dateTimeText(sale.sold_at)}</td>
-                  <td>{canSeeSales ? <Link href={`/vendas/${sale.sale_id}`}>{sale.code}</Link> : sale.code}</td>
+                  <td>
+                    {canSeeSales ? (
+                      <Link href={sale.imported ? `/vendas-importadas/${sale.sale_id}` : `/vendas/${sale.sale_id}`}>
+                        {sale.code}
+                      </Link>
+                    ) : (
+                      sale.code
+                    )}
+                    {sale.imported && <small className={styles.hint}> · importada</small>}
+                  </td>
                   <td>{sale.branch_name}</td>
                   <td>{sale.items}</td>
                   <td>{brl(sale.total)}</td>
