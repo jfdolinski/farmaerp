@@ -105,9 +105,9 @@ describe('NFC-e do caixa na central', () => {
     expect(Number((await ownerPool.query('SELECT last_used_number FROM terminal_fiscal_series WHERE id = $1', [series.id])).rows[0].last_used_number))
       .toBeGreaterThanOrEqual(500);
 
-    // A mesma nota de novo (mesmo id) e autorizada: muda nada; tentar mudar dá conflito.
+    // A mesma nota de novo (mesmo id), já autorizada: o caixa não muda nada e a fila dele segue.
     expect(await push(a.terminal1, 'nfce', { ...doc, status: 'rejected', protocol: null, authorized_at: null }))
-      .toMatchObject({ status: 'conflict', code: 'FA735' });
+      .toMatchObject({ status: 'applied' });
     expect(await fiscalStatus(saleId)).toBe('authorized');
 
     // Na retaguarda: situação sem o XML; o XML à parte.

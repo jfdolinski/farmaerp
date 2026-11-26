@@ -105,7 +105,7 @@ describe('perfis e permissões contra o banco real', () => {
 
     it('catálogo e perfis podem ser lidos por quem está no grupo', async () => {
       const catalog = (await call('get', '/admin/permissions', OPERATOR).expect(200)).body as Json[];
-      expect(catalog).toHaveLength(56);
+      expect(catalog).toHaveLength(58);
       expect((await rolesOf(OPERATOR)).length).toBeGreaterThanOrEqual(4);
     });
 
