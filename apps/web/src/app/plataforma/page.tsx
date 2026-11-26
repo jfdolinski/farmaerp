@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { apiFetch, redirectIfNeeded, requireUser } from "@/lib/api";
 import { AppHeader } from "../app-header";
 import { ErrorNotice } from "../error-notice";
-import { CreateTenantForm } from "./ui";
+import { CreateTenantForm, IssuerDecision, type PendingIssuer } from "./ui";
 import styles from "../terminais/page.module.css";
 
 export const metadata: Metadata = { title: "Plataforma · FarmaERP" };
@@ -22,6 +22,7 @@ interface TenantRow {
 const dateText = (value: string) =>
   new Date(value).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 const rootText = (root: string) => `${root.slice(0, 2)}.${root.slice(2, 5)}.${root.slice(5, 8)}`;
+const formatCnpj = (value: string) => value.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
 
 export default function PlatformPage() {
   return (
@@ -46,8 +47,12 @@ async function PlatformContent() {
       </>
     );
   }
-  const result = await apiFetch<TenantRow[]>("/platform/tenants");
+  const [result, issuers] = await Promise.all([
+    apiFetch<TenantRow[]>("/platform/tenants"),
+    apiFetch<PendingIssuer[]>("/platform/import-issuers"),
+  ]);
   if (!result.ok) redirectIfNeeded(result.error, "/plataforma");
+  if (!issuers.ok) redirectIfNeeded(issuers.error, "/plataforma");
 
   return (
     <>
@@ -56,6 +61,33 @@ async function PlatformContent() {
         <h1>Plataforma</h1>
         <Link href="/plataforma/versoes">Versões do PDV</Link>
       </div>
+      <section className={styles.card}>
+        <h2>CNPJs aguardando destino</h2>
+        <p className={styles.hint}>
+          Notas importadas por um cliente com CNPJ que ele ainda não tem como filial. Criar cadastra a empresa e a filial
+          (ou só a filial, quando a empresa de mesma raiz já existe) no cliente que importou, e as notas entram sozinhas.
+          Recusar deixa as notas como ignoradas.
+        </p>
+        {!issuers.ok && <ErrorNotice error={issuers.error} />}
+        {issuers.ok && issuers.data.length === 0 && <p className={styles.hint}>Nenhum CNPJ aguardando.</p>}
+        {issuers.ok &&
+          issuers.data.map((issuer) => (
+            <article key={issuer.id} className={styles.card}>
+              <h3>
+                {formatCnpj(issuer.cnpj)} · {issuer.name ?? "Sem nome na nota"}
+              </h3>
+              <p className={styles.hint}>
+                Cliente: <strong>{issuer.group_name}</strong> ·{" "}
+                {issuer.kind === "company" ? "empresa nova" : `filial nova da empresa ${issuer.company_name ?? ""}`}
+                {issuer.state && ` · ${issuer.state}`} · {issuer.notes} nota(s)
+                {issuer.first_emitted_at &&
+                  issuer.last_emitted_at &&
+                  ` de ${dateText(issuer.first_emitted_at)} a ${dateText(issuer.last_emitted_at)}`}
+              </p>
+              <IssuerDecision issuer={issuer} />
+            </article>
+          ))}
+      </section>
       <section className={styles.card}>
         <h2>Nova empresa</h2>
         <p className={styles.hint}>
