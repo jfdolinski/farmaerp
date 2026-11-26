@@ -499,7 +499,45 @@ const _migrations = <String>[
     received_at TEXT NOT NULL
   ) STRICT;
   ''',
+  // Profissionais da saúde (prescritores) do grupo, para a busca na receita do controlado.
+  '''
+  CREATE TABLE health_professional (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    name TEXT NOT NULL,
+    council TEXT NOT NULL,
+    registration TEXT NOT NULL,
+    state TEXT NOT NULL,
+    specialty TEXT,
+    search TEXT NOT NULL,
+    seen_generation INTEGER NOT NULL
+  ) STRICT;
+  CREATE INDEX health_professional_registration_idx ON health_professional (council, state, registration);
+  ''',
 ];
+
+/// Profissional da saúde (prescritor) na cópia local.
+class LocalProfessional {
+  const LocalProfessional({
+    required this.id,
+    required this.name,
+    required this.council,
+    required this.registration,
+    required this.state,
+    this.specialty,
+  });
+
+  final String id;
+  final String name;
+  final String council;
+  final String registration;
+  final String state;
+  final String? specialty;
+
+  String get label => '$name · $council $registration/$state';
+}
+
+/// Número no conselho para comparar: sem zeros à esquerda e em maiúsculas (igual à central).
+String registrationKey(String value) => value.trim().toUpperCase().replaceFirst(RegExp('^0+'), '');
 
 /// Entrega do certificado e do CSC guardada no caixa (o conteúdo continua cifrado).
 class StoredNfceCredential {
@@ -927,7 +965,7 @@ class LocalDatabase {
     }
     if (fullLoad) {
       // O que não veio na carga inteira saiu do escopo da filial.
-      for (final table in ['product', 'app_user', 'fiscal']) {
+      for (final table in ['product', 'app_user', 'fiscal', 'health_professional']) {
         _db.execute('DELETE FROM $table WHERE seen_generation < ?', [state.generation]);
       }
       _db.execute('DELETE FROM product_search WHERE product_id NOT IN (SELECT id FROM product)');
@@ -994,6 +1032,12 @@ class LocalDatabase {
           _db.execute('DELETE FROM customer WHERE id = ?', [id]);
         } else {
           _upsertCustomer(id, data);
+        }
+      case 'health_professional':
+        if (data == null) {
+          _db.execute('DELETE FROM health_professional WHERE id = ?', [id]);
+        } else {
+          _upsertProfessional(id, data, generation);
         }
       case 'discount_rule':
         if (data == null) {
@@ -1095,6 +1139,81 @@ class LocalDatabase {
       );
     }
   }
+
+  void _upsertProfessional(Uint8List id, Map<String, dynamic> data, int generation) {
+    final name = data['name'] as String;
+    _db.execute(
+      'INSERT INTO health_professional (id, name, council, registration, state, specialty, search, seen_generation) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET name = excluded.name, council = excluded.council, '
+      'registration = excluded.registration, state = excluded.state, specialty = excluded.specialty, '
+      'search = excluded.search, seen_generation = excluded.seen_generation',
+      [id, name, data['council'], data['registration'], data['state'], data['specialty'], foldText(name), generation],
+    );
+  }
+
+  LocalProfessional _professional(Row row) => LocalProfessional(
+    id: uuidText(row['id'] as List<int>),
+    name: row['name'] as String,
+    council: row['council'] as String,
+    registration: row['registration'] as String,
+    state: row['state'] as String,
+    specialty: row['specialty'] as String?,
+  );
+
+  /// Busca do prescritor na receita: pelo nome (sem acento) ou pelo número no conselho.
+  List<LocalProfessional> searchProfessionals(String term, {int limit = 8}) {
+    final text = term.trim();
+    if (text.length < 2) return const [];
+    final rows = _db.select(
+      'SELECT * FROM health_professional WHERE search LIKE ? OR ltrim(upper(registration), \'0\') = ? '
+      'ORDER BY name LIMIT ?',
+      ['%${foldText(text)}%', registrationKey(text), limit],
+    );
+    return [for (final row in rows) _professional(row)];
+  }
+
+  /// O profissional com este conselho, número e UF, se já estiver na cópia local.
+  LocalProfessional? professionalByRegistration(String council, String registration, String state) {
+    for (final row in _db.select(
+      'SELECT * FROM health_professional WHERE council = ? AND state = ?',
+      [council, state.trim().toUpperCase()],
+    )) {
+      if (registrationKey(row['registration'] as String) == registrationKey(registration)) return _professional(row);
+    }
+    return null;
+  }
+
+  /// Cadastro rápido no caixa: entra na cópia local e sobe pela outbox, na mesma transação.
+  LocalProfessional saveProfessional({
+    required String name,
+    required String council,
+    required String registration,
+    required String state,
+    required DateTime now,
+  }) => _transaction(() {
+    final professional = LocalProfessional(
+      id: const Uuid().v7(),
+      name: name.trim().replaceAll(RegExp(r'\s+'), ' '),
+      council: council,
+      registration: registration.trim(),
+      state: state.trim().toUpperCase(),
+    );
+    _upsertProfessional(uuidBytes(professional.id), {
+      'name': professional.name,
+      'council': professional.council,
+      'registration': professional.registration,
+      'state': professional.state,
+      'specialty': null,
+    }, syncState.generation);
+    enqueue('health_professional', {
+      'id': professional.id,
+      'name': professional.name,
+      'council': professional.council,
+      'registration': professional.registration,
+      'state': professional.state,
+    }, now: now);
+    return professional;
+  });
 
   void _upsertFiscal(Uint8List id, Map<String, dynamic> data, int generation) {
     _db.execute(

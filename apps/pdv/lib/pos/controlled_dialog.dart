@@ -5,6 +5,7 @@ import '../face/face_widgets.dart';
 import '../ui/caps.dart';
 import 'controlled.dart';
 import 'focus_kit.dart';
+import '../local/local_database.dart' show LocalProfessional;
 import 'cart.dart';
 import 'money.dart';
 import 'pos_controller.dart';
@@ -92,7 +93,7 @@ class _ControlledDialogState extends State<_ControlledDialog> {
 
   @override
   void dispose() {
-    for (final field in [..._fields.values, _quantity, _code, _pin, _reason]) {
+    for (final field in [..._fields.values, _quantity, _code, _pin, _reason, _prescriberSearch]) {
       field.dispose();
     }
     for (final node in [..._focuses.values, _reasonFocus, _codeFocus, _pinFocus]) {
@@ -104,6 +105,37 @@ class _ControlledDialogState extends State<_ControlledDialog> {
   TextEditingController _field(String name) => _fields.putIfAbsent(name, TextEditingController.new);
 
   String? _reuseMessage;
+  final _prescriberSearch = TextEditingController();
+  List<LocalProfessional> _prescribers = const [];
+  String? _prescriberMessage;
+
+  /// Preenche o prescritor com um do cadastro.
+  void _choosePrescriber(LocalProfessional professional) {
+    setState(() {
+      _form
+        ..prescriberName = professional.name
+        ..prescriberCouncil = professional.council
+        ..prescriberNumber = professional.registration
+        ..prescriberState = professional.state;
+      _field('prescriberName').text = professional.name;
+      _field('prescriberNumber').text = professional.registration;
+      _field('prescriberState').text = professional.state;
+      _prescribers = const [];
+      _prescriberSearch.clear();
+      _prescriberMessage = null;
+      _formVersion += 1;
+    });
+    _focusProblem();
+  }
+
+  void _registerPrescriber() {
+    _collect();
+    final saved = widget.controller.registerPrescriber(_form);
+    setState(() {
+      _tried = true;
+      _prescriberMessage = saved == null ? null : 'Prescritor cadastrado: ${saved.label}.';
+    });
+  }
 
   /// Muda quando a receita é trazida de outro item, para os campos de escolha mostrarem o valor novo.
   int _formVersion = 0;
@@ -234,7 +266,7 @@ class _ControlledDialogState extends State<_ControlledDialog> {
         keyboardType: keyboard,
         inputFormatters: formatters,
         decoration: InputDecoration(labelText: label, hintText: hint, errorText: _tried ? errors[name] : null),
-        onChanged: (_) => _tried ? setState(_collect) : null,
+        onChanged: (_) => setState(_collect),
       ),
     );
   }
@@ -370,6 +402,26 @@ class _ControlledDialogState extends State<_ControlledDialog> {
                     ]),
                     const SizedBox(height: 12),
                     Text('Prescritor', style: Theme.of(context).textTheme.titleSmall),
+                    SizedBox(
+                      width: 420,
+                      child: TextField(
+                        key: const Key('rx-prescriber-search'),
+                        controller: _prescriberSearch,
+                        decoration: const InputDecoration(labelText: 'Buscar no cadastro (nome ou número no conselho)'),
+                        onChanged: (value) => setState(() => _prescribers = controller.searchPrescribers(value)),
+                      ),
+                    ),
+                    if (_prescribers.isNotEmpty)
+                      Wrap(spacing: 8, runSpacing: 4, children: [
+                        for (final (index, professional) in _prescribers.indexed)
+                          ActionChip(
+                            key: Key('rx-prescriber-$index'),
+                            label: Text(professional.label),
+                            onPressed: () => _choosePrescriber(professional),
+                          ),
+                      ])
+                    else if (_prescriberSearch.text.trim().length >= 2)
+                      const Text('Nenhum prescritor encontrado. Preencha abaixo e cadastre.'),
                     Wrap(spacing: 12, runSpacing: 8, children: [
                       _text('prescriberName', 'Nome', errors: errors, width: 300),
                       SizedBox(
@@ -385,7 +437,14 @@ class _ControlledDialogState extends State<_ControlledDialog> {
                       ),
                       _text('prescriberNumber', 'Número', errors: errors, width: 140),
                       _text('prescriberState', 'UF', errors: errors, width: 70, formatters: _state),
+                      if (!controller.prescriberRegistered(_form))
+                        OutlinedButton(
+                          key: const Key('rx-prescriber-save'),
+                          onPressed: _registerPrescriber,
+                          child: const Text('Cadastrar prescritor'),
+                        ),
                     ]),
+                    if (_prescriberMessage != null) Text(_prescriberMessage!, key: const Key('rx-prescriber-message')),
                     const SizedBox(height: 12),
                     Text(_form.type.requiresBuyer ? 'Comprador' : 'Comprador (opcional no antimicrobiano)',
                         style: Theme.of(context).textTheme.titleSmall),

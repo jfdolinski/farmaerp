@@ -652,6 +652,18 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'O caixa busca o certificado de novo sozinho. Se continuar, informe o código ao suporte.',
     retryable: true,
   ),
+  'FA733': ErrorCatalogEntry(
+    code: 'FA733',
+    message: 'Já existe um profissional com este conselho, número e UF.',
+    action: 'Busque o profissional na lista e edite o cadastro que já existe.',
+    retryable: false,
+  ),
+  'FA734': ErrorCatalogEntry(
+    code: 'FA734',
+    message: 'Os dados do profissional são inválidos.',
+    action: 'Informe o nome, o conselho, o número (letras, números e hífen) e a UF. A especialidade é opcional.',
+    retryable: false,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',

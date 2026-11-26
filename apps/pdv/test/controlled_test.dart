@@ -25,6 +25,8 @@ const diazepam = '019a0000-0000-7000-8000-000000000053';
 const azitromicina = '019a0000-0000-7000-8000-000000000063';
 const batchDiazepam = '019a0000-0000-7000-8000-000000000056';
 const batchAzitro = '019a0000-0000-7000-8000-000000000066';
+const drAna = '019a0000-0000-7000-8000-0000000000a1';
+const drBruno = '019a0000-0000-7000-8000-0000000000a2';
 const batchOld = '019a0000-0000-7000-8000-000000000036';
 const batchNew = '019a0000-0000-7000-8000-000000000038';
 const batchExpired = '019a0000-0000-7000-8000-000000000039';
@@ -88,6 +90,12 @@ LocalDatabase seeded() {
         ],
       }),
       const PullItem(type: 'stock', id: amoxicilina, data: {'quantity': -1, 'batches': []}),
+      const PullItem(type: 'health_professional', id: drAna, data: {
+        'name': 'Dra. Fictícia Antônia', 'council': 'CRM', 'registration': '012345', 'state': 'SP', 'specialty': 'Psiquiatria',
+      }),
+      const PullItem(type: 'health_professional', id: drBruno, data: {
+        'name': 'Dr. Bruno Fictício', 'council': 'CRO', 'registration': '777', 'state': 'PR', 'specialty': null,
+      }),
     ]),
     now: synced,
   );
@@ -469,6 +477,44 @@ void main() {
     });
   });
 
+  group('profissionais da saúde', () {
+    test('descem da central; busca por nome sem acento ou pelo número; inativo some', () {
+      expect(database.searchProfessionals('antonia').map((p) => p.id), [drAna]);
+      expect(database.searchProfessionals('12345').map((p) => p.label), ['Dra. Fictícia Antônia · CRM 012345/SP']);
+      expect(database.searchProfessionals('Fictí').map((p) => p.id), [drBruno, drAna]);
+      expect(database.searchProfessionals('a'), isEmpty);
+      expect(database.professionalByRegistration('CRM', '12345', 'sp')?.id, drAna);
+      expect(database.professionalByRegistration('CRO', '12345', 'SP'), isNull);
+      // Inativo (ou apagado) desce vazio e sai da cópia local.
+      database.applyPage(const PullPage(format: 8, until: '11', items: [PullItem(type: 'health_professional', id: drBruno, data: null)]),
+          now: synced);
+      expect(database.searchProfessionals('Bruno'), isEmpty);
+    });
+
+    test('cadastro rápido no caixa: entra na cópia local e sobe pela outbox; repetido devolve o que já existe', () async {
+      await ready();
+      controller.scan('7890000000055');
+      controller.startPayment();
+      final form = filled()
+        ..prescriberName = '  Dr.  Novo   Prescritor '
+        ..prescriberNumber = '998877'
+        ..prescriberState = 'MG';
+      expect(controller.prescriberRegistered(form), isFalse);
+      // Prescritor com problema não cadastra.
+      expect(controller.registerPrescriber(filled()..prescriberState = 'XX'), isNull);
+      expect(noticeCode(), 'FA734');
+      final saved = controller.registerPrescriber(form)!;
+      expect([saved.name, saved.registration, saved.state], ['Dr. Novo Prescritor', '998877', 'MG']);
+      expect(controller.prescriberRegistered(form), isTrue);
+      expect(controller.searchPrescribers('novo prescritor').single.id, saved.id);
+      // De novo, com zero à esquerda: o mesmo, sem outra subida.
+      expect(controller.registerPrescriber(form..prescriberNumber = '0998877')!.id, saved.id);
+      final outbox = database.nextOutboxBatch().where((item) => item.kind == 'health_professional').toList();
+      expect(outbox, hasLength(1));
+      expect(outbox.single.payload, {'id': saved.id, 'name': 'Dr. Novo Prescritor', 'council': 'CRM', 'registration': '998877', 'state': 'MG'});
+    });
+  });
+
   group('tela', () {
     Future<void> pump(WidgetTester tester) async {
       await tester.binding.setSurfaceSize(const Size(1400, 1000));
@@ -535,6 +581,34 @@ void main() {
       String text(String name) => tester.widget<TextField>(find.byKey(Key('rx-$name'))).controller!.text;
       expect([text('prescriberName'), text('prescriberNumber'), text('buyerDocument'), text('number'), text('date')],
           ['Dra. Fictícia', '123456', '123456789', '', '']);
+    });
+
+    testWidgets('busca do prescritor preenche os campos; prescritor novo pode ser cadastrado', (tester) async {
+      await tester.runAsync(ready);
+      controller.scan('7890000000055');
+      controller.startPayment();
+      await pump(tester);
+      await tester.tap(find.byKey(const Key('controlled-open')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('rx-prescriber-search')), 'antonia');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('rx-prescriber-0')));
+      await tester.pumpAndSettle();
+      String text(String name) => tester.widget<TextField>(find.byKey(Key('rx-$name'))).controller!.text;
+      expect([text('prescriberName'), text('prescriberNumber'), text('prescriberState')], ['Dra. Fictícia Antônia', '012345', 'SP']);
+      // Já cadastrado: sem o botão de cadastrar.
+      expect(find.byKey(const Key('rx-prescriber-save')), findsNothing);
+
+      await tester.enterText(find.byKey(const Key('rx-prescriber-search')), 'ninguém');
+      await tester.pumpAndSettle();
+      expect(findText('Nenhum prescritor encontrado. Preencha abaixo e cadastre.'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('rx-prescriberName')), 'Dra. Nova Fictícia');
+      await tester.enterText(find.byKey(const Key('rx-prescriberNumber')), '4321');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('rx-prescriber-save')));
+      await tester.pumpAndSettle();
+      expect(findTextContaining('Prescritor cadastrado: Dra. Nova Fictícia · CRM 4321/SP'), findsOneWidget);
+      expect(find.byKey(const Key('rx-prescriber-save')), findsNothing);
     });
 
     testWidgets('sem saldo em lote, a janela pede só o motivo', (tester) async {

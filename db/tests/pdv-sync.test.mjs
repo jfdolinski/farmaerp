@@ -143,7 +143,7 @@ describe('carga inicial', () => {
     const page = await pullPage(a.terminal1, { limit: 2 });
     expect(page.items).toHaveLength(2);
     expect(page.next).toMatch(/^[1-4]:/);
-    expect(page.format).toBe(7);
+    expect(page.format).toBe(8);
     // O total vem só no primeiro pacote, para o progresso da carga.
     expect(page.total).toBe(single.items.length);
     expect((await pullPage(a.terminal1, { until: page.until, after: page.next, limit: 2 })).total).toBeNull();
@@ -433,7 +433,7 @@ describe('proteções', () => {
     }
     for (const args of [
       { cursor: 'abc' }, { cursor: '-1' }, { until: '1x' }, { after: `3:${randomUUID()}` },
-      { until: '10', after: `7:${randomUUID()}` }, { until: '10', after: '3:nada' }, { limit: 0 }, { limit: 5001 },
+      { until: '10', after: `8:${randomUUID()}` }, { until: '10', after: '3:nada' }, { limit: 0 }, { limit: 5001 },
     ]) {
       await expect(pullPage(a.terminal1, args)).rejects.toSatisfy(hasCode('FA956'));
     }
