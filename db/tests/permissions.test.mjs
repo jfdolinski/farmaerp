@@ -13,7 +13,7 @@ beforeAll(async () => {
 afterAll(closePools);
 
 const ALL = [
-  'agreements.manage', 'audit.view', 'branches.view_all', 'controlled.dispense', 'controlled.view', 'credit.manage', 'credit.policy', 'credit.view', 'customers.manage', 'customers.view', 'fiscal.certificate', 'fiscal.manage', 'fiscal.view', 'health_professionals.manage', 'products.manage', 'products.price', 'products.reactivate',
+  'agreements.manage', 'audit.view', 'branches.view_all', 'controlled.dispense', 'controlled.view', 'credit.manage', 'credit.policy', 'credit.view', 'customers.manage', 'customers.view', 'fiscal.certificate', 'fiscal.manage', 'fiscal.view', 'health_professionals.manage', 'imports.manage', 'products.manage', 'products.price', 'products.reactivate',
   'products.status', 'products.view', 'purchases.cost_override', 'purchases.manage', 'purchases.post', 'purchases.view', 'releases.view', 'roles.assign', 'roles.manage', 'rules.manage', 'rules.view', 'sales.discount_override', 'sales.quote', 'sales.return', 'sales.sell', 'sales.view', 'sales.zero_stock_release',
   'sngpc.manage', 'stock.adjust', 'stock.batch', 'stock.batch_override', 'stock.loss', 'stock.transfer', 'stock.view', 'structure.manage', 'sync.resolve', 'sync.view',
   'terminals.approve', 'terminals.block', 'terminals.request', 'terminals.revoke', 'terminals.view',

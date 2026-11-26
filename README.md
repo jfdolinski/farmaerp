@@ -631,6 +631,20 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - **Retaguarda:** seção "Compras" na ficha do cliente (`GET /admin/customers/:id/history`), só com as filiais que o usuário vê; exige `customers.view` ou `customers.manage`.
 - **Caixa:** botão de histórico no painel do cliente da venda (`GET /terminals/customers/:id/history`), com a rede inteira do grupo. Só com internet (FA984 sem conexão).
 
+**Importação das notas do sistema anterior (I1: NFC-e)**
+
+- **Envio:** `POST /admin/imports` (nome e tamanho, .zip até 1 GB), `PUT /admin/imports/:id/parts/:n` (partes de até 20 MB, em ordem) e `POST /admin/imports/:id/complete`. Permissão `imports.manage` (Administrador). O arquivo fica em `IMPORTS_DIR` até ser processado (FA740 sem a pasta; FA741 parte fora de ordem).
+- **Processamento** (`ImportsService`, a cada 10 s): lê o .zip entrada por entrada (`yauzl`), cada XML vira uma chamada a `app.import_nfce` (uma transação por nota) e os cancelamentos (evento 110111 homologado) ficam para o fim. Reprocessar é seguro: nota repetida é ignorada pela chave.
+- **Regras (migration 0061):** só NFC-e de produção autorizada (100/150); homologação e sem protocolo são ignoradas; NF-e 55 e outros documentos são contados para as próximas etapas.
+  - **Filial** do emitente pelo CNPJ (criada com a empresa, se a raiz for nova; CNPJ de outro cliente: FA742).
+  - **Produto** pelo código do sistema anterior (`product.legacy_code`): criado com o nome, GTIN válido e livre (senão o próprio código como código interno), NCM e CEST próprios (`own_ncm`, `own_cest`) e o preço da nota.
+  - **Tributação própria** (`product_tax_rule`, por regime e UF): CFOP, origem, CST/CSOSN, alíquotas e cBenef da nota mais recente.
+  - **Cliente** pelo CPF/CNPJ do destinatário (sem nome: "Cliente CPF ***.***.***-NN").
+  - **Venda importada** (`imported_sale`, itens e pagamentos, com o XML) e **saída de estoque** do tipo `import` na data da nota, que pode deixar o saldo negativo e **não entra no SNGPC**. Cancelamento desfaz a venda e devolve o estoque.
+  - Nota com problema fica no relatório (FA743), com o motivo; as outras seguem.
+- **Relatório** (`GET /admin/imports/:id`): situação, contagens por modelo e resultado, problemas e a última numeração por filial, modelo e série.
+- A tela da retaguarda e a tributação própria descendo para o PDV entram no I2.
+
 **Profissionais da saúde (prescritores)**
 
 - **Cadastro** (`health_professional`, migration 0057, por grupo): nome, conselho (CRM, CRO, CRMV, COREN, CRF, RMS), número, UF, especialidade (opcional) e situação. O mesmo conselho, número (sem zeros à esquerda, sem diferença de maiúsculas) e UF não se repete (FA733); dados inválidos: FA734.
