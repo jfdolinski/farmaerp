@@ -7,6 +7,7 @@ import 'package:farmaerp_pdv/pos/focus_kit.dart';
 import 'package:farmaerp_pdv/pos/pos_auth.dart';
 import 'package:farmaerp_pdv/pos/pos_controller.dart';
 import 'package:farmaerp_pdv/pos/pos_screen.dart';
+import 'package:farmaerp_pdv/terminal/terminal_api.dart' show ApiException;
 import 'package:farmaerp_pdv/ui/caps.dart' show caps;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -295,6 +296,52 @@ void main() {
       await tester.enterText(find.byKey(const Key('scan-field')), '789000');
       await tester.pump(const Duration(milliseconds: 300));
       expect(controller.results, isEmpty);
+    });
+
+    testWidgets('cliente: cadastro na tela de vendas confere o CPF, usa o digitado na busca e já escolhe o cliente', (tester) async {
+      await tester.runAsync(() => controller.login('3', '2468'));
+      controller.openShift(0);
+      await tester.runAsync(() => controller.identifySeller('3'));
+      await tester.binding.setSurfaceSize(const Size(1500, 1000));
+      await tester.pumpWidget(MaterialApp(home: PosScreen(controller: controller)));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.f4);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('customer-query')), '111.444.777-35');
+      await tester.tap(find.byKey(const Key('customer-new')));
+      await tester.pumpAndSettle();
+      String text(String key) => tester.widget<TextField>(find.byKey(Key('customer-new-$key'))).controller!.text;
+      expect(text('document'), '11144477735');
+
+      // CPF errado e nome curto: nada vai para a central.
+      await tester.enterText(find.byKey(const Key('customer-new-document')), '11144477736');
+      await tester.enterText(find.byKey(const Key('customer-new-name')), 'Jo');
+      await tester.tap(find.byKey(const Key('customer-new-save')));
+      await tester.pumpAndSettle();
+      expect(findText('CPF inválido'), findsOneWidget);
+      expect(findText('Informe o nome completo'), findsOneWidget);
+      expect(api.createdCustomers, isEmpty);
+
+      // CPF já cadastrado: mensagem e atalho para buscar.
+      await tester.enterText(find.byKey(const Key('customer-new-document')), '111.444.777-35');
+      await tester.enterText(find.byKey(const Key('customer-new-name')), 'Ana Fictícia');
+      api.createFailure = const ApiException('FA901');
+      await tester.tap(find.byKey(const Key('customer-new-save')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('customer-new-error')), findsOneWidget);
+      expect(find.byKey(const Key('customer-new-find')), findsOneWidget);
+
+      api.createFailure = null;
+      await tester.tap(find.byKey(const Key('customer-new-marketing')));
+      await tester.enterText(find.byKey(const Key('customer-new-birth')), '20/05/1990');
+      await tester.tap(find.byKey(const Key('customer-new-save')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pumpAndSettle();
+      expect(api.createdCustomers.single, containsPair('birthDate', '1990-05-20'));
+      expect(api.createdCustomers.single['consents'], {'cashback': false, 'marketing': true});
+      expect(controller.cart.customer?.name, caps('Ana Fictícia'));
+      expect(find.byKey(const Key('customer-new-save')), findsNothing);
     });
 
     testWidgets('cliente: busca sozinha a partir de 3 letras e Enter escolhe o marcado', (tester) async {

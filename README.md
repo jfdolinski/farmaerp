@@ -619,6 +619,12 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - **Tela Fiscal:** o que falta para ligar e quantos caixas já receberam o certificado em uso.
 - **Testes:** a entrega de referência (`apps/pdv/test/fixtures/fiscal/entrega-certificado.json`, chave e certificado só de teste) é gerada com o código da API e aberta tanto pelo PDV (Dart) quanto pela API.
 
+**Cliente cadastrado no caixa**
+
+- Na janela de cliente do PDV (F4), "Cadastrar cliente" abre o cadastro: nome, CPF, telefone e nascimento (opcionais), e os consentimentos de cashback e de ofertas (opcionais, registrados como dados na loja). O CPF ou o nome digitados na busca já vêm preenchidos.
+- Só com internet (`POST /terminals/customers`, `app.pdv_create_customer`, migration 0058): a central confere o CPF repetido na hora (FA901, com o atalho "Buscar o cliente por este CPF"). Sem internet: FA984, e a venda segue sem cliente.
+- Quem cadastra é o operador do caixa, conferido pela permissão de vender na filial do terminal. O cliente novo já fica guardado no terminal e escolhido na venda.
+
 **Profissionais da saúde (prescritores)**
 
 - **Cadastro** (`health_professional`, migration 0057, por grupo): nome, conselho (CRM, CRO, CRMV, COREN, CRF, RMS), número, UF, especialidade (opcional) e situação. O mesmo conselho, número (sem zeros à esquerda, sem diferença de maiúsculas) e UF não se repete (FA733); dados inválidos: FA734.

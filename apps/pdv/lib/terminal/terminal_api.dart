@@ -92,6 +92,9 @@ abstract class TerminalApi {
     required String id,
   });
 
+  /// Cadastro do cliente na tela de vendas (com internet). Devolve o cliente como na escolha.
+  Future<PullItem> createCustomer({required String accessToken, required Map<String, Object?> data});
+
   /// Estoque do produto em cada filial do grupo (com internet).
   Future<List<Map<String, dynamic>>> networkStock({
     required String accessToken,
@@ -446,4 +449,10 @@ class HttpTerminalApi implements TerminalApi {
   @override
   Future<Map<String, dynamic>> nfceCredentials({required String accessToken}) =>
       _post('/terminals/nfce/credentials', const {}, accessToken: accessToken);
+
+  @override
+  Future<PullItem> createCustomer({required String accessToken, required Map<String, Object?> data}) async {
+    final json = await _post('/terminals/customers', data, accessToken: accessToken);
+    return PullItem(type: 'customer', id: json['id'] as String, data: json['data'] as Map<String, dynamic>?);
+  }
 }

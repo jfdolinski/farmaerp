@@ -256,6 +256,22 @@ class FakeApi implements TerminalApi {
     throw next;
   }
 
+  /// Cadastros recebidos; [createFailure] simula a recusa (ex.: FA901) ou a falta de internet.
+  final createdCustomers = <Map<String, Object?>>[];
+  Object? createFailure;
+
+  @override
+  Future<PullItem> createCustomer({required String accessToken, required Map<String, Object?> data}) async {
+    if (createFailure != null) throw createFailure!;
+    createdCustomers.add(data);
+    const id = '019a0000-0000-7000-8000-0000000000c1';
+    customerData[id] = {
+      'code': 90, 'person_type': 'individual', 'name': data['name'], 'trade_name': null, 'document': data['document'],
+      'phone': data['phone'], 'birth_date': data['birthDate'], 'city': null, 'state': null,
+    };
+    return PullItem(type: 'customer', id: id, data: customerData[id]);
+  }
+
   @override
   Future<void> registerFiscalKey({required String accessToken, required String publicKey, required String signature}) async {}
 

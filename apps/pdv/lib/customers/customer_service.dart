@@ -40,6 +40,31 @@ class CustomerService {
     }
   }
 
+  /// Cadastro na tela de vendas, só com internet (a central confere o CPF repetido). O cliente
+  /// novo fica guardado aqui, como o escolhido na busca. Devolve o id.
+  Future<String> create({
+    required String operatorId,
+    required String name,
+    required String document,
+    String? phone,
+    String? birthDate,
+    bool cashbackConsent = false,
+    bool marketingConsent = false,
+  }) async {
+    final item = await api.createCustomer(accessToken: await accessToken(), data: {
+      'operatorId': operatorId,
+      'name': name.trim(),
+      'document': document.trim(),
+      'phone': (phone ?? '').trim().isEmpty ? null : phone!.trim(),
+      'birthDate': birthDate,
+      'consents': {'cashback': cashbackConsent, 'marketing': marketingConsent},
+    });
+    database.saveCustomer(item);
+    // Sem dados pessoais no log.
+    logger?.info('Cliente cadastrado no caixa');
+    return item.id;
+  }
+
   /// Dados completos do cliente para a venda. Sem internet, vale a cópia guardada aqui.
   Future<Map<String, Object?>> select(String id) async {
     try {

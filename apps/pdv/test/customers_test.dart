@@ -115,6 +115,23 @@ void main() {
     });
   });
 
+  group('cadastro no caixa', () {
+    test('vai para a central com o operador e os consentimentos; o cliente fica guardado', () async {
+      final id = await customers.create(
+        operatorId: 'op-1', name: ' Ana Fictícia ', document: '11144477735', phone: ' ', birthDate: '1990-05-20',
+        cashbackConsent: true,
+      );
+      expect(api.createdCustomers.single, {
+        'operatorId': 'op-1', 'name': 'Ana Fictícia', 'document': '11144477735', 'phone': null, 'birthDate': '1990-05-20',
+        'consents': {'cashback': true, 'marketing': false},
+      });
+      expect(database.customerById(id)?['name'], 'Ana Fictícia');
+      api.createFailure = const ApiException('FA901');
+      await expectLater(customers.create(operatorId: 'op-1', name: 'Outra', document: '11144477735'),
+          throwsA(isA<ApiException>().having((e) => e.code, 'code', 'FA901')));
+    });
+  });
+
   group('cliente HTTP', () {
     test('a busca vai no corpo, e o detalhe pelo id', () async {
       final requests = <http.Request>[];
@@ -143,6 +160,22 @@ void main() {
       final item = await client.customer(accessToken: 'abc', id: joaoId);
       expect([requests[1].method, requests[1].url.path], ['GET', '/terminals/customers/$joaoId']);
       expect(item.data?['document'], '11144477735');
+    });
+
+    test('o cadastro vai por POST, com o CPF no corpo', () async {
+      late http.Request sent;
+      final client = HttpTerminalApi(
+        baseUrl: 'https://central.test',
+        client: MockClient((request) async {
+          sent = request;
+          return http.Response(jsonEncode({'id': joaoId, 'data': joao()}), 201);
+        }),
+      );
+      final item = await client.createCustomer(accessToken: 'abc', data: {'operatorId': 'op-1', 'name': 'João', 'document': '11144477735'});
+      expect([sent.method, sent.url.path], ['POST', '/terminals/customers']);
+      expect(sent.url.toString(), isNot(contains('111')));
+      expect(jsonDecode(sent.body), containsPair('document', '11144477735'));
+      expect([item.id, item.data?['code']], [joaoId, 7]);
     });
 
     test('resposta em formato inesperado vira o erro genérico', () async {

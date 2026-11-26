@@ -36,6 +36,45 @@ export class TerminalCustomersController {
     });
   }
 
+  /**
+   * Cadastro na tela de vendas (só com internet). O operador do caixa é conferido no banco (permissão
+   * de vender na filial). O CPF vai no corpo, nunca na URL.
+   */
+  @Post()
+  create(@RequestBody() rawBody: unknown) {
+    const body = asBody(rawBody);
+    const operatorId = requireUuid(body.operatorId);
+    const text = (field: string, max: number) => {
+      const value = body[field];
+      if (value === undefined || value === null || value === '') return null;
+      if (typeof value !== 'string' || value.length > max) throw new AppError('FA904');
+      return value;
+    };
+    const consents = body.consents;
+    if (consents !== undefined && (consents === null || typeof consents !== 'object' || Array.isArray(consents))) {
+      throw new AppError('FA905');
+    }
+    const flags = (consents ?? {}) as Record<string, unknown>;
+    for (const value of [flags.cashback, flags.marketing]) {
+      if (value !== undefined && typeof value !== 'boolean') throw new AppError('FA905');
+    }
+    const data = {
+      name: text('name', 150),
+      document: text('document', 20),
+      phone: text('phone', 20),
+      birthDate: text('birthDate', 10),
+      consents: { cashback: flags.cashback === true, marketing: flags.marketing === true },
+    };
+    if (data.birthDate !== null && !/^\d{4}-\d{2}-\d{2}$/.test(data.birthDate)) throw new AppError('FA904');
+    return this.database.withContext(async (client) => {
+      const { rows } = await client.query<{ result: unknown }>('SELECT app.pdv_create_customer($1, $2::jsonb) AS result', [
+        operatorId,
+        JSON.stringify(data),
+      ]);
+      return rows[0].result;
+    });
+  }
+
   @Get(':id')
   customer(@Param('id') id: string) {
     const customerId = requireUuid(id);

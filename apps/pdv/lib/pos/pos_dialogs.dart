@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 import 'package:flutter/services.dart';
 
+import '../core/document.dart';
 import '../core/error_display.dart';
 import '../face/face_widgets.dart';
 import '../local/local_database.dart';
@@ -350,11 +351,144 @@ class _CustomerDialogState extends State<_CustomerDialog> {
   int _sequence = 0;
   Timer? _typing;
 
+  // Cadastro na tela de vendas (com internet).
+  bool _creating = false;
+  final _newName = TextEditingController();
+  final _newDocument = TextEditingController();
+  final _newPhone = TextEditingController();
+  final _newBirth = TextEditingController();
+  bool _cashbackConsent = false;
+  bool _marketingConsent = false;
+  bool _tried = false;
+  String? _createError;
+  bool _duplicate = false;
+
   @override
   void dispose() {
     _typing?.cancel();
-    _query.dispose();
+    for (final field in [_query, _newName, _newDocument, _newPhone, _newBirth]) {
+      field.dispose();
+    }
     super.dispose();
+  }
+
+  /// Abre o cadastro aproveitando o que foi digitado na busca (CPF ou nome).
+  void _startCreating() {
+    final typed = _query.text.trim();
+    final digits = typed.replaceAll(RegExp(r'[^0-9]'), '');
+    setState(() {
+      _creating = true;
+      _createError = null;
+      _duplicate = false;
+      if (digits.length == 11 && digits.length >= typed.replaceAll(RegExp(r'[\s.\-/]'), '').length) {
+        _newDocument.text = digits;
+      } else if (typed.isNotEmpty && digits.isEmpty) {
+        _newName.text = typed;
+      }
+    });
+  }
+
+  DateTime? get _birth {
+    final match = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$').firstMatch(_newBirth.text.trim());
+    if (match == null) return null;
+    final day = int.parse(match[1]!), month = int.parse(match[2]!), year = int.parse(match[3]!);
+    final value = DateTime(year, month, day);
+    return value.day == day && value.month == month && year >= 1900 && !value.isAfter(DateTime.now()) ? value : null;
+  }
+
+  /// Campos com problema, conferidos aqui antes de ir à central.
+  Map<String, String> get _newErrors => {
+    if (_newName.text.trim().length < 3) 'name': 'Informe o nome completo',
+    if (!isValidCpf(_newDocument.text)) 'document': 'CPF inválido',
+    if (_newPhone.text.trim().isNotEmpty && !RegExp(r'^\d{10,11}$').hasMatch(_newPhone.text.replaceAll(RegExp(r'[^0-9]'), '')))
+      'phone': 'Telefone com DDD (10 ou 11 dígitos)',
+    if (_newBirth.text.trim().isNotEmpty && _birth == null) 'birth': 'Data inválida (dd/mm/aaaa)',
+  };
+
+  Future<void> _create() async {
+    setState(() {
+      _tried = true;
+      _createError = null;
+      _duplicate = false;
+    });
+    if (_newErrors.isNotEmpty) return;
+    final code = await widget.controller.createCustomer(
+      name: _newName.text,
+      document: _newDocument.text.replaceAll(RegExp(r'[^0-9]'), ''),
+      phone: _newPhone.text.replaceAll(RegExp(r'[^0-9]'), ''),
+      birthDate: _birth,
+      cashbackConsent: _cashbackConsent,
+      marketingConsent: _marketingConsent,
+    );
+    if (!mounted) return;
+    if (code == null) {
+      Navigator.pop(context);
+      return;
+    }
+    final display = ErrorDisplay.fromCode(code);
+    setState(() {
+      _createError = '${display.message} ${display.action}';
+      _duplicate = code == 'FA901';
+    });
+  }
+
+  /// CPF já cadastrado: volta para a busca pelo CPF.
+  void _searchDuplicate() {
+    setState(() {
+      _creating = false;
+      _query.text = _newDocument.text.replaceAll(RegExp(r'[^0-9]'), '');
+    });
+    _search();
+  }
+
+  Widget _createForm() {
+    final errors = _tried ? _newErrors : const <String, String>{};
+    Widget field(String key, String label, TextEditingController controller, {TextInputType? keyboard, String? hint}) => TextField(
+      key: Key('customer-new-$key'),
+      controller: controller,
+      keyboardType: keyboard,
+      decoration: InputDecoration(labelText: label, hintText: hint, errorText: errors[key]),
+      onChanged: (_) => _tried ? setState(() {}) : null,
+    );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        field('name', 'Nome completo', _newName),
+        field('document', 'CPF', _newDocument, keyboard: TextInputType.number),
+        field('phone', 'Telefone com DDD (opcional)', _newPhone, keyboard: TextInputType.phone),
+        field('birth', 'Nascimento (opcional)', _newBirth, keyboard: TextInputType.datetime, hint: 'dd/mm/aaaa'),
+        CheckboxListTile(
+          key: const Key('customer-new-cashback'),
+          contentPadding: EdgeInsets.zero,
+          value: _cashbackConsent,
+          onChanged: (value) => setState(() => _cashbackConsent = value ?? false),
+          title: const Text('Aceita participar do cashback'),
+        ),
+        CheckboxListTile(
+          key: const Key('customer-new-marketing'),
+          contentPadding: EdgeInsets.zero,
+          value: _marketingConsent,
+          onChanged: (value) => setState(() => _marketingConsent = value ?? false),
+          title: const Text('Aceita receber ofertas'),
+        ),
+        const Text('Os dados ficam protegidos (LGPD) e só são usados para as compras e o que o cliente aceitou acima.'),
+        if (_createError != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(_createError!, key: const Key('customer-new-error')),
+          ),
+        if (_duplicate)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              key: const Key('customer-new-find'),
+              onPressed: _searchDuplicate,
+              child: const Text('Buscar o cliente por este CPF'),
+            ),
+          ),
+      ],
+    );
   }
 
   /// Sugestões enquanto digita: a partir de 3 letras, com uma pausa curta entre as teclas.
@@ -410,10 +544,10 @@ class _CustomerDialogState extends State<_CustomerDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Identificar o cliente'),
+      title: Text(_creating ? 'Cadastrar cliente' : 'Identificar o cliente'),
       content: SizedBox(
         width: 480,
-        child: Column(
+        child: _creating ? SingleChildScrollView(child: _createForm()) : Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -467,8 +601,18 @@ class _CustomerDialogState extends State<_CustomerDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fechar')),
-        FilledButton(key: const Key('customer-search'), onPressed: _searching ? null : _search, child: const Text('Buscar')),
+        if (_creating) ...[
+          TextButton(key: const Key('customer-new-back'), onPressed: () => setState(() => _creating = false), child: const Text('Voltar à busca')),
+          FilledButton(
+            key: const Key('customer-new-save'),
+            onPressed: widget.controller.busy ? null : _create,
+            child: const Text('Cadastrar e usar na venda'),
+          ),
+        ] else ...[
+          TextButton(key: const Key('customer-new'), onPressed: _startCreating, child: const Text('Cadastrar cliente')),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fechar')),
+          FilledButton(key: const Key('customer-search'), onPressed: _searching ? null : _search, child: const Text('Buscar')),
+        ],
       ],
     );
   }
