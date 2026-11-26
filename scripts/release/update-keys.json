@@ -1,0 +1,4 @@
+{
+  "comment": "Chaves públicas Ed25519 (base64 de 32 bytes) que assinam as versões do PDV. A privada fica só no segredo UPDATE_SIGNING_KEY do GitHub. Para trocar de chave, acrescente a nova, publique, e só depois tire a antiga.",
+  "keys": []
+}

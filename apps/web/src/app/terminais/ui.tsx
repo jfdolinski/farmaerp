@@ -11,6 +11,7 @@ import {
   setSaleSettings,
   setReturnDays,
   setTerminalProfile,
+  setUpdateRing,
   claimPairing,
   LookupState,
   lookupPairing,
@@ -294,6 +295,31 @@ export function ProfileForm({ id, current }: { id: string; current: string }) {
         </button>
         <ErrorNotice error={state.error} />
         {state.done && <p role="status">Salvo. O PDV muda de modo na próxima sincronização.</p>}
+      </form>
+    </details>
+  );
+}
+
+/** Anel de atualização: os terminais de teste recebem a versão nova antes da rede. */
+export function UpdateRingForm({ id, current }: { id: string; current: string }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(setUpdateRing, {});
+  return (
+    <details className={styles.reason}>
+      <summary>Atualização: {current === "test" ? "terminal de teste" : "rede"}</summary>
+      <form action={action} className={styles.rowForm}>
+        <input type="hidden" name="id" value={id} />
+        <label>
+          Recebe a versão nova
+          <select name="ring" defaultValue={current}>
+            <option value="test">Primeiro (terminal de teste)</option>
+            <option value="general">Depois de liberada para a rede</option>
+          </select>
+        </label>
+        <button type="submit" disabled={pending}>
+          Salvar
+        </button>
+        <ErrorNotice error={state.error} />
+        {state.done && <p role="status">Salvo.</p>}
       </form>
     </details>
   );

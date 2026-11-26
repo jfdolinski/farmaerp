@@ -10,6 +10,7 @@ import {
   OfflineMinutesForm,
   SaleSettingsForm,
   ProfileForm,
+  UpdateRingForm,
   ReturnDaysForm,
   AutoRefresh,
   ReasonAction,
@@ -47,7 +48,19 @@ interface MonitorRow {
   open_conflicts: number;
   offline_minutes: number | null;
   branch_offline_minutes: number;
+  update_ring: "test" | "general";
+  last_update_status: "downloaded" | "applied" | "rolled_back" | "failed" | null;
+  last_update_version: string | null;
+  last_update_at: string | null;
+  last_update_detail: string | null;
 }
+
+const UPDATE_LABELS: Record<string, string> = {
+  downloaded: "baixada, aplica no próximo fechamento ou abertura",
+  applied: "aplicada",
+  rolled_back: "voltou à versão anterior",
+  failed: "falhou",
+};
 
 const STATUS_LABELS = {
   pending: "Aguardando aprovação",
@@ -239,7 +252,16 @@ async function TerminalsContent() {
                       </span>
                       <small>Visto: {formatDate(terminal.last_seen_at)}</small>
                     </td>
-                    <td>{terminal.app_version ?? "-"}</td>
+                    <td>
+                      {terminal.app_version ?? "-"}
+                      {terminal.update_ring === "test" && <small>Terminal de teste</small>}
+                      {terminal.last_update_status && (
+                        <small className={terminal.last_update_status === "rolled_back" || terminal.last_update_status === "failed" ? styles.warning : undefined}>
+                          {terminal.last_update_version}: {UPDATE_LABELS[terminal.last_update_status]} em {formatDate(terminal.last_update_at)}
+                          {terminal.last_update_detail ? ` (${terminal.last_update_detail})` : ""}
+                        </small>
+                      )}
+                    </td>
                     <td>
                       <SyncSummary terminal={terminal} />
                     </td>
@@ -256,6 +278,9 @@ async function TerminalsContent() {
                       )}
                       {(terminal.status === "active" || terminal.status === "blocked") && canApprove && terminal.profile && (
                         <ProfileForm id={terminal.id} current={terminal.profile} />
+                      )}
+                      {(terminal.status === "active" || terminal.status === "blocked") && canApprove && (
+                        <UpdateRingForm id={terminal.id} current={terminal.update_ring} />
                       )}
                       {terminal.status === "active" && canApprove && (
                         <OfflineMinutesForm

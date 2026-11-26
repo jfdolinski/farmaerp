@@ -159,6 +159,15 @@ O aparelho guarda uma chave Ed25519, responde a um desafio assinado e recebe um 
 - `FISCAL_ENCRYPTION_KEY`: 32 bytes em base64, criptografa certificado A1 e CSC. Sem ela, a API sobe, mas o envio de certificado e de CSC responde FA915.
 - `TRUST_PROXY=true`: usar atrás do proxy do EasyPanel, para o limite de tentativas ver o IP real.
 
+### Versões e atualização automática (central)
+
+- **Versões** (`app_release`): da plataforma, iguais para todos os clientes. O CI envia o instalador para `POST /releases` (token `RELEASE_UPLOAD_TOKEN`, arquivo no corpo, dados na query). A API confere a **assinatura Ed25519** antes de gravar (chaves públicas em `scripts/release/update-keys.json`; a privada fica só no segredo do GitHub) e o SHA-256 e o tamanho depois de receber. O arquivo vai para `RELEASES_DIR`. Repetida: FA874; inválida: FA869; envio sem token ou pasta: FA876.
+- **Texto assinado:** `farmaerp-release-v1`, app, sistema, versão, SHA-256 e tamanho, um por linha (`scripts/release/release-format.mjs`, `apps/api/src/releases/release-signature.ts` e o PDV).
+- **Chave:** `node scripts/release/generate-update-key.mjs <arquivo fora do repositório>` gera o par; a pública vai em `update-keys.json` (e em `update-keys.ts`, conferido por teste). Fora da produção, os testes aceitam também `UPDATE_TEST_PUBLIC_KEY`.
+- **Liberação gradual:** a versão nasce só para os terminais de teste. Em `/plataforma/versoes`, o administrador da plataforma libera para a rede ou retira (FA877; retirada não volta). Em Terminais, cada cliente marca o **anel** do terminal (teste ou rede, FA878).
+- **Terminal:** `GET /terminals/updates?platform=&current=` devolve a versão mais nova do anel dele, acima da que ele tem e que ele não tenha precisado desfazer; `GET /terminals/updates/{id}/file` baixa (com retomada por Range; FA875 se não puder); `POST /terminals/updates/{id}/report` informa baixou, aplicou, voltou à anterior ou falhou (`terminal_update_event`).
+- **Retaguarda:** em Terminais, a versão, o anel e a última atualização de cada terminal; em `/plataforma/versoes`, quantos terminais estão em cada versão, quantos aplicaram e quantos voltaram.
+
 ## Código humano
 
 O UUID é a identidade do registro. O código humano serve para tela, cupom e atendimento.
