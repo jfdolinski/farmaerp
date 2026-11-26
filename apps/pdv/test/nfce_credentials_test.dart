@@ -79,7 +79,9 @@ void main() {
     final opened = NfceCredentials.parse(await key.open(_envelope, envelopeContext(_terminalId, _version)));
     expect(opened.cscId, '000001');
     expect(opened.credentialVersion, _version);
-    expect(opened.privateKeyPem, File('test/fixtures/fiscal/test-key.pem').readAsStringSync());
+    // Quebra de linha conforme o sistema em que a entrega foi gerada (Windows ou Linux).
+    String lines(String text) => text.replaceAll('\r\n', '\n');
+    expect(lines(opened.privateKeyPem), lines(File('test/fixtures/fiscal/test-key.pem').readAsStringSync()));
     expect(opened.certificatePem, contains('BEGIN CERTIFICATE'));
 
     Future<String?> codeOf(Future<Object?> Function() call) async {
