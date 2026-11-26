@@ -12,6 +12,7 @@ import {
   FiscalFormState,
   setCsc,
   setDfe,
+  setNfce,
   setRegime,
   setSeries,
   setStateRegistration,
@@ -331,5 +332,93 @@ export function DfeToggle({ branchId, enabled }: { branchId: string; enabled: bo
       </div>
       <ErrorNotice error={state.error} />
     </form>
+  );
+}
+
+export interface NfceRow {
+  branch_id: string;
+  enabled: boolean;
+  environment: number;
+  contingency_hours: number;
+  state_supported: boolean;
+  has_state_registration: boolean;
+  has_regime: boolean;
+  has_certificate: boolean;
+  has_csc: boolean;
+  terminals: number;
+  terminals_ready: number;
+  can_manage: boolean;
+}
+
+/** "Emitir NFC-e" da filial: requisitos, ambiente, prazo da contingência e os caixas prontos. */
+export function NfceForm({ row }: { row: NfceRow }) {
+  const [state, action, pending] = useActionState<FiscalFormState, FormData>(setNfce, {});
+  const missing = [
+    !row.state_supported && "estado ainda não atendido",
+    !row.has_state_registration && "inscrição estadual",
+    !row.has_regime && "regime da empresa",
+    !row.has_certificate && "certificado A1 válido",
+    !row.has_csc && "CSC",
+  ].filter(Boolean);
+  return (
+    <>
+      <p className={styles.hint}>
+        Com a NFC-e ligada, cada caixa recebe o certificado e o CSC criptografados só para ele e emite a nota direto na
+        Sefaz. Sem internet, a nota sai em contingência e precisa ser transmitida dentro do prazo; o caixa avisa na metade
+        do prazo.
+      </p>
+      {row.enabled ? (
+        <p>
+          <strong>Ligada, em {row.environment === 1 ? "produção" : "homologação"}.</strong>{" "}
+          {row.terminals === 0
+            ? "Nenhum caixa ativo nesta filial."
+            : `${row.terminals_ready} de ${row.terminals} ${row.terminals === 1 ? "caixa já recebeu" : "caixas já receberam"} o certificado em uso.`}
+        </p>
+      ) : (
+        <p>
+          <strong>Desligada.</strong>
+        </p>
+      )}
+      {missing.length > 0 && (
+        <p className={styles.warning}>Para ligar, falta: {missing.join(", ")}.</p>
+      )}
+      {row.can_manage && (
+        <form action={action} className={styles.stack}>
+          <input type="hidden" name="branchId" value={row.branch_id} />
+          <div className={styles.inline}>
+            <label>
+              Ambiente
+              <select name="environment" defaultValue={String(row.environment)}>
+                <option value="2">Homologação (testes, sem valor fiscal)</option>
+                <option value="1">Produção</option>
+              </select>
+            </label>
+            <label>
+              Prazo da contingência (horas)
+              <input
+                name="contingencyHours"
+                type="number"
+                min={1}
+                max={168}
+                required
+                defaultValue={row.contingency_hours}
+              />
+            </label>
+          </div>
+          <div className={styles.inline}>
+            <button type="submit" name="enabled" value="true" disabled={pending}>
+              {row.enabled ? "Salvar" : "Ligar a NFC-e"}
+            </button>
+            {row.enabled && (
+              <button type="submit" name="enabled" value="false" className={styles.danger} disabled={pending}>
+                Desligar a NFC-e
+              </button>
+            )}
+          </div>
+          <ErrorNotice error={state.error} />
+          <Saved state={state} text="Configuração da NFC-e salva." />
+        </form>
+      )}
+    </>
   );
 }

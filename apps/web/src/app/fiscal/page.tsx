@@ -12,6 +12,8 @@ import {
   CscForm,
   DfeToggle,
   FiscalRow,
+  NfceForm,
+  NfceRow,
   RegimeForm,
   SeriesForm,
   SeriesRow,
@@ -48,10 +50,11 @@ async function FiscalContent() {
   const result = await apiFetch<FiscalRow[]>("/admin/fiscal");
   if (!result.ok) redirectIfNeeded(result.error, "/fiscal");
   const rows = result.ok ? result.data : [];
-  const [series, coverage, dfe] = await Promise.all([
+  const [series, coverage, dfe, nfce] = await Promise.all([
     apiFetch<SeriesRow[]>("/admin/fiscal/series"),
     apiFetch<CoverageRow[]>("/admin/fiscal/tax-coverage"),
     apiFetch<DfeRow[]>("/admin/dfe/status"),
+    apiFetch<NfceRow[]>("/admin/fiscal/nfce"),
   ]);
   const companies = [...new Set(rows.map((row) => row.company_id))];
 
@@ -97,6 +100,15 @@ async function FiscalContent() {
                 )}
                 <h3>CSC da NFC-e</h3>
                 <CscForm row={row} />
+                <h3>Emitir NFC-e</h3>
+                {nfce.ok ? (
+                  (() => {
+                    const item = nfce.data.find((entry) => entry.branch_id === row.branch_id);
+                    return item ? <NfceForm row={item} /> : null;
+                  })()
+                ) : (
+                  <ErrorNotice error={nfce.error} />
+                )}
                 <h3>Tributação</h3>
                 {coverage.ok ? (
                   <TaxCoverage row={row} coverage={coverage.data.find((item) => item.branch_id === row.branch_id)} />

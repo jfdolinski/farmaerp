@@ -45,6 +45,7 @@ class TerminalController extends ChangeNotifier {
     required this.deviceName,
     required this.appVersion,
     this.sync,
+    this.afterSync,
     this.logger,
     this.pollInterval = const Duration(seconds: 3),
     this.heartbeatInterval = const Duration(seconds: 60),
@@ -59,6 +60,10 @@ class TerminalController extends ChangeNotifier {
 
   /// Subida da outbox e descida para o banco local. Rodam depois de cada sinal de vida aceito.
   final SyncService? sync;
+
+  /// Depois de cada sincronização (ex.: certificado da NFC-e). Recebe o token, o terminal e
+  /// a assinatura com a chave do terminal. Uma falha aqui não derruba o sinal de vida.
+  final Future<void> Function(String accessToken, String terminalId, Future<String> Function(String message) sign)? afterSync;
   final LocalLogger? logger;
   final Duration pollInterval;
   final Duration heartbeatInterval;
@@ -289,6 +294,14 @@ class TerminalController extends ChangeNotifier {
     await _rememberStatus('active');
     _setPhase(TerminalPhase.ready);
     await sync?.run(token.value);
+    final after = afterSync;
+    if (after != null) {
+      try {
+        await after(token.value, _terminalId!, _identity!.sign);
+      } catch (error, stack) {
+        logger?.error('Falha depois da sincronização', errorCode: 'FA000', error: error, stackTrace: stack);
+      }
+    }
   }
 
   /// Token válido do terminal, para as consultas com internet (ex.: busca de cliente).

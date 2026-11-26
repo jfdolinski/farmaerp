@@ -270,6 +270,7 @@
       "sngpc_dispensing_complement_id_uuid_v7_check",
       "app_release_id_uuid_v7_check",
       "terminal_update_event_id_uuid_v7_check",
+      "terminal_credential_delivery_id_uuid_v7_check",
       "sngpc_credential_id_uuid_v7_check",
       "sngpc_submission_id_uuid_v7_check"
     ]
@@ -3203,6 +3204,60 @@
     "httpStatus": 422,
     "severity": "warning",
     "retryable": false,
+    "dbConstraints": []
+  },
+  "FA727": {
+    "message": "A filial ainda não pode emitir NFC-e.",
+    "action": "Informe a inscrição estadual, o regime da empresa, o certificado A1 e o CSC na tela Fiscal.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA728": {
+    "message": "A configuração da NFC-e é inválida.",
+    "action": "Escolha o ambiente e informe o prazo da contingência entre 1 e 168 horas.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "branch_nfce_environment_check",
+      "branch_nfce_contingency_hours_check"
+    ]
+  },
+  "FA729": {
+    "message": "Este terminal não emite NFC-e.",
+    "action": "Só terminais de caixa ou autoatendimento emitem nota. Confira o perfil do terminal em Terminais.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA730": {
+    "message": "A NFC-e não está ligada nesta filial.",
+    "action": "Ligue \"Emitir NFC-e\" na tela Fiscal da retaguarda.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA731": {
+    "message": "Não foi possível confirmar a chave de criptografia do terminal.",
+    "action": "O caixa registra a chave de novo sozinho. Se continuar, informe o código ao suporte.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": true,
+    "dbConstraints": [
+      "terminal_fiscal_key_check",
+      "terminal_credential_delivery_key_check"
+    ]
+  },
+  "FA732": {
+    "message": "O certificado recebido não abriu neste caixa.",
+    "action": "O caixa busca o certificado de novo sozinho. Se continuar, informe o código ao suporte.",
+    "httpStatus": 422,
+    "severity": "error",
+    "retryable": true,
     "dbConstraints": []
   }
 }

@@ -257,6 +257,12 @@ class FakeApi implements TerminalApi {
   }
 
   @override
+  Future<void> registerFiscalKey({required String accessToken, required String publicKey, required String signature}) async {}
+
+  @override
+  Future<Map<String, dynamic>> nfceCredentials({required String accessToken}) async => throw const ApiException('FA730');
+
+  @override
   Future<PullPage> pull({
     required String accessToken,
     String? cursor,
