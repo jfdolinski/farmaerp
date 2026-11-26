@@ -287,7 +287,25 @@ describe('descida para o PDV contra o banco real', () => {
     const listed = ((await asManager('/sales').expect(200)).body as Json[]).find((row) => row.id === saleId);
     expect(listed).toMatchObject({ payment_methods: ['pix'], fiscal_status: 'pending', alert_count: 0, item_count: 1 });
     const detail = (await asManager(`/sales/${saleId}`).expect(200)).body as Json;
-    expect(detail).toMatchObject({ total: 25.8, items: [{ product_id: DIPIRONA, quantity: 2, central_price: 12.9 }] });
+    expect(detail).toMatchObject({ total: 25.8, items: [{ product_id: DIPIRONA, quantity: 2, central_price: 12.9 }], nfce: null });
+
+    // NFC-e autorizada no caixa sobe depois da venda; a retaguarda mostra e baixa o XML.
+    const fiscal = (await pullAll(null)).items.find((item: Json) => item.type === 'fiscal')?.data as Json;
+    const nfceSeries = (fiscal.series as Json[]).find((row) => row.model === '65')?.series as number;
+    const accessKey = `35${String(Date.now()).padStart(42, '0')}`;
+    const xml = `<nfeProc versao="4.00">${'<x/>'.repeat(40)}</nfeProc>`;
+    expect((await push([{ kind: 'nfce', payload: {
+      id: uuidV7(), sale_id: saleId, series: nfceSeries, number, access_key: accessKey, environment: 2, emission_type: 1,
+      status: 'authorized', protocol: '135260000000123', status_code: '100', reason: 'Autorizado o uso da NF-e', xml,
+      emitted_at: new Date().toISOString(), authorized_at: new Date().toISOString(),
+    } }]).expect(200)).body.results[0]).toMatchObject({ status: 'applied', code: null });
+    expect((await asManager(`/sales/${saleId}`).expect(200)).body).toMatchObject({
+      fiscal_status: 'authorized', nfce: { status: 'authorized', access_key: accessKey, protocol: '135260000000123' },
+    });
+    const download = await asManager(`/sales/${saleId}/nfce.xml`).expect(200);
+    expect(download.headers['content-disposition']).toContain(`NFCe-${accessKey}.xml`);
+    expect(download.text).toBe(xml);
+    expect((await asManager(`/sales/${uuidV7()}/nfce.xml`).expect(404)).body).toMatchObject({ code: 'FA006' });
     expect((await asManager('/sales?from=ontem').expect(422)).body).toMatchObject({ code: 'FA005' });
     expect((await asManager(`/sales/${uuidV7()}`).expect(404)).body).toMatchObject({ code: 'FA006' });
     const asOperator = request(server()).get(`/admin/sales/${saleId}`).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(OPERATOR_EMAIL)}`);

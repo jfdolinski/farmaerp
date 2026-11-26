@@ -664,6 +664,30 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Informe o nome, o conselho, o número (letras, números e hífen) e a UF. A especialidade é opcional.',
     retryable: false,
   ),
+  'FA735': ErrorCatalogEntry(
+    code: 'FA735',
+    message: 'A NFC-e recebida do caixa é inválida.',
+    action: 'A nota fica nos conflitos de sincronização. Atualize o PDV e informe o código ao suporte.',
+    retryable: false,
+  ),
+  'FA736': ErrorCatalogEntry(
+    code: 'FA736',
+    message: 'A Sefaz recusou a NFC-e desta venda.',
+    action: 'A venda foi concluída com a nota pendente. Confira o motivo em Vendas, na retaguarda.',
+    retryable: false,
+  ),
+  'FA737': ErrorCatalogEntry(
+    code: 'FA737',
+    message: 'A Sefaz não respondeu.',
+    action: 'A venda foi concluída com a nota pendente. O caixa tenta transmitir de novo.',
+    retryable: true,
+  ),
+  'FA738': ErrorCatalogEntry(
+    code: 'FA738',
+    message: 'O certificado da NFC-e ainda não chegou a este caixa.',
+    action: 'A venda foi concluída com a nota pendente. Confira a internet do caixa e a tela Fiscal da retaguarda.',
+    retryable: true,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',

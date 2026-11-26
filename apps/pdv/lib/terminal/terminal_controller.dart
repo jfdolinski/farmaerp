@@ -304,6 +304,9 @@ class TerminalController extends ChangeNotifier {
     }
   }
 
+  /// Terminal pareado (null antes da aprovação ou de carregar a identidade).
+  String? get terminalId => _terminalId;
+
   /// Token válido do terminal, para as consultas com internet (ex.: busca de cliente). Antes de
   /// o terminal carregar a identidade (ou sem pareamento), FA306.
   Future<String> accessToken() async {

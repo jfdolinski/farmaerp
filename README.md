@@ -638,6 +638,16 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - **Caixa:** os ativos descem para todos os caixas do grupo (7º tipo da descida; formato 8, que faz os caixas recarregarem tudo uma vez). Inativo desce vazio e sai da cópia local. O cadastro rápido feito no caixa sobe pela outbox (`health_professional`); se a central já tiver o mesmo profissional, fica com o que já tinha, sem conflito.
 - A receita da venda continua guardando o prescritor por extenso: o cadastro só ajuda a preencher.
 
+**NFC-e: emissão no caixa (Etapa 8, 8A-2b1)**
+
+- **Na finalização** (filial com "Emitir NFC-e" e o certificado no caixa): a venda é gravada; depois o PDV monta a NFC-e com a série do caixa (modelo 65; próximo número depois do maior entre o inicial, o que a central conhece e o que o caixa já usou), assina e transmite direto à Sefaz da UF (`lib/fiscal/sefaz.dart`, NFeAutorizacao4, lote síncrono, certificado do caixa no TLS, 15 s).
+  - **Autorizada:** guarda o `nfeProc` (nota + protocolo) e imprime o **DANFE NFC-e** com número, série, protocolo, consulta pela chave e o **QR Code** (ESC/POS e PDF). Em homologação, "EMITIDA EM AMBIENTE DE HOMOLOGAÇÃO / SEM VALOR FISCAL".
+  - **Recusada** (FA736) ou **sem resposta** (FA737): a venda conclui com a nota pendente e o comprovante comum; a nota assinada fica guardada com o motivo. A contingência sem internet entra no 8A-2b2.
+  - **Sem certificado no caixa** (FA738) ou **produto sem NCM/tributação** (FA726/FA723): a venda conclui sem nota e o número não é gasto.
+- **Na central** (migration 0060, `fiscal_document`): a nota sobe pela outbox depois da venda (item `nfce`); a venda passa a mostrar a situação fiscal (autorizada, recusada, pendente, contingência) e a série do terminal anda. Nota autorizada não muda (FA735). Retaguarda: detalhe da venda com série, número, chave, protocolo, motivo da Sefaz e "Baixar o XML".
+- **Endereços da Sefaz** por UF (SP, PR, SVRS para RS e SC, MG): **conferir antes de produção**. No primeiro envio real, conferir também a cadeia de certificados da Sefaz (raízes da ICP-Brasil).
+- **Testes:** Sefaz falsa (respostas no formato do manual: autorizada, recusada, lote recusado, serviço parado, sem conexão); venda completa com a nota validada no schema oficial.
+
 **SNGPC: manutenção (Etapa 8, entreposto)**
 
 - **Abertura por filial** (`app.sngpc_open`, permissão `sngpc.manage`, do Farmacêutico): o saldo de cada lote de controlado vira o inventário inicial. Saldo sem lote ou negativo fica fora e aparece no aviso, para acertar o estoque. Já aberto: FA861; ainda não aberto: FA862.
