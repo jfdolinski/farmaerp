@@ -653,6 +653,15 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - Lotes ficam no item (sem saldo por lote) e nada entra no SNGPC. Nota sem filial do cliente, entrada emitida por terceiro, homologação ou sem autorização: ignorada, e o relatório conta as ignoradas por motivo.
 - **Notas importadas (I3b, migration 0065):** `GET /admin/imported-notes` (filial, que inclui a que recebeu a transferência, período e natureza), `/:id` (itens com o código do fornecedor, quantidade da nota e do estoque, custo e lotes) e `/:id/xml`, para quem tem `stock.view` ou `purchases.view` numa das filiais da nota. Tela `/notas-importadas` e o detalhe.
 
+**Inventário de abertura (E1, migration 0066)**
+
+- Inventário por filial com data e hora de corte (`stock_count` e `stock_count_item`), permissão `stock.opening` (Administrador). Um em contagem por filial (FA744); corte no futuro ou antes de outro aplicado: FA747.
+- **Contagem:** planilha CSV (`POST /admin/stock-counts/:id/file`, texto; cada arquivo soma, para contar por seção) e digitação (`PUT /admin/stock-counts/:id/items`, define a quantidade). Código de barras, interno ou do sistema anterior; cabeçalho opcional (Código, Quantidade, Lote, Validade), ";" ou ",", número 1.234,5 e validade dd/mm/aaaa ou mm/aaaa. Linha com problema volta com o motivo, sem parar as outras.
+- **Lote:** produto que exige lote é contado por lote, com validade (FA746); nos outros, o lote é ignorado.
+- **Conferência** (`app.stock_count_review`): saldo no corte (só movimentos até ele: o caixa continua vendendo), contado e diferença; lote existente com outra validade aparece como problema e impede aplicar.
+- **Aplicar** (`app.apply_stock_count`): o contado vira o saldo; o que tinha saldo e não foi contado vai a zero (inclusive o saldo antigo sem lote de produto que exige lote). Cada diferença é um movimento `inventory` na hora do corte, ligado ao inventário, que pode deixar o saldo negativo (venda depois do corte) e não entra no SNGPC. Sem custo. Aplicado ou cancelado não muda (FA745).
+- Tela `/inventario` e o detalhe (contar, conferência, linhas contadas, aplicar e desistir).
+
 **Profissionais da saúde (prescritores)**
 
 - **Cadastro** (`health_professional`, migration 0057, por grupo): nome, conselho (CRM, CRO, CRMV, COREN, CRF, RMS), número, UF, especialidade (opcional) e situação. O mesmo conselho, número (sem zeros à esquerda, sem diferença de maiúsculas) e UF não se repete (FA733); dados inválidos: FA734.

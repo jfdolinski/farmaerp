@@ -282,7 +282,9 @@
       "sngpc_credential_id_uuid_v7_check",
       "sngpc_submission_id_uuid_v7_check",
       "imported_stock_note_id_uuid_v7_check",
-      "imported_stock_note_item_id_uuid_v7_check"
+      "imported_stock_note_item_id_uuid_v7_check",
+      "stock_count_id_uuid_v7_check",
+      "stock_count_item_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -1139,7 +1141,15 @@
     "retryable": false,
     "dbConstraints": [
       "stock_movement_type_check",
-      "stock_movement_quantity_check"
+      "stock_movement_quantity_check",
+      "stock_count_item_quantity_check",
+      "stock_count_item_source_check",
+      "stock_count_kind_check",
+      "stock_count_status_check",
+      "stock_count_note_check",
+      "stock_count_applied_check",
+      "stock_movement_stock_count_check",
+      "stock_count_item_key"
     ]
   },
   "FA811": {
@@ -3462,5 +3472,42 @@
       "imported_stock_note_key_key",
       "imported_stock_note_item_line_key"
     ]
+  },
+  "FA744": {
+    "message": "Já existe um inventário em contagem nesta filial.",
+    "action": "Continue o inventário aberto ou cancele-o antes de abrir outro.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "stock_count_open_key"
+    ]
+  },
+  "FA745": {
+    "message": "Este inventário não pode mais ser alterado.",
+    "action": "Ele já foi aplicado ou cancelado. Abra um novo inventário, se precisar.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA746": {
+    "message": "Produto que exige lote precisa de lote e validade na contagem.",
+    "action": "Informe o lote e a validade e confira de novo.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "stock_count_item_batch_check",
+      "stock_count_item_expiry_check"
+    ]
+  },
+  "FA747": {
+    "message": "A data e hora de corte do inventário são inválidas.",
+    "action": "Use um momento que já passou e depois do último inventário aplicado na filial.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
   }
 }

@@ -44,6 +44,7 @@ import { PdvAuthEventsController } from './auth/pdv-auth-events.controller.js';
 import { SalesController } from './sales/sales.controller.js';
 import { ImportedSalesController } from './sales/imported-sales.controller.js';
 import { ImportedNotesController } from './purchases/imported-notes.controller.js';
+import { StockCountsController } from './stock/stock-counts.controller.js';
 import { OfflineRulesController, TerminalStockController } from './terminals/offline-rules.controller.js';
 import { TerminalNfceController } from './terminals/terminal-nfce.controller.js';
 import { HealthProfessionalsController } from './sales/health-professionals.controller.js';
@@ -88,6 +89,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     SalesController,
     ImportedSalesController,
     ImportedNotesController,
+    StockCountsController,
     ControlledController,
     SngpcController,
     ReleasesController,
@@ -130,5 +132,9 @@ export class AppModule implements NestModule {
     consumer
       .apply(express.text({ type: ['application/xml', 'text/xml'], limit: '5mb' }))
       .forRoutes({ path: 'admin/purchase-invoices', method: RequestMethod.POST });
+    // A planilha do inventário chega como texto (CSV), com limite próprio.
+    consumer
+      .apply(express.text({ type: ['text/csv', 'text/plain'], limit: '5mb' }))
+      .forRoutes({ path: 'admin/stock-counts/:id/file', method: RequestMethod.POST });
   }
 }
