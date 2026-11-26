@@ -20,8 +20,8 @@ const customerId = '019a0000-0000-7000-8000-000000000032';
 final synced = DateTime.utc(2026, 11, 24, 13);
 late String pin;
 
-PullItem user(String id, int code, String name) => PullItem(type: 'user', id: id, data: {
-  'code': code, 'name': name, 'is_admin': false, 'roles': const [], 'permissions': const ['sales.sell', 'sales.return'],
+PullItem user(String id, int code, String name, {List<String> extra = const []}) => PullItem(type: 'user', id: id, data: {
+  'code': code, 'name': name, 'is_admin': false, 'roles': const [], 'permissions': ['sales.sell', 'sales.return', ...extra],
   'limits': const {'cash_withdrawal': 1000}, 'pin_hash': pin,
 });
 
@@ -38,7 +38,7 @@ LocalDatabase seeded() {
         'fixed_seller_id': operatorId,
       }),
       user(operatorId, 3, 'Operador Centro'),
-      user(managerId, 2, 'Gerente Centro'),
+      user(managerId, 2, 'Gerente Centro', extra: const ['pdv.sale_cancel']),
       PullItem(type: 'product', id: dipirona, data: {
         'code': 1, 'name': 'Dipirona 500 mg', 'status': 'active', 'price': 10, 'fraction_quantity': 1, 'batch_required': false,
         'cashback': 5,
@@ -140,6 +140,16 @@ void main() {
     controller.backToItems();
     await Future<void>.delayed(Duration.zero);
     expect(api.released, [first, second]);
+  });
+
+  test('venda cancelada no caixa (descartada) libera a reserva do cashback', () async {
+    await sell(3);
+    await controller.addCashback(500);
+    final reservation = controller.cart.payments.single.reservationId!;
+    expect(await controller.discardCart(supervisorCode: '2', supervisorPin: '2468'), isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect(api.released, [reservation]);
+    expect(controller.cashbackUsableCents, 0);
   });
 
   test('sem internet ou sem consentimento, não usa', () async {

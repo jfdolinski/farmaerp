@@ -3615,5 +3615,13 @@
     "severity": "warning",
     "retryable": true,
     "dbConstraints": []
+  },
+  "FA757": {
+    "message": "Esta pessoa não pode autorizar esta operação.",
+    "action": "Chame quem tem a permissão no perfil (o supervisor ou o gerente) para digitar o código e o PIN.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
   }
 }

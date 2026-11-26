@@ -9,6 +9,7 @@ import '../local/local_database.dart' show LocalProfessional;
 import 'cart.dart';
 import 'money.dart';
 import 'pos_controller.dart';
+import 'pos_dialogs.dart' show showRegistrationRelease;
 
 /// Ao finalizar, um controlado da venda sem receita: preencher, voltar aos itens ou tirar da venda.
 class ControlledPanel extends StatelessWidget {
@@ -128,9 +129,17 @@ class _ControlledDialogState extends State<_ControlledDialog> {
     _focusProblem();
   }
 
-  void _registerPrescriber() {
+  /// Supervisor que liberou o cadastro (quem está no terminal não tem "Cadastrar prescritor no PDV").
+  String? _prescriberAuthorizedBy;
+
+  Future<void> _registerPrescriber() async {
     _collect();
-    final saved = widget.controller.registerPrescriber(_form);
+    if (!widget.controller.can('pdv.prescriber_create') && _prescriberAuthorizedBy == null) {
+      final released = await showRegistrationRelease(context, widget.controller, permission: 'pdv.prescriber_create', what: 'prescritor');
+      if (!mounted || released == null) return;
+      _prescriberAuthorizedBy = released;
+    }
+    final saved = widget.controller.registerPrescriber(_form, authorizedBy: _prescriberAuthorizedBy);
     setState(() {
       _tried = true;
       _prescriberMessage = saved == null ? null : 'Prescritor cadastrado: ${saved.label}.';

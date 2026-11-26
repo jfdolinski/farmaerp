@@ -62,7 +62,7 @@ LocalDatabase seeded() {
         'last_sale_number': null,
         'fixed_seller_id': operatorId,
       }),
-      user(operatorId, 3, 'Operador Centro', const ['sales.sell']),
+      user(operatorId, 3, 'Operador Centro', const ['sales.sell', 'pdv.prescriber_create']),
       user(managerId, 5, 'Gerente Centro', const ['sales.sell', 'controlled.view']),
       user(pharmacistId, 7, 'Farmacêutica Ana', const ['sales.sell', 'controlled.dispense']),
       product(clonazepam, 4, 'Clonazepam 2 mg', 'B1', '7890000000055'),
@@ -511,7 +511,26 @@ void main() {
       expect(controller.registerPrescriber(form..prescriberNumber = '0998877')!.id, saved.id);
       final outbox = database.nextOutboxBatch().where((item) => item.kind == 'health_professional').toList();
       expect(outbox, hasLength(1));
-      expect(outbox.single.payload, {'id': saved.id, 'name': 'Dr. Novo Prescritor', 'council': 'CRM', 'registration': '998877', 'state': 'MG'});
+      expect(outbox.single.payload, {'id': saved.id, 'name': 'Dr. Novo Prescritor', 'council': 'CRM', 'registration': '998877', 'state': 'MG', 'created_by': operatorId});
+    });
+
+    test('sem "Cadastrar prescritor no PDV": só com a liberação, e quem liberou vai junto para a central', () async {
+      await controller.login('5', '2468');
+      controller.openShift(0);
+      controller.scan('7890000000055');
+      controller.startPayment();
+      final form = filled()
+        ..prescriberName = 'Dra. Liberada'
+        ..prescriberNumber = '776655'
+        ..prescriberState = 'SP';
+      expect(controller.can('pdv.prescriber_create'), isFalse);
+      expect(controller.registerPrescriber(form), isNull);
+      expect(noticeCode(), 'FA002');
+      expect(controller.prescriberRegistered(form), isFalse);
+      final saved = controller.registerPrescriber(form, authorizedBy: pharmacistId)!;
+      final outbox = database.nextOutboxBatch().where((item) => item.kind == 'health_professional').single;
+      expect(outbox.payload, containsPair('created_by', pharmacistId));
+      expect(outbox.payload['id'], saved.id);
     });
   });
 

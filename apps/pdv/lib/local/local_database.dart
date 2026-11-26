@@ -1326,6 +1326,7 @@ class LocalDatabase {
     required String registration,
     required String state,
     required DateTime now,
+    String? createdBy,
   }) => _transaction(() {
     final professional = LocalProfessional(
       id: const Uuid().v7(),
@@ -1347,6 +1348,8 @@ class LocalDatabase {
       'council': professional.council,
       'registration': professional.registration,
       'state': professional.state,
+      // Quem cadastrou (ou o supervisor que liberou): a central confere a permissão.
+      'created_by': ?createdBy,
     }, now: now);
     return professional;
   });

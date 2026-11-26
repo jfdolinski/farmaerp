@@ -20,6 +20,8 @@ import 'pos_test.dart' show FakePrinter, hashFor;
 
 const branchId = '019a0000-0000-7000-8000-000000000005';
 const operatorId = '019a0000-0000-7000-8000-000000000009';
+const managerId = '019a0000-0000-7000-8000-00000000000d';
+const plainId = '019a0000-0000-7000-8000-0000000000c3';
 const dipirona = '019a0000-0000-7000-8000-000000000027';
 const dorflex = '019a0000-0000-7000-8000-000000000028';
 const clonazepam = '019a0000-0000-7000-8000-000000000033';
@@ -41,7 +43,7 @@ PullItem product(String id, int code, String name, String barcode, {String? ingr
   },
 );
 
-LocalDatabase seeded() {
+LocalDatabase seeded({String profile = 'cashier'}) {
   final database = LocalDatabase.inMemory();
   database.applyPage(
     PullPage(format: 3, until: '10', items: [
@@ -50,9 +52,19 @@ LocalDatabase seeded() {
         'company': {'trade_name': 'Farmácia Demonstração'},
         'series': const [],
         'last_sale_number': null,
+        'terminal_profile': profile,
+      }),
+      // Sem "Cadastrar cliente no PDV": precisa da liberação.
+      PullItem(type: 'user', id: plainId, data: {
+        'code': 6, 'name': 'Caixa Sem Cadastro', 'is_admin': false, 'roles': const [], 'permissions': const ['sales.sell'],
+        'limits': const {}, 'pin_hash': pin,
+      }),
+      PullItem(type: 'user', id: managerId, data: {
+        'code': 2, 'name': 'Gerente Centro', 'is_admin': false, 'roles': const [], 'permissions': const ['sales.sell', 'pdv.customer_create'],
+        'limits': const {}, 'pin_hash': pin,
       }),
       PullItem(type: 'user', id: operatorId, data: {
-        'code': 3, 'name': 'Operador Centro', 'is_admin': false, 'roles': const [], 'permissions': const ['sales.sell'],
+        'code': 3, 'name': 'Operador Centro', 'is_admin': false, 'roles': const [], 'permissions': const ['sales.sell', 'pdv.customer_create'],
         'limits': const {'sale_discount': 5}, 'pin_hash': pin,
       }),
       product(dipirona, 1, 'Dipirona Sódica 500 mg', '7890000000017', ingredient: 'Dipirona', manufacturer: 'EMS'),
@@ -342,6 +354,58 @@ void main() {
       expect(api.createdCustomers.single['consents'], {'cashback': false, 'marketing': true});
       expect(controller.cart.customer?.name, caps('Ana Fictícia'));
       expect(find.byKey(const Key('customer-new-save')), findsNothing);
+    });
+
+    testWidgets('cliente: sem a permissão, o cadastro pede a liberação e vai em nome de quem liberou', (tester) async {
+      await tester.runAsync(() => controller.login('6', '2468'));
+      controller.openShift(0);
+      await tester.runAsync(() => controller.identifySeller('6'));
+      await tester.binding.setSurfaceSize(const Size(1500, 1000));
+      await tester.pumpWidget(MaterialApp(home: PosScreen(controller: controller)));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.f4);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('customer-new')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('customer-new-name')), findsNothing);
+      // Desistir da liberação: o cadastro não abre.
+      await tester.tap(find.byKey(const Key('release-back')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('customer-new-name')), findsNothing);
+      await tester.tap(find.byKey(const Key('customer-new')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('release-code')), '2');
+      await tester.enterText(find.byKey(const Key('release-pin')), '2468');
+      await tester.tap(find.byKey(const Key('release-confirm')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('customer-new-document')), '111.444.777-35');
+      await tester.enterText(find.byKey(const Key('customer-new-name')), 'Ana Fictícia');
+      await tester.tap(find.byKey(const Key('customer-new-save')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pumpAndSettle();
+      expect(api.createdCustomers.single, containsPair('operatorId', managerId));
+    });
+
+    test('cliente: sem a permissão e sem liberação, nem chama a central', () async {
+      await controller.login('6', '2468');
+      expect(await controller.createCustomer(name: 'Ana Fictícia', document: '11144477735'), 'FA002');
+      expect(api.createdCustomers, isEmpty);
+    });
+
+    test('cliente no terminal de orçamento: vai em nome do vendedor (não há operador)', () async {
+      database.close();
+      database = seeded(profile: 'quote');
+      controller = PosController(
+        database: database,
+        auth: PosAuth(database: database),
+        printer: () => printer,
+        terminalNumber: () => 3,
+        customers: CustomerService(api: api, database: database, accessToken: () async => 't'),
+      );
+      await controller.identifySeller('3');
+      expect(await controller.createCustomer(name: 'Ana Fictícia', document: '11144477735'), isNull);
+      expect(api.createdCustomers.single, containsPair('operatorId', operatorId));
     });
 
     testWidgets('cliente: o histórico abre pelo painel; sem internet avisa', (tester) async {
