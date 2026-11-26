@@ -643,7 +643,7 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - **Venda importada** (`imported_sale`, itens e pagamentos, com o XML) e **saída de estoque** do tipo `import` na data da nota, que pode deixar o saldo negativo e **não entra no SNGPC**. Cancelamento desfaz a venda e devolve o estoque.
   - Nota com problema fica no relatório (FA743), com o motivo; as outras seguem.
 - **Relatório** (`GET /admin/imports/:id`): situação, contagens por modelo e resultado, problemas e a última numeração por filial, modelo e série.
-- A tela da retaguarda e a tributação própria descendo para o PDV entram no I2.
+- **Tela** `/importacoes` (permissão `imports.manage`): envio do .zip em partes de 8 MB pela retaguarda (rota `/importacoes/envio/:id/:parte`, que recusa parte cortada pelo limite de 10 MB do proxy do Next), lista dos arquivos e relatório que se atualiza sozinho enquanto processa.
 
 **Profissionais da saúde (prescritores)**
 
