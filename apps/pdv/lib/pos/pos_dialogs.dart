@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../core/document.dart';
 import '../core/error_display.dart';
+import '../customers/customer_service.dart';
 import '../face/face_widgets.dart';
 import '../local/local_database.dart';
 import '../terminal/terminal_api.dart';
@@ -328,6 +329,85 @@ Future<void> showNetworkStock(BuildContext context, PosController controller, Sa
 }
 
 /// Identificação do cliente: busca com internet (ou entre os guardados) e escolha.
+/// Histórico do cliente da venda: ticket médio, compras dos últimos 30 dias e recorrentes.
+Future<void> showCustomerHistoryDialog(BuildContext context, PosController controller) {
+  final customer = controller.cart.customer;
+  final service = controller.customers;
+  if (customer == null || service == null) return Future.value();
+  return showDialog<void>(context: context, builder: (_) => _CustomerHistoryDialog(name: customer.name, history: service.history(customer.id)));
+}
+
+class _CustomerHistoryDialog extends StatelessWidget {
+  const _CustomerHistoryDialog({required this.name, required this.history});
+
+  final String name;
+  /// Buscado uma vez, ao abrir a janela.
+  final Future<CustomerHistory> history;
+
+  static String _two(int value) => value.toString().padLeft(2, '0');
+  static String _date(DateTime value) {
+    final local = value.toLocal();
+    return '${_two(local.day)}/${_two(local.month)}/${local.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      key: const Key('customer-history'),
+      title: Text('Compras de $name'),
+      content: SizedBox(
+        width: 560,
+        child: FutureBuilder<CustomerHistory>(
+          future: history,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              final error = snapshot.error;
+              final code = error is ApiException
+                  ? (const {'FA001', 'FA008', 'FA009'}.contains(error.code) ? 'FA984' : error.code)
+                  : 'FA000';
+              final display = ErrorDisplay.fromCode(code);
+              return Text('${display.message} ${display.action}', key: const Key('customer-history-error'));
+            }
+            final history = snapshot.data;
+            if (history == null) return const LinearProgressIndicator();
+            final titles = Theme.of(context).textTheme.titleSmall;
+            return SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    history.averageTicketCents == null
+                        ? 'Nenhuma compra nos últimos 12 meses.'
+                        : 'Ticket médio: ${formatCents(history.averageTicketCents!)} · ${history.sales12m} '
+                            '${history.sales12m == 1 ? 'compra' : 'compras'} em 12 meses',
+                    key: const Key('customer-history-ticket'),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  if (history.lastPurchaseAt != null) Text('Última compra em ${_date(history.lastPurchaseAt!)}'),
+                  const SizedBox(height: 12),
+                  Text('Últimos 30 dias', style: titles),
+                  if (history.recent.isEmpty) const Text('Nenhuma compra nos últimos 30 dias.'),
+                  for (final sale in history.recent)
+                    Text('${_date(sale.soldAt)} · ${sale.code} · ${sale.branchName} · ${sale.items} '
+                        '${sale.items == 1 ? 'item' : 'itens'} · ${formatCents(sale.totalCents)}'),
+                  const SizedBox(height: 12),
+                  Text('Produtos recorrentes (180 dias)', style: titles),
+                  if (history.recurring.isEmpty) const Text('Nenhum produto comprado mais de uma vez.'),
+                  for (final item in history.recurring)
+                    Text('${item.name} · ${item.purchases} compras · última em ${_date(item.lastAt)}',
+                        key: Key('customer-history-${item.productId}')),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fechar'))],
+    );
+  }
+}
+
 Future<void> showCustomerDialog(BuildContext context, PosController controller) {
   return showDialog<void>(context: context, builder: (_) => _CustomerDialog(controller: controller));
 }

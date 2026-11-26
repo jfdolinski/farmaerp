@@ -214,6 +214,14 @@ describe('descida para o PDV contra o banco real', () => {
       .toMatchObject({ code: 'FA905' });
     expect((await auth(request(server()).post('/terminals/customers')).send({ operatorId, name: 'Nascimento', document, birthDate: '20/05/1990' }).expect(422)).body)
       .toMatchObject({ code: 'FA904' });
+
+    // Histórico: no caixa e na retaguarda (cliente novo, ainda sem compras).
+    const createdId = created.id as string;
+    const history = (await auth(request(server()).get(`/terminals/customers/${createdId}/history`)).expect(200)).body as Json;
+    expect(history).toEqual({ sales_12m: 0, total_12m: 0, average_ticket: null, last_purchase_at: null, last_30_days: [], recurring: [] });
+    expect((await admin('get', `/customers/${createdId}/history`).expect(200)).body).toMatchObject({ sales_12m: 0, recurring: [] });
+    expect((await auth(request(server()).get('/terminals/customers/019a0000-0000-7000-8000-0000000000ff/history')).expect(404)).body)
+      .toMatchObject({ code: 'FA006' });
   });
 
   it('clientes: busca mascarada, escolha completa, descida acompanhada e situação na retaguarda', async () => {

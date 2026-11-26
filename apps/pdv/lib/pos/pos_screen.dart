@@ -956,10 +956,23 @@ class _TotalsPanel extends StatelessWidget {
                       'Convênio: ${cart.customer!.agreements.map((a) => a['name']).join(', ')}',
                   ].join(' · '),
                 ),
-                trailing: IconButton(
-                  tooltip: 'TIRAR O CLIENTE',
-                  icon: const Icon(Icons.close),
-                  onPressed: controller.clearCustomer,
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      key: const Key('customer-history-open'),
+                      tooltip: 'HISTÓRICO DE COMPRAS',
+                      icon: const Icon(Icons.receipt_long),
+                      onPressed: controller.customers == null
+                          ? null
+                          : () => dialog(() => showCustomerHistoryDialog(context, controller)),
+                    ),
+                    IconButton(
+                      tooltip: 'TIRAR O CLIENTE',
+                      icon: const Icon(Icons.close),
+                      onPressed: controller.clearCustomer,
+                    ),
+                  ],
                 ),
               ),
             const SizedBox(height: 8),

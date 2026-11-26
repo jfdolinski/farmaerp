@@ -145,6 +145,16 @@ export class CustomersController {
     });
   }
 
+  /** Ticket médio, compras dos últimos 30 dias e produtos recorrentes, nas filiais que o usuário vê. */
+  @Get(':id/history')
+  history(@Param('id') id: string) {
+    const customerId = requireUuid(id);
+    return this.database.withContext(async (client) => {
+      const { rows } = await client.query<{ result: unknown }>('SELECT app.customer_purchase_history($1) AS result', [customerId]);
+      return rows[0].result;
+    });
+  }
+
   @Get(':id')
   detail(@Param('id') id: string) {
     const customerId = requireUuid(id);
