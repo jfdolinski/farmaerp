@@ -284,7 +284,9 @@
       "imported_stock_note_id_uuid_v7_check",
       "imported_stock_note_item_id_uuid_v7_check",
       "stock_count_id_uuid_v7_check",
-      "stock_count_item_id_uuid_v7_check"
+      "stock_count_item_id_uuid_v7_check",
+      "fiscal_event_id_uuid_v7_check",
+      "fiscal_number_void_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -3509,5 +3511,94 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": []
+  },
+  "FA748": {
+    "message": "O prazo para cancelar esta NFC-e já passou.",
+    "action": "O cancelamento vale até 30 minutos depois da autorização. Para desfazer a venda, faça a devolução.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA749": {
+    "message": "Esta venda já teve devolução e não pode ser cancelada.",
+    "action": "Desfaça o restante pela devolução.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA750": {
+    "message": "Esta venda já entrou numa fatura do convênio e não pode ser cancelada.",
+    "action": "Cancele a fatura do convênio antes, ou faça a devolução.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA751": {
+    "message": "Esta venda tem controlado já conferido no SNGPC e não pode ser cancelada.",
+    "action": "Faça a devolução ou acerte a movimentação na tela do SNGPC.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA752": {
+    "message": "Esta venda tem parcela do crediário já paga e não pode ser cancelada.",
+    "action": "Faça a devolução da venda.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA753": {
+    "message": "Esta NFC-e não está numa situação que permita a operação.",
+    "action": "Consulte a nota na Sefaz e confira a situação.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA754": {
+    "message": "A Sefaz não aceitou a operação com a NFC-e.",
+    "action": "Confira o motivo informado pela Sefaz e tente de novo, se for o caso.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "fiscal_event_reason_check",
+      "fiscal_event_protocol_check",
+      "fiscal_event_status_code_check",
+      "fiscal_event_xml_check",
+      "fiscal_event_kind_check",
+      "fiscal_event_kind_key",
+      "fiscal_number_void_model_check",
+      "fiscal_number_void_series_check",
+      "fiscal_number_void_environment_check",
+      "fiscal_number_void_reason_check",
+      "fiscal_number_void_protocol_check",
+      "fiscal_number_void_xml_check",
+      "fiscal_document_resend_status_check",
+      "fiscal_document_resend_message_check",
+      "sale_cancel_reason_check",
+      "sale_canceled_check",
+      "stock_movement_canceled_sale_check",
+      "credit_payment_cancel_check",
+      "credit_payment_cancel_key",
+      "fiscal_document_cancel_note_check"
+    ]
+  },
+  "FA755": {
+    "message": "A faixa para inutilizar é inválida.",
+    "action": "Escolha só números sem nota válida e ainda não inutilizados (até 10.000 de cada vez).",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "fiscal_number_void_range_check",
+      "fiscal_number_void_first_check",
+      "fiscal_number_void_last_check"
+    ]
   }
 }
