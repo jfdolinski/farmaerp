@@ -93,6 +93,36 @@ export async function apiDownload(path: string, extraHeaders: Record<string, str
   }
 }
 
+/** Parte binária de um arquivo (a importação das notas), enviada como veio. */
+export async function apiUpload<T>(path: string, body: ArrayBuffer): Promise<ApiResult<T>> {
+  const apiUrl = process.env.API_URL ?? "http://127.0.0.1:3001";
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  const ip = await clientIp();
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl}${path}`, {
+      method: "PUT",
+      cache: "no-store",
+      // Uma parte tem alguns MB: mais tempo que as outras chamadas.
+      signal: AbortSignal.timeout(120_000),
+      headers: {
+        "Content-Type": "application/octet-stream",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(ip ? { "X-Forwarded-For": ip } : {}),
+      },
+      body,
+    });
+  } catch {
+    return { ok: false, error: unavailable() };
+  }
+  try {
+    const payload: unknown = await response.json();
+    return response.ok ? { ok: true, data: payload as T } : { ok: false, error: payload as ApiError };
+  } catch {
+    return { ok: false, error: unavailable() };
+  }
+}
+
 /** Só decide o que aparece na tela: quem barra de verdade é o banco. */
 export const can = (user: CurrentUser, code: string) =>
   user.permissions.includes(code);
