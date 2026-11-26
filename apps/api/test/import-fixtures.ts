@@ -31,3 +31,28 @@ export const cancelXml = (status = '135') => '<procEventoNFe versao="1.00" xmlns
   + `<retEvento versao="1.00"><infEvento><cStat>${status}</cStat><chNFe>${KEY}</chNFe></infEvento></retEvento></procEventoNFe>`;
 
 export { KEY };
+
+/** NF-e (modelo 55) de compra: fornecedor de exemplo vendendo para a filial do seed. */
+export const NFE_KEY = '35260611444777000161550010000012341000012347';
+export function nfeXml({ key = NFE_KEY, operation = '1', emitCnpj = '11444777000161', destCnpj = '11222333000181', cfop = '5102' } = {}) {
+  const nfe = `<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe${key}" versao="4.00">`
+    + `<ide><cUF>35</cUF><mod>55</mod><serie>1</serie><nNF>1234</nNF><dhEmi>2026-05-02T09:00:00-03:00</dhEmi><tpNF>${operation}</tpNF><tpAmb>1</tpAmb></ide>`
+    + `<emit><CNPJ>${emitCnpj}</CNPJ><xNome>DISTRIBUIDORA EXEMPLO SA</xNome>`
+    + '<enderEmit><xLgr>Av. Industrial</xLgr><nro>500</nro><xBairro>Distrito</xBairro><cMun>3509502</cMun><xMun>Campinas</xMun><UF>SP</UF><CEP>13000000</CEP></enderEmit>'
+    + '<IE>ISENTO</IE><CRT>3</CRT></emit>'
+    + `<dest><CNPJ>${destCnpj}</CNPJ><xNome>DROGARIA ANTIGA LTDA</xNome>`
+    + '<enderDest><xLgr>Rua Velha</xLgr><nro>10</nro><xBairro>Centro</xBairro><cMun>3550308</cMun><xMun>São Paulo</xMun><UF>SP</UF><CEP>01001000</CEP></enderDest></dest>'
+    + '<det nItem="1"><prod><cProd>FORN-77</cProd><cEAN>SEM GTIN</cEAN><xProd>Amoxicilina 500 mg cx 21</xProd><NCM>30042099</NCM>'
+    + `<CFOP>${cfop}</CFOP><uCom>CX</uCom><qCom>3.0000</qCom><vUnCom>20.0000000000</vUnCom><vProd>60.00</vProd><cEANTrib>7896004713656</cEANTrib>`
+    + '<vFrete>3.00</vFrete><vDesc>1.50</vDesc>'
+    + '<rastro><nLote>LT01</nLote><qLote>2.000</qLote><dFab>2026-01-10</dFab><dVal>2027-12-31</dVal></rastro>'
+    + '<rastro><nLote>LT02</nLote><qLote>1.000</qLote><dFab>2026-02-10</dFab><dVal>2028-01-31</dVal></rastro>'
+    + '<med><cProdANVISA>1004300450011</cProdANVISA><vPMC>39.90</vPMC></med></prod>'
+    + '<imposto><ICMS><ICMS10><orig>0</orig><CST>10</CST><vICMSST>4.20</vICMSST><vFCPST>0.30</vFCPST></ICMS10></ICMS>'
+    + '<IPI><cEnq>999</cEnq><IPITrib><CST>50</CST><vIPI>1.20</vIPI></IPITrib></IPI></imposto></det>'
+    + '<total><ICMSTot><vProd>60.00</vProd><vDesc>1.50</vDesc><vNF>67.20</vNF></ICMSTot></total>'
+    + '<pag><detPag><tPag>15</tPag><vPag>67.20</vPag></detPag></pag>'
+    + '</infNFe></NFe>';
+  return `<?xml version="1.0" encoding="UTF-8"?><nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">${nfe}`
+    + `<protNFe versao="4.00"><infProt><chNFe>${key}</chNFe><nProt>135260000000555</nProt><cStat>100</cStat></infProt></protNFe></nfeProc>`;
+}

@@ -8,10 +8,14 @@ export interface ImportedNote {
   number: number;
   emitted_at: string;
   environment: string;
+  /** tpNF: 0 entrada, 1 saída (NF-e). */
+  operation: string;
   status_code: string;
   protocol: string | null;
   issuer: Record<string, string | null>;
   customer: { document: string; name: string | null } | null;
+  /** Destinatário completo (NF-e): para achar a filial do cliente, o fornecedor ou o cliente. */
+  dest: Record<string, string | null> | null;
   items: Record<string, unknown>[];
   payments: Record<string, unknown>[];
   subtotal: number;
@@ -38,7 +42,7 @@ const parser = new XMLParser({
   parseTagValue: false,
   parseAttributeValue: false,
   trimValues: true,
-  isArray: (name) => name === 'det' || name === 'detPag',
+  isArray: (name) => name === 'det' || name === 'detPag' || name === 'rastro',
 });
 
 const obj = (value: unknown): Node | null => (value && typeof value === 'object' && !Array.isArray(value) ? (value as Node) : null);
@@ -65,6 +69,27 @@ const firstChild = (node: Node | null): Node | null => {
   return null;
 };
 
+/** Dados e endereço de uma parte da nota (emitente ou destinatário). */
+function party(node: Node | null, address: Node | null): Record<string, string | null> {
+  return {
+    cnpj: text(node, 'CNPJ'),
+    cpf: text(node, 'CPF'),
+    name: text(node, 'xNome'),
+    trade_name: text(node, 'xFant'),
+    state_registration: text(node, 'IE'),
+    crt: text(node, 'CRT'),
+    street: text(address, 'xLgr'),
+    number: text(address, 'nro'),
+    complement: text(address, 'xCpl'),
+    district: text(address, 'xBairro'),
+    city_code: text(address, 'cMun'),
+    city: text(address, 'xMun'),
+    uf: text(address, 'UF'),
+    postal_code: text(address, 'CEP'),
+    phone: text(address, 'fone'),
+  };
+}
+
 /** Tributação do item: ICMS (CST ou CSOSN), PIS, COFINS e o benefício fiscal. */
 function itemTax(imposto: Node | null, prod: Node | null) {
   const icms = firstChild(obj(imposto?.ICMS));
@@ -83,17 +108,22 @@ function itemTax(imposto: Node | null, prod: Node | null) {
   };
 }
 
+/** Emitente: sempre com CNPJ (sem o campo de CPF). */
+function issuerOf(emit: Node | null): Record<string, string | null> {
+  const { cpf: _cpf, ...rest } = party(emit, obj(emit?.enderEmit));
+  return rest;
+}
+
 function parseNote(nfe: Node, protocol: Node | null, xml: string): ParsedEntry {
   const inf = obj(nfe.infNFe);
   if (!inf) return { kind: 'invalid', reason: 'NF-e sem infNFe.' };
   const ide = obj(inf.ide);
   const model = text(ide, 'mod');
   const key = text(protocol, 'chNFe') ?? (typeof inf['@_Id'] === 'string' ? inf['@_Id'].replace(/^NFe/, '') : null);
-  if (model !== '65') {
+  if (model !== '65' && model !== '55') {
     return { kind: 'other', model, accessKey: key, reason: `Modelo ${model ?? '?'}: entra numa próxima etapa da importação.` };
   }
   const emit = obj(inf.emit);
-  const address = obj(emit?.enderEmit);
   const dest = obj(inf.dest);
   const total = obj(obj(inf.total)?.ICMSTot);
   const pag = obj(inf.pag);
@@ -107,33 +137,25 @@ function parseNote(nfe: Node, protocol: Node | null, xml: string): ParsedEntry {
       number: num(ide, 'nNF') ?? 0,
       emitted_at: text(ide, 'dhEmi') ?? '',
       environment: text(ide, 'tpAmb') ?? '',
+      operation: text(ide, 'tpNF') ?? '1',
       status_code: text(protocol, 'cStat') ?? '',
       protocol: text(protocol, 'nProt'),
-      issuer: {
-        cnpj: text(emit, 'CNPJ'),
-        name: text(emit, 'xNome'),
-        trade_name: text(emit, 'xFant'),
-        state_registration: text(emit, 'IE'),
-        crt: text(emit, 'CRT'),
-        street: text(address, 'xLgr'),
-        number: text(address, 'nro'),
-        complement: text(address, 'xCpl'),
-        district: text(address, 'xBairro'),
-        city_code: text(address, 'cMun'),
-        city: text(address, 'xMun'),
-        uf: text(address, 'UF'),
-        postal_code: text(address, 'CEP'),
-        phone: text(address, 'fone'),
-      },
+      issuer: issuerOf(emit),
+      dest: model === '55' && dest ? party(dest, obj(dest.enderDest)) : null,
       customer: document ? { document, name: text(dest, 'xNome') } : null,
       items: list(inf.det).map((det) => {
         const prod = obj(det.prod);
         const med = obj(prod?.med);
         const gtin = text(prod, 'cEAN');
+        const taxGtin = text(prod, 'cEANTrib');
+        const imposto = obj(det.imposto);
+        const icms = firstChild(obj(imposto?.ICMS));
+        const ipi = obj(obj(imposto?.IPI)?.IPITrib);
         return {
           line: Number(det['@_nItem'] ?? 0),
           code: text(prod, 'cProd'),
           gtin: gtin && /^\d{8,14}$/.test(gtin) ? gtin : null,
+          tax_gtin: taxGtin && /^\d{8,14}$/.test(taxGtin) ? taxGtin : null,
           name: text(prod, 'xProd'),
           ncm: text(prod, 'NCM'),
           cest: text(prod, 'CEST'),
@@ -141,12 +163,26 @@ function parseNote(nfe: Node, protocol: Node | null, xml: string): ParsedEntry {
           quantity: num(prod, 'qCom'),
           unit_price: num(prod, 'vUnCom'),
           discount: num(prod, 'vDesc') ?? 0,
+          products_value: num(prod, 'vProd') ?? 0,
+          freight: num(prod, 'vFrete') ?? 0,
+          insurance: num(prod, 'vSeg') ?? 0,
+          other: num(prod, 'vOutro') ?? 0,
+          ipi: num(ipi, 'vIPI') ?? 0,
+          st: num(icms, 'vICMSST') ?? 0,
+          fcp_st: num(icms, 'vFCPST') ?? 0,
           total: Math.round(((num(prod, 'vProd') ?? 0) - (num(prod, 'vDesc') ?? 0)) * 100) / 100,
           cfop: text(prod, 'CFOP'),
-          tax: itemTax(obj(det.imposto), prod),
+          tax: itemTax(imposto, prod),
           anvisa_code: text(med, 'cProdANVISA'),
           pmc: num(med, 'vPMC'),
           info: text(det, 'infAdProd'),
+          // Lotes (rastro): só registro, sem saldo por lote.
+          batches: list(prod?.rastro).map((batch) => ({
+            number: text(batch, 'nLote'),
+            quantity: num(batch, 'qLote'),
+            manufactured_on: text(batch, 'dFab'),
+            expires_on: text(batch, 'dVal'),
+          })),
         };
       }),
       payments: list(pag?.detPag).map((payment) => {

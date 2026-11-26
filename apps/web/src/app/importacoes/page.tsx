@@ -43,10 +43,12 @@ async function ImportsContent() {
       {rows.some((row) => RUNNING.has(row.status)) && <AutoRefresh />}
       <h1>Importação de notas</h1>
       <p className={styles.hint}>
-        Traga as notas já emitidas pelo sistema anterior num arquivo .zip com os XML (pode ter pastas). Nesta etapa
-        entram as NFC-e autorizadas: a filial é cadastrada pelo CNPJ do emitente, os produtos pelo código do sistema
-        anterior, os clientes pelo CPF ou CNPJ, e cada venda baixa o estoque na data da nota. Notas canceladas desfazem
-        a venda. Enviar o mesmo arquivo de novo é seguro: notas repetidas são ignoradas.
+        Traga as notas do sistema anterior num arquivo .zip com os XML (pode ter pastas). Entram as NFC-e e as NF-e
+        autorizadas, cada uma na data dela. NFC-e: a filial é cadastrada pelo CNPJ do emitente, os produtos pelo código
+        do sistema anterior e os clientes pelo CPF ou CNPJ; cada venda baixa o estoque. NF-e: a compra recebida entra no
+        estoque com o custo e o fornecedor; a venda vira venda importada; transferência, devolução e outras saídas
+        movimentam o estoque das filiais. Notas canceladas desfazem o que fizeram. Enviar o mesmo arquivo de novo é
+        seguro: notas repetidas são ignoradas.
       </p>
       <section className={styles.card}>
         <h2>Enviar arquivo</h2>

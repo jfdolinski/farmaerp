@@ -12,7 +12,7 @@ import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { AppModule } from './../src/app.module.js';
 import { ImportsService } from './../src/imports/imports.service.js';
-import { cancelXml, KEY, nfceXml } from './import-fixtures.js';
+import { cancelXml, KEY, NFE_KEY, nfceXml, nfeXml } from './import-fixtures.js';
 import { AppLogger, createPinoLogger } from './../src/observability/app-logger.js';
 
 const PASSWORD = 'farmaerp-dev-123';
@@ -100,6 +100,7 @@ describe('importação das notas contra o banco real', () => {
     const key = `${KEY.slice(0, 25)}${String(randomInt(1e9)).padStart(9, '0')}${KEY.slice(34)}`;
     const cancelKey = `${KEY.slice(0, 25)}${String(randomInt(1e9)).padStart(9, '0')}${KEY.slice(34)}`;
     const codeA = `IMP${randomInt(1e9)}`;
+    const purchaseKey = `${NFE_KEY.slice(0, 25)}${String(randomInt(1e9)).padStart(9, '0')}${NFE_KEY.slice(34)}`;
     const note = (k: string) => nfceXml().split(KEY).join(k).replace('<cProd>000123</cProd>', `<cProd>${codeA}</cProd>`)
       .replace('<cProd>B-9</cProd>', `<cProd>${codeA}B</cProd>`).replace('<cEAN>7891234567895</cEAN>', '<cEAN>SEM GTIN</cEAN>');
     const content = zip([
@@ -107,6 +108,8 @@ describe('importação das notas contra o banco real', () => {
       ['2026/06/outra.xml', note(cancelKey)],
       ['2026/06/cancelada.xml', cancelXml().split(KEY).join(cancelKey)],
       ['2026/06/nfe55.xml', nfceXml({ model: '55' }).split(KEY).join(key.replace(/65(001)/, '55$1'))],
+      // Compra do fornecedor para a filial do seed (vem antes no arquivo, mas é lida na segunda passada).
+      ['compras/nfe-compra.xml', nfeXml({ key: purchaseKey })],
       ['leia-me.txt', 'arquivo que não é nota'],
     ]);
 
@@ -132,9 +135,13 @@ describe('importação das notas contra o banco real', () => {
     const report = (await call('get', `/admin/imports/${id}`).expect(200)).body as Json;
     expect(report).toMatchObject({
       status: 'done',
-      totals: { entries: 5, imported: 2, canceled: 1, ignored: 2, failed: 0, models: { '65': 2, '55': 1 } },
+      // A NF-e 55 emitida pela loja para CPF é venda; a compra entra no estoque.
+      totals: { entries: 6, imported: 4, canceled: 1, ignored: 1, failed: 0, models: { '65': 2, '55': 2 } },
       problems: [],
-      last_numbers: [expect.objectContaining({ branch_name: 'Loja Centro', model: '65', series: 1 })],
+      last_numbers: expect.arrayContaining([
+        expect.objectContaining({ branch_name: 'Loja Centro', model: '65', series: 1 }),
+        expect.objectContaining({ branch_name: 'Loja Centro', model: '55', series: 1 }),
+      ]),
     });
     expect(((await call('get', '/admin/imports').expect(200)).body as Json[]).map((row) => row.id)).toContain(id);
 
@@ -164,7 +171,7 @@ describe('importação das notas contra o banco real', () => {
       await service.tick();
       if (((await call('get', `/admin/imports/${again.id}`).expect(200)).body as Json).status === 'done') break;
     }
-    expect(((await call('get', `/admin/imports/${again.id}`).expect(200)).body as Json).totals).toMatchObject({ imported: 0, duplicate: 2 });
+    expect(((await call('get', `/admin/imports/${again.id}`).expect(200)).body as Json).totals).toMatchObject({ imported: 0, duplicate: 4 });
   });
 
   it('arquivo que não é .zip termina com falha e o motivo', async () => {

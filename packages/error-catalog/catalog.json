@@ -280,7 +280,9 @@
       "document_import_id_uuid_v7_check",
       "product_tax_rule_id_uuid_v7_check",
       "sngpc_credential_id_uuid_v7_check",
-      "sngpc_submission_id_uuid_v7_check"
+      "sngpc_submission_id_uuid_v7_check",
+      "imported_stock_note_id_uuid_v7_check",
+      "imported_stock_note_item_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -3433,7 +3435,32 @@
       "product_legacy_code_key",
       "product_tax_rule_key",
       "document_import_note_result_check",
-      "stock_movement_imported_item_check"
+      "stock_movement_imported_item_check",
+      "imported_stock_note_cfop_check",
+      "imported_stock_note_item_batches_check",
+      "imported_stock_note_item_cfop_check",
+      "imported_stock_note_item_line_check",
+      "imported_stock_note_item_note_quantity_check",
+      "imported_stock_note_item_quantity_check",
+      "imported_stock_note_item_supplier_code_check",
+      "imported_stock_note_item_total_check",
+      "imported_stock_note_item_unit_check",
+      "imported_stock_note_item_unit_cost_check",
+      "imported_stock_note_key_check",
+      "imported_stock_note_kind_check",
+      "imported_stock_note_model_check",
+      "imported_stock_note_number_check",
+      "imported_stock_note_party_document_check",
+      "imported_stock_note_party_name_check",
+      "imported_stock_note_protocol_check",
+      "imported_stock_note_series_check",
+      "imported_stock_note_total_check",
+      "imported_stock_note_transfer_check",
+      "imported_stock_note_xml_check",
+      "product_cost_source_check",
+      "stock_movement_imported_stock_item_check",
+      "imported_stock_note_key_key",
+      "imported_stock_note_item_line_key"
     ]
   }
 }

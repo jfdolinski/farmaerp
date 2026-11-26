@@ -84,9 +84,10 @@ function readEntries(path: string, onEntry: (name: string, content: Buffer | nul
 }
 
 /**
- * Processa os arquivos da fila: cada XML vira uma chamada ao banco (uma transação por nota). Os
- * cancelamentos ficam para o fim, depois das notas do mesmo arquivo. Reprocessar é seguro: nota
- * repetida é ignorada pela chave.
+ * Processa os arquivos da fila: cada XML vira uma chamada ao banco (uma transação por nota). O
+ * arquivo é lido duas vezes: primeiro as NFC-e (que cadastram as filiais do cliente) e o resto;
+ * depois as NF-e (modelo 55), que dependem das filiais para saber a direção da nota. Os
+ * cancelamentos ficam para o fim. Reprocessar é seguro: nota repetida é ignorada pela chave.
  */
 @Injectable()
 export class ImportsService implements OnApplicationBootstrap, OnModuleDestroy {
@@ -138,6 +139,16 @@ export class ImportsService implements OnApplicationBootstrap, OnModuleDestroy {
       this.worker((client) =>
         client.query('SELECT app.import_note_result($1, $2, $3, $4, $5, NULL, $6)', [id, entry, key, model, result, reason]),
       );
+    const store = async (name: string, function_: string, note: unknown) => {
+      const { rows } = await this.worker((client) =>
+        client.query<{ r: { result: keyof ImportTotals } }>(`SELECT app.${function_}($1, $2, $3::jsonb) AS r`, [
+          id, name, JSON.stringify(note),
+        ]),
+      );
+      const result = rows[0].r.result;
+      if (result === 'imported' || result === 'duplicate' || result === 'ignored' || result === 'failed') totals[result] += 1;
+    };
+    let pendingNfe = 0;
     const progress = (status: string | null, error: string | null) =>
       this.worker((client) =>
         client.query('SELECT app.document_import_progress($1, $2::jsonb, $3, $4)', [id, JSON.stringify(totals), status, error]),
@@ -151,14 +162,11 @@ export class ImportsService implements OnApplicationBootstrap, OnModuleDestroy {
         } else {
           const parsed = parseEntry(decode(content));
           if (parsed.kind === 'note') {
-            totals.models['65'] = (totals.models['65'] ?? 0) + 1;
-            const { rows } = await this.worker((client) =>
-              client.query<{ r: { result: keyof ImportTotals } }>('SELECT app.import_nfce($1, $2, $3::jsonb) AS r', [
-                id, name, JSON.stringify(parsed.note),
-              ]),
-            );
-            const result = rows[0].r.result;
-            if (result === 'imported' || result === 'duplicate' || result === 'ignored' || result === 'failed') totals[result] += 1;
+            const model = parsed.note.model;
+            totals.models[model] = (totals.models[model] ?? 0) + 1;
+            // NF-e fica para a segunda passada.
+            if (model === '55') pendingNfe += 1;
+            else await store(name, 'import_nfce', parsed.note);
           } else if (parsed.kind === 'cancel') {
             cancels.push({ entry: name, key: parsed.accessKey, at: parsed.canceledAt });
           } else if (parsed.kind === 'other') {
@@ -173,6 +181,18 @@ export class ImportsService implements OnApplicationBootstrap, OnModuleDestroy {
         }
         if (totals.entries % PROGRESS_EVERY === 0) await progress(null, null);
       });
+      // Segunda passada: só as NF-e.
+      if (pendingNfe > 0) {
+        let done = 0;
+        await readEntries(importFilePath(dir, id), async (name, content) => {
+          if (content === null) return;
+          const parsed = parseEntry(decode(content));
+          if (parsed.kind !== 'note' || parsed.note.model !== '55') return;
+          await store(name, 'import_nfe', parsed.note);
+          done += 1;
+          if (done % PROGRESS_EVERY === 0) await progress(null, null);
+        });
+      }
       for (const cancel of cancels) {
         await this.worker((client) =>
           client.query('SELECT app.import_nfce_cancel($1, $2, $3, $4)', [id, cancel.entry, cancel.key, cancel.at]),
