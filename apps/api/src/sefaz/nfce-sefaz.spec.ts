@@ -99,6 +99,9 @@ describe('reenvio da nota', () => {
     expect(ok.kind === 'authorized' && ok.procXml).toContain('</NFe><protNFe');
     expect(parseAuthorization(soap(`<retEnviNFe><cStat>104</cStat>${prot('204').replace('Autorizado o uso da NF-e', 'Duplicidade')}</retEnviNFe>`), SIGNED))
       .toMatchObject({ kind: 'duplicate', status: '204' });
+    // 539: mesmo número com outra chave (a outra vem no motivo): recusa, não é a mesma nota.
+    expect(parseAuthorization(soap(`<retEnviNFe><cStat>104</cStat>${prot('539').replace('Autorizado o uso da NF-e', 'Duplicidade de NF-e com diferenca na Chave de Acesso [chNFe: 35261111222333000181650040000000429999999999]')}</retEnviNFe>`), SIGNED))
+      .toMatchObject({ kind: 'rejected', status: '539', reason: expect.stringContaining('chNFe: 3526') });
     expect(parseAuthorization(soap('<retEnviNFe><cStat>108</cStat><xMotivo>Paralisado</xMotivo></retEnviNFe>'), SIGNED)).toMatchObject({ kind: 'unavailable' });
     expect(parseAuthorization(soap(`<retEnviNFe><cStat>104</cStat>${prot('778')}</retEnviNFe>`), SIGNED)).toMatchObject({ kind: 'rejected', status: '778' });
     expect(parseAuthorization(soap('<retEnviNFe><cStat>225</cStat><xMotivo>Schema</xMotivo></retEnviNFe>'), SIGNED)).toMatchObject({ kind: 'rejected', status: '225' });

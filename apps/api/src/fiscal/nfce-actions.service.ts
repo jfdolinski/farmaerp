@@ -245,6 +245,33 @@ export class NfceActionsService implements OnApplicationBootstrap, OnModuleDestr
     });
   }
 
+  /**
+   * Cancelamento pedido pelo caixa (supervisor conferido no caixa pelo PIN e aqui pela permissão).
+   * Nota já cancelada (o caixa não viu a resposta e pediu de novo) responde que já está feito.
+   */
+  async cancelForTerminal(id: string, supervisorId: string, reason: string): Promise<Record<string, unknown>> {
+    const context = await this.database.withContext(
+      async (client) => (await client.query<DocumentContext>('SELECT * FROM app.terminal_cancel_context($1, $2)', [id, supervisorId])).rows[0],
+    );
+    if (context.status === 'canceled') return { already: true };
+    const certificate = this.certificate(context);
+    const { envelope, event } = cancellationEnvelope({
+      environment: context.environment as 1 | 2, uf: context.state ?? '', cnpj: context.cnpj, accessKey: context.access_key,
+      protocol: context.protocol ?? '', reason, at: brasiliaNow(),
+    }, pemFromPfx(certificate.pfx, certificate.passphrase));
+    const result = parseEvent(await this.call(context, 'event', envelope, certificate), event);
+    if (result.kind === 'unavailable') throw new AppError('FA944', { cause: new Error(`${result.status} ${result.reason}`) });
+    if (result.kind === 'refused') {
+      throw new AppError('FA754', { cause: new Error(`${result.status} ${result.reason}`), detail: `Sefaz ${result.status}: ${result.reason}`.slice(0, 300) });
+    }
+    return this.database.withContext(async (client) => {
+      const { rows } = await client.query<{ r: Record<string, unknown> }>('SELECT app.terminal_cancel_register($1, $2, $3::jsonb) AS r', [id, supervisorId, JSON.stringify({
+        reason, protocol: result.protocol, status_code: result.status, xml: result.procXml, registered_at: result.registeredAt || new Date().toISOString(),
+      })]);
+      return { ...rows[0].r, sefaz: `${result.status} ${result.reason}` };
+    });
+  }
+
   /** Inutiliza a faixa na Sefaz e registra. */
   async void(branchId: string, series: number, first: number, last: number, reason: string): Promise<{ id: string; protocol: string }> {
     const context = await this.database.withContext(

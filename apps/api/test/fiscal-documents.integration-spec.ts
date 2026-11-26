@@ -254,4 +254,24 @@ describe('notas fiscais pela central contra o banco real', () => {
     expect(voidRefused).toMatchObject({ code: 'FA754' });
     expect(String(voidRefused.detail)).toMatch(/^Sefaz 563: /);
   });
+
+  it('o caixa pede o cancelamento com o supervisor; repetido responde que já está feito', async () => {
+    const note = await saleWithNote({});
+    const terminal = (path: string) => request(server()).post(path).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`);
+    const adminId = ((await request(server()).get('/auth/me').set('X-Forwarded-For', ip)
+      .set('Authorization', `Bearer ${sessions.get(ADMIN_EMAIL)}`).expect(200)).body as Json).userId as string;
+    const path = `/terminals/fiscal-documents/${note.id}/cancel`;
+    expect(codeOf(await terminal(path).send({ reason: 'curto', supervisorId: adminId }).expect(422))).toBe('FA005');
+    // O operador do seed não tem "Cancelar NFC-e".
+    expect(codeOf(await terminal(path).send({ reason: 'Cliente desistiu no caixa', supervisorId: OPERATOR_ID }).expect(403))).toBe('FA002');
+    const done = (await terminal(path).send({ reason: 'Cliente desistiu no caixa', supervisorId: adminId }).expect(200)).body as Json;
+    expect(done).toMatchObject({ cash_refund: 'same_session', sefaz: '135 Evento registrado' });
+    const sent = () => received.filter((r) => r.path.endsWith('/event') && r.body.includes(note.accessKey));
+    expect(sent()).toHaveLength(1);
+    // Pedido de novo (o caixa não viu a resposta): já está feito, sem chamar a Sefaz.
+    expect((await terminal(path).send({ reason: 'Cliente desistiu no caixa', supervisorId: adminId }).expect(200)).body).toEqual({ already: true });
+    expect(sent()).toHaveLength(1);
+    // Sem o token do caixa, nada.
+    await request(server()).post(path).set('X-Forwarded-For', ip).send({ reason: 'Cliente desistiu no caixa', supervisorId: adminId }).expect(401);
+  });
 });

@@ -46,6 +46,7 @@ import { ImportedSalesController } from './sales/imported-sales.controller.js';
 import { ImportedNotesController } from './purchases/imported-notes.controller.js';
 import { StockCountsController } from './stock/stock-counts.controller.js';
 import { FiscalDocumentsController } from './fiscal/fiscal-documents.controller.js';
+import { TerminalFiscalController } from './terminals/terminal-fiscal.controller.js';
 import { NfceActionsService } from './fiscal/nfce-actions.service.js';
 import { OfflineRulesController, TerminalStockController } from './terminals/offline-rules.controller.js';
 import { TerminalNfceController } from './terminals/terminal-nfce.controller.js';
@@ -93,6 +94,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     ImportedNotesController,
     StockCountsController,
     FiscalDocumentsController,
+    TerminalFiscalController,
     ControlledController,
     SngpcController,
     ReleasesController,

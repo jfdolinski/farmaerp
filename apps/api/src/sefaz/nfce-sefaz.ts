@@ -199,7 +199,7 @@ export type AuthorizationResult =
   | { kind: 'rejected'; status: string; reason: string }
   | { kind: 'unavailable'; status: string; reason: string };
 
-/** 104 traz o protocolo: 100/150 autoriza. 204/539: a nota já está lá (consultar). 108/109: parado. */
+/** 104 traz o protocolo: 100/150 autoriza. 204: a nota já está lá (consultar). 108/109: parado. */
 export function parseAuthorization(xml: string, signedNfe: string): AuthorizationResult {
   const root = parse(xml);
   const batch = find(root, 'retEnviNFe') ?? unavailable('retEnviNFe ausente');
@@ -210,7 +210,9 @@ export function parseAuthorization(xml: string, signedNfe: string): Authorizatio
   const prot = find(batch, 'infProt');
   const status = text(prot, 'cStat');
   const reason = text(prot, 'xMotivo');
-  if (status === '204' || status === '539') return { kind: 'duplicate', status, reason };
+  // 204: a mesma nota já está na Sefaz (consultar). 539 é outra coisa: mesmo número com outra
+  // chave (a outra vem no motivo) e fica como recusa, para virar aviso.
+  if (status === '204') return { kind: 'duplicate', status, reason };
   if (status !== '100' && status !== '150') return { kind: 'rejected', status, reason };
   const protNFe = cut(xml, 'protNFe');
   if (!protNFe) return unavailable('autorizada sem o protocolo');
