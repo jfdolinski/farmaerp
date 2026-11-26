@@ -19,6 +19,17 @@ const PASSWORD = 'farmaerp-dev-123';
 const ADMIN = 'admin@farmaerp.test';
 const OPERATOR = 'operador@farmaerp.test';
 
+/** CNPJ com dígitos certos, de uma raiz sorteada (não é de ninguém de propósito). */
+function randomCnpj(): string {
+  const digits = [...Array.from({ length: 8 }, () => randomInt(10)), 0, 0, 0, 1];
+  for (const weights of [[5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2], [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]]) {
+    const sum = weights.reduce((total, weight, index) => total + weight * digits[index], 0);
+    const rest = sum % 11;
+    digits.push(rest < 2 ? 0 : 11 - rest);
+  }
+  return digits.join('');
+}
+
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 /** .zip mínimo (método "stored"): cabeçalhos locais, diretório central e o fim. */
@@ -102,12 +113,12 @@ describe('importação das notas contra o banco real', () => {
     const codeA = `IMP${randomInt(1e9)}`;
     const purchaseKey = `${NFE_KEY.slice(0, 25)}${String(randomInt(1e9)).padStart(9, '0')}${NFE_KEY.slice(34)}`;
     const note = (k: string) => nfceXml().split(KEY).join(k).replace('<cProd>000123</cProd>', `<cProd>${codeA}</cProd>`)
-      .replace('<cProd>B-9</cProd>', `<cProd>${codeA}B</cProd>`).replace('<cEAN>7891234567895</cEAN>', '<cEAN>SEM GTIN</cEAN>');
+      .replace('<cProd>B-9</cProd>', `<cProd>${codeA}B</cProd>`).replace('<cEAN>7891234567895</cEAN>', '<cEAN>7896004713656</cEAN>');
     const content = zip([
       ['2026/06/nota.xml', note(key)],
       ['2026/06/outra.xml', note(cancelKey)],
       ['2026/06/cancelada.xml', cancelXml().split(KEY).join(cancelKey)],
-      ['2026/06/nfe55.xml', nfceXml({ model: '55' }).split(KEY).join(key.replace(/65(001)/, '55$1'))],
+      ['2026/06/nfe55.xml', note(key).split(key).join(key.replace(/65(001)/, '55$1')).replace('<mod>65</mod>', '<mod>55</mod>')],
       // Compra do fornecedor para a filial do seed (vem antes no arquivo, mas é lida na segunda passada).
       ['compras/nfe-compra.xml', nfeXml({ key: purchaseKey })],
       ['leia-me.txt', 'arquivo que não é nota'],
@@ -187,6 +198,42 @@ describe('importação das notas contra o banco real', () => {
       if (((await call('get', `/admin/imports/${again.id}`).expect(200)).body as Json).status === 'done') break;
     }
     expect(((await call('get', `/admin/imports/${again.id}`).expect(200)).body as Json).totals).toMatchObject({ imported: 0, duplicate: 4 });
+  });
+
+  it('NFC-e de empresa nova espera; a plataforma cria pela API e a rotina põe a nota', async () => {
+    const cnpj = randomCnpj();
+    const key = `${KEY.slice(0, 6)}${cnpj}${KEY.slice(20, 25)}${String(randomInt(1e9)).padStart(9, '0')}${KEY.slice(34)}`;
+    const content = zip([['nova/nota.xml', nfceXml().split(KEY).join(key).replace('<CNPJ>11222333000181</CNPJ>', `<CNPJ>${cnpj}</CNPJ>`)
+      .replace('<cProd>000123</cProd>', `<cProd>NOVA${randomInt(1e9)}</cProd>`).replace('<cProd>B-9</cProd>', `<cProd>NOVB${randomInt(1e9)}</cProd>`)
+      .replace('<cEAN>7891234567895</cEAN>', '<cEAN>SEM GTIN</cEAN>')]]);
+    const { id } = (await call('post', '/admin/imports').send({ fileName: 'nova.zip', size: content.length }).expect(201)).body as { id: string };
+    await call('put', `/admin/imports/${id}/parts/1`).set('Content-Type', 'application/octet-stream').send(content).expect(200);
+    await call('post', `/admin/imports/${id}/complete`).expect(200);
+    const service = app.get(ImportsService);
+    for (let i = 0; i < 20; i += 1) {
+      await service.tick();
+      if (((await call('get', `/admin/imports/${id}`).expect(200)).body as Json).status === 'done') break;
+    }
+    const report = (await call('get', `/admin/imports/${id}`).expect(200)).body as Json;
+    expect(report).toMatchObject({ totals: { waiting: 1, imported: 0 }, waiting: [{ cnpj, status: 'pending', notes: 1 }] });
+
+    // Só o administrador da plataforma vê e decide.
+    expect(codeOf(await call('get', '/platform/import-issuers', OPERATOR).expect(403))).toBe('FA002');
+    const pending = ((await call('get', '/platform/import-issuers').expect(200)).body as Json[]).find((row) => row.cnpj === cnpj);
+    expect(pending).toMatchObject({ kind: 'company', name: 'DROGARIA ANTIGA LTDA', notes: 1 });
+    const path = `/platform/import-issuers/${pending?.id as string}/decision`;
+    expect(codeOf(await call('post', path).send({ decision: 'talvez' }).expect(422))).toBe('FA005');
+    expect(codeOf(await call('post', path).send({ decision: 'create', taxRegime: 7 }).expect(422))).toBe('FA005');
+    expect(codeOf(await call('post', path, OPERATOR).send({ decision: 'create' }).expect(403))).toBe('FA002');
+    expect((await call('post', path).send({ decision: 'create', tradeName: 'Nova Unidade', taxRegime: 1 }).expect(201)).body)
+      .toMatchObject({ status: 'created', notes: 1 });
+    expect(codeOf(await call('post', path).send({ decision: 'refuse' }).expect(409))).toBe('FA758');
+
+    // A rotina põe a nota liberada; o relatório e a conta mudam.
+    expect(await service.processReleased()).toBeGreaterThanOrEqual(1);
+    const after = (await call('get', `/admin/imports/${id}`).expect(200)).body as Json;
+    expect(after).toMatchObject({ totals: { waiting: 0, imported: 1 }, waiting: [] });
+    expect(await service.processReleased()).toBe(0);
   });
 
   it('arquivo que não é .zip termina com falha e o motivo', async () => {

@@ -43,3 +43,32 @@ export async function createTenant(_previous: TenantState, form: FormData): Prom
   refresh();
   return { created: { name: body.groupName, email: body.admin.email.toLowerCase(), temporaryPassword: result.data.temporaryPassword } };
 }
+
+export interface IssuerDecisionState {
+  error?: ApiError;
+  done?: { decision: "create" | "refuse"; notes: number };
+}
+
+/** Destino do CNPJ que veio nas notas importadas: cria a empresa e a filial (ou só a filial) ou recusa. */
+export async function decideIssuer(_previous: IssuerDecisionState, form: FormData): Promise<IssuerDecisionState> {
+  const choice = text(form, "decision");
+  if (choice !== "create" && choice !== "refuse") return { error: { code: "FA005", message: "Alguns dados informados são inválidos.", action: "Escolha criar ou recusar.", retryable: false, traceId: null } };
+  const decision: "create" | "refuse" = choice;
+  const body = {
+    decision,
+    legalName: optional(form, "legalName"),
+    tradeName: optional(form, "tradeName"),
+    taxRegime: optional(form, "taxRegime"),
+  };
+  const result = await apiFetch<{ notes: number }>(`/platform/import-issuers/${encodeURIComponent(text(form, "id"))}/decision`, {
+    method: "POST",
+    body,
+  });
+  if (!result.ok) {
+    if (result.error.code === "FA402") redirect("/login?next=/plataforma&expired=1");
+    if (result.error.code === "FA403") redirect("/trocar-senha");
+    return { error: result.error };
+  }
+  // Sem atualizar a lista agora: o cartão mostra o resultado até a página ser recarregada.
+  return { done: { decision, notes: result.data.notes } };
+}

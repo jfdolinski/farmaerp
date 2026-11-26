@@ -287,7 +287,9 @@
       "stock_count_item_id_uuid_v7_check",
       "fiscal_event_id_uuid_v7_check",
       "fiscal_number_void_id_uuid_v7_check",
-      "pdv_cart_discard_id_uuid_v7_check"
+      "pdv_cart_discard_id_uuid_v7_check",
+      "import_pending_issuer_id_uuid_v7_check",
+      "import_waiting_note_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -3478,7 +3480,21 @@
       "product_cost_source_check",
       "stock_movement_imported_stock_item_check",
       "imported_stock_note_key_key",
-      "imported_stock_note_item_line_key"
+      "imported_stock_note_item_line_key",
+      "imported_sale_skipped_items_check",
+      "imported_stock_note_skipped_items_check",
+      "import_pending_issuer_cnpj_check",
+      "import_pending_issuer_issuer_check",
+      "import_pending_issuer_status_check",
+      "import_pending_issuer_decision_check",
+      "import_pending_issuer_cnpj_key",
+      "import_waiting_note_entry_check",
+      "import_waiting_note_key_check",
+      "import_waiting_note_model_check",
+      "import_waiting_note_note_check",
+      "import_waiting_note_status_check",
+      "import_waiting_note_done_check",
+      "import_waiting_note_key"
     ]
   },
   "FA744": {
@@ -3619,6 +3635,22 @@
   "FA757": {
     "message": "Esta pessoa não pode autorizar esta operação.",
     "action": "Chame quem tem a permissão no perfil (o supervisor ou o gerente) para digitar o código e o PIN.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA758": {
+    "message": "Este CNPJ já foi decidido.",
+    "action": "Atualize a lista: as notas dele já foram liberadas ou recusadas.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA759": {
+    "message": "Nenhum item da nota tem produto cadastrado.",
+    "action": "Importe antes as NFC-e que trazem esses produtos e importe a nota de novo.",
     "httpStatus": 422,
     "severity": "warning",
     "retryable": false,

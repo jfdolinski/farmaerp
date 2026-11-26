@@ -5,7 +5,7 @@ import { apiFetch, can, redirectIfNeeded, requireUser } from "@/lib/api";
 import { AppHeader } from "../../app-header";
 import { ErrorNotice } from "../../error-notice";
 import styles from "../../terminais/page.module.css";
-import { count, fileSize, type ImportRow, MODEL_LABELS, moment, RUNNING, STATUS_LABELS } from "../labels";
+import { count, fileSize, formatCnpj, type ImportRow, MODEL_LABELS, moment, RUNNING, STATUS_LABELS } from "../labels";
 import { AutoRefresh } from "../ui";
 
 export const metadata: Metadata = { title: "Relatório da importação · FarmaERP" };
@@ -21,7 +21,26 @@ interface ImportReport extends ImportRow {
   }[];
   last_numbers: { branch_id: string; branch_name: string; model: string; series: number; last_number: number }[];
   ignored_reasons?: { reason: string; total: number }[];
+  /** CNPJs desta importação que o cliente ainda não tem como filial. */
+  waiting?: { cnpj: string; name: string | null; status: string; notes: number }[];
+  /** Itens de NF-e sem produto cadastrado, que ficaram de fora (até 500). */
+  skipped_items?: {
+    note_number: number;
+    access_key: string;
+    line: number | null;
+    code: string | null;
+    name: string | null;
+    gtin: string | null;
+    quantity: number | null;
+  }[];
+  skipped_total?: number;
 }
+
+const WAITING_STATUS: Record<string, string> = {
+  pending: "Aguardando a decisão",
+  created: "Criada: as notas estão entrando",
+  refused: "Recusada",
+};
 
 type Params = Promise<{ id: string }>;
 
@@ -126,6 +145,12 @@ async function ReportContent({ params }: { params: Params }) {
                 <th>Com problema</th>
                 <td>{count(totals.failed)}</td>
               </tr>
+              {(totals.waiting ?? 0) > 0 && (
+                <tr>
+                  <th>Esperando o destino da empresa (veja abaixo)</th>
+                  <td>{count(totals.waiting)}</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -137,6 +162,75 @@ async function ReportContent({ params }: { params: Params }) {
           </p>
         )}
       </section>
+
+      {(report.waiting ?? []).length > 0 && (
+        <section className={styles.card}>
+          <h2>Empresas ou filiais que ainda não estão cadastradas</h2>
+          <p className={styles.hint}>
+            As notas destes CNPJs esperam o administrador da plataforma definir a empresa ou a filial. Quando ele criar,
+            elas entram sozinhas, sem enviar o arquivo de novo. Se ele recusar, ficam como ignoradas.
+          </p>
+          <div className={styles.tableWrap}>
+            <table>
+              <thead>
+                <tr>
+                  <th>CNPJ</th>
+                  <th>Nome na nota</th>
+                  <th>Situação</th>
+                  <th>Notas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(report.waiting ?? []).map((row) => (
+                  <tr key={row.cnpj}>
+                    <td>{formatCnpj(row.cnpj)}</td>
+                    <td>{row.name ?? "—"}</td>
+                    <td>{WAITING_STATUS[row.status] ?? row.status}</td>
+                    <td>{count(row.notes)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {(report.skipped_total ?? 0) > 0 && (
+        <section className={styles.card}>
+          <h2>Itens sem produto cadastrado</h2>
+          <p className={styles.hint}>
+            {count(report.skipped_total)} {report.skipped_total === 1 ? "item de NF-e ficou" : "itens de NF-e ficaram"} de
+            fora: os produtos são cadastrados só pelas NFC-e importadas. O resto de cada nota entrou normalmente.
+          </p>
+          <div className={styles.tableWrap}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Nota</th>
+                  <th>Item</th>
+                  <th>Código</th>
+                  <th>Descrição</th>
+                  <th>Código de barras</th>
+                  <th>Quantidade</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(report.skipped_items ?? []).map((row) => (
+                  <tr key={`${row.access_key}-${row.line ?? row.code}`}>
+                    <td>{row.note_number.toLocaleString("pt-BR")}</td>
+                    <td>{row.line ?? "—"}</td>
+                    <td>{row.code ?? "—"}</td>
+                    <td>{row.name ?? "—"}</td>
+                    <td>{row.gtin ?? "—"}</td>
+                    <td>{row.quantity === null ? "—" : Number(row.quantity).toLocaleString("pt-BR")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {(report.skipped_items ?? []).length === 500 && <p className={styles.hint}>Mostrando os 500 primeiros itens.</p>}
+        </section>
+      )}
 
       {report.last_numbers.length > 0 && (
         <section className={styles.card}>

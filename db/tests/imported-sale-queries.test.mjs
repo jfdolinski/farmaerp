@@ -86,6 +86,11 @@ beforeAll(async () => {
   second = note({ emitted_at: daysAgo(10), total: 40, subtotal: 40, items: [{ ...note().items[0], quantity: 2, total: 40 }], payments: [{ type: '01', amount: 40 }] });
   canceled = note({ emitted_at: daysAgo(1), total: 99, subtotal: 99, items: [{ ...note().items[0], quantity: 1, unit_price: 99, total: 99 }], payments: [{ type: '01', amount: 99 }] });
   anonymous = note({ customer: null, emitted_at: daysAgo(2) });
+  // Empresa nova: espera o administrador da plataforma (aqui, b.admin) criar; depois entra.
+  expect((await importNote(first)).result).toBe('waiting');
+  await ownerPool.query('INSERT INTO platform_admin (user_id) VALUES ($1)', [b.admin.id]);
+  const pending = (await ownerPool.query('SELECT id FROM import_pending_issuer WHERE cnpj = $1', [issuerCnpj])).rows[0];
+  await asUser(b.admin, "SELECT app.platform_resolve_issuer($1, 'create', '{}'::jsonb)", [pending.id]);
   for (const n of [first, second, canceled, anonymous]) expect((await importNote(n)).result).toBe('imported');
   await asWorker('SELECT app.import_nfce_cancel($1, $2, $3, $4)', [job, 'canc.xml', canceled.access_key, daysAgo(1)]);
   const row = (await ownerPool.query('SELECT id, customer_id FROM imported_sale WHERE access_key = $1', [first.access_key])).rows[0];

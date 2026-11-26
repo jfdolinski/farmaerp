@@ -3,7 +3,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { appPool, branchCnpj, closePools, createFixtures, hasCode, ownerPool, randomRoot, setUser } from './helpers.mjs';
 
 // Importação do NF-e 55: compras (entrada direta com custo), vendas, transferências, devoluções e
-// outras saídas, pela direção do CNPJ e pelo CFOP. Notas montadas à mão.
+// outras saídas, pela direção do CNPJ e pelo CFOP. Notas montadas à mão. Os produtos nascem das
+// NFC-e (seedProducts importa uma da filial 1 com os itens), como no arquivo de verdade.
 
 let a;
 let b;
@@ -52,6 +53,19 @@ async function run(setup, sql, params = []) {
 }
 const asUser = (user, sql, params) => run((c) => setUser(c, user.id), sql, params);
 const asWorker = (sql, params) => run((c) => c.query("SELECT set_config('app.user_id', '', true), set_config('app.worker', 'import', true)"), sql, params);
+/** NFC-e da filial 1 com os itens: cria os produtos (código anterior e GTIN), como a importação faz. */
+async function seedProducts(items) {
+  const raw = key();
+  const note = {
+    access_key: raw.slice(0, 20) + '65' + raw.slice(22), model: '65', series: 900, number: randomInt(1, 1e6),
+    emitted_at: '2026-01-02T10:00:00-03:00', environment: '1', status_code: '100', protocol: '135260000000001',
+    issuer: { cnpj: a.branch1.cnpj, name: 'Filial 1', uf: 'SP' },
+    items: items.map((it, i) => ({ line: i + 1, code: it.code, gtin: it.gtin ?? null, name: it.name ?? 'Produto', quantity: 1, unit_price: 1, discount: 0, total: 1, cfop: '5102' })),
+    payments: [], subtotal: items.length, discount: 0, total: items.length, change: 0, xml: XML,
+  };
+  const [{ r }] = await asWorker('SELECT app.import_nfce($1, $2, $3::jsonb) AS r', [job, 'semente.xml', JSON.stringify(note)]);
+  if (r.result !== 'imported') throw new Error(JSON.stringify(r));
+}
 const importNfe = (note, entry = 'nfe.xml') => asWorker('SELECT app.import_nfe($1, $2, $3::jsonb) AS r', [job, entry, JSON.stringify(note)]).then((r) => r[0].r);
 
 const supplierCnpj = branchCnpj(randomRoot(), 1);
@@ -86,6 +100,8 @@ const costOf = async (productId, branchId) => (await ownerPool.query(
 
 beforeAll(async () => {
   ({ a, b } = await createFixtures());
+  // b.admin faz as vezes do administrador da plataforma nestes testes.
+  await ownerPool.query('INSERT INTO platform_admin (user_id) VALUES ($1)', [b.admin.id]);
   job = (await asUser(a.admin, 'SELECT app.create_document_import($1, $2) AS id', ['nfe.zip', 10]))[0].id;
   await asUser(a.admin, 'SELECT app.document_import_part($1, 1, 10)', [job]);
   await asUser(a.admin, 'SELECT app.complete_document_import($1)', [job]);
@@ -103,11 +119,14 @@ describe('compra recebida', () => {
   let first;
   let productId;
 
-  it('entra no estoque com fornecedor, produto novo pelo GTIN, vínculo do código, custo e lotes', async () => {
+  const bonusGtin = gtin();
+
+  it('entra no estoque com fornecedor, produto que já existe pelo GTIN, vínculo do código, custo e lotes', async () => {
+    await seedProducts([{ code: `S${randomInt(1e9)}`, gtin: boxGtin }, { code: `S${randomInt(1e9)}`, gtin: bonusGtin }]);
     first = nfe({
       items: [
         item({ code, gtin: boxGtin, batches: [{ number: 'L1', quantity: 2, manufactured_on: '2026-01-01', expires_on: '2027-01-01' }] }),
-        item({ line: 2, code: `${code}-B`, cfop: '5910', products_value: 5, freight: 0, total: 5, quantity: 1 }),
+        item({ line: 2, code: `${code}-B`, gtin: bonusGtin, cfop: '5910', products_value: 5, freight: 0, total: 5, quantity: 1 }),
       ],
     });
     expect(await importNfe(first)).toMatchObject({ result: 'imported', kind: 'purchase' });
@@ -122,11 +141,13 @@ describe('compra recebida', () => {
     ]);
     expect(items[0].batches).toEqual([{ number: 'L1', quantity: 2, manufactured_on: '2026-01-01', expires_on: '2027-01-01' }]);
     expect((await ownerPool.query('SELECT code, is_internal FROM product_barcode WHERE product_id = $1', [productId])).rows).toEqual([{ code: boxGtin, is_internal: false }]);
-    expect((await ownerPool.query('SELECT legacy_code, own_ncm FROM product WHERE id = $1', [productId])).rows[0]).toEqual({ legacy_code: null, own_ncm: '30049099' });
+    // O produto é o da NFC-e (tem o código anterior): a compra não cria outro.
+    expect((await ownerPool.query('SELECT legacy_code IS NOT NULL AS seeded FROM product WHERE id = $1', [productId])).rows[0]).toEqual({ seeded: true });
     expect((await ownerPool.query('SELECT supplier_code FROM product_supplier WHERE product_id = $1 AND supplier_id = $2', [productId, note.supplier_id])).rows)
       .toEqual([{ supplier_code: code }]);
-    expect(await balance(productId, a.branch1.id)).toBe(2);
-    expect(await balance(items[1].product_id, a.branch1.id)).toBe(1);
+    // A NFC-e semente vendeu 1 de cada.
+    expect(await balance(productId, a.branch1.id)).toBe(1);
+    expect(await balance(items[1].product_id, a.branch1.id)).toBe(0);
     // Bonificação (5910) entra no estoque, sem custo.
     expect(Number(await costOf(productId, a.branch1.id))).toBe(11);
     expect(await costOf(items[1].product_id, a.branch1.id)).toBeNull();
@@ -145,19 +166,21 @@ describe('compra recebida', () => {
     const older = nfe({ emitted_at: '2026-04-10T10:00:00-03:00', items: [item({ code, products_value: 100, freight: 0, quantity: 2 })] });
     await importNfe(older);
     expect(Number(await costOf(productId, a.branch1.id))).toBe(15);
-    expect(await balance(productId, a.branch1.id)).toBe(6);
+    expect(await balance(productId, a.branch1.id)).toBe(5);
     // Caixa com 10 unidades: o vínculo diz o fracionamento.
     await ownerPool.query('UPDATE product_supplier SET fraction_quantity = 10 WHERE product_id = $1 AND supplier_code = $2', [productId, code]);
     const boxed = nfe({ emitted_at: '2026-07-10T10:00:00-03:00', items: [item({ code, products_value: 50, freight: 0, quantity: 1 })] });
     await importNfe(boxed);
     expect(Number((await itemsOf((await noteByKey(boxed.access_key)).id))[0].quantity)).toBe(10);
-    expect(await balance(productId, a.branch1.id)).toBe(16);
+    expect(await balance(productId, a.branch1.id)).toBe(15);
     expect(Number(await costOf(productId, a.branch1.id))).toBe(5);
   });
 
   it('produto que exige lote na filial entra e sai sem lote (o histórico não vira saldo por lote)', async () => {
     const tracked = `${code}-L`;
-    const first = nfe({ items: [item({ code: tracked, quantity: 3 })] });
+    const trackedGtin = gtin();
+    await seedProducts([{ code: `S${randomInt(1e9)}`, gtin: trackedGtin }]);
+    const first = nfe({ items: [item({ code: tracked, gtin: trackedGtin, quantity: 3 })] });
     await importNfe(first);
     const trackedId = (await itemsOf((await noteByKey(first.access_key)).id))[0].product_id;
     await ownerPool.query(
@@ -166,7 +189,7 @@ describe('compra recebida', () => {
     );
     await ownerPool.query('UPDATE product_branch_status SET tracks_batches = true WHERE product_id = $1 AND branch_id = $2', [trackedId, a.branch1.id]);
     expect(await importNfe(nfe({ items: [item({ code: tracked, quantity: 2 })] }))).toMatchObject({ result: 'imported' });
-    expect(await balance(trackedId, a.branch1.id)).toBe(5);
+    expect(await balance(trackedId, a.branch1.id)).toBe(4);
   });
 
   it('GTIN de produto que já existe liga a ele, pelo código da unidade tributável também', async () => {
@@ -254,6 +277,7 @@ describe('notas emitidas pelo cliente', () => {
   const productByCode = async () => (await ownerPool.query('SELECT id FROM product WHERE economic_group_id = $1 AND legacy_code = $2', [a.group.id, ownCode])).rows[0]?.id;
 
   it('venda a empresa vira venda importada (modelo 55) com o cliente e baixa o estoque', async () => {
+    await seedProducts([{ code: ownCode, name: 'Produto próprio' }]);
     const sale = own({
       dest: { ...party(companyCustomer, 'CLINICA EXEMPLO LTDA') },
       items: [item({ code: ownCode, name: 'Produto próprio', cfop: '5102', quantity: 3, unit_price: 10, total: 30 })],
@@ -264,21 +288,26 @@ describe('notas emitidas pelo cliente', () => {
     expect([row.model, row.branch_id, Number(row.total)]).toEqual(['55', a.branch1.id, 30]);
     const customer = (await ownerPool.query('SELECT document, name, person_type FROM customer WHERE id = $1', [row.customer_id])).rows[0];
     expect(customer).toEqual({ document: companyCustomer, name: 'CLINICA EXEMPLO LTDA', person_type: 'company' });
-    expect(await balance(await productByCode(), a.branch1.id)).toBe(-3);
+    expect(await balance(await productByCode(), a.branch1.id)).toBe(-4);
     expect(await noteByKey(sale.access_key)).toBeUndefined();
   });
 
-  it('transferência entre filiais tira de uma e põe na outra; filial nova da mesma raiz é cadastrada', async () => {
+  it('transferência entre filiais tira de uma e põe na outra; filial nova da mesma raiz espera a plataforma', async () => {
     const transfer = own({ dest: party(a.branch2.cnpj, 'Filial 2'), items: [item({ code: ownCode, cfop: '5152', quantity: 4, total: 40 })] });
     expect(await importNfe(transfer)).toMatchObject({ result: 'imported', kind: 'transfer' });
     const note = await noteByKey(transfer.access_key);
     expect(note).toMatchObject({ kind: 'transfer', own_issued: true, branch_id: a.branch1.id, counterpart_branch_id: a.branch2.id });
     const productId = await productByCode();
-    expect(await balance(productId, a.branch1.id)).toBe(-7);
+    expect(await balance(productId, a.branch1.id)).toBe(-8);
     expect(await balance(productId, a.branch2.id)).toBe(4);
     const newCnpj = branchCnpj(a.root, 9);
     const toNew = own({ dest: party(newCnpj, 'Filial nova'), items: [item({ code: ownCode, cfop: '5152', quantity: 1, total: 10 })] });
-    await importNfe(toNew);
+    expect(await importNfe(toNew)).toMatchObject({ result: 'waiting', reason: expect.stringContaining('administrador da plataforma') });
+    expect((await ownerPool.query('SELECT count(*)::int AS n FROM branch WHERE cnpj = $1', [newCnpj])).rows[0].n).toBe(0);
+    // A plataforma cria a filial; a nota volta pela importação dela.
+    const pending = (await ownerPool.query('SELECT id FROM import_pending_issuer WHERE economic_group_id = $1 AND cnpj = $2', [a.group.id, newCnpj])).rows[0];
+    await asUser(b.admin, "SELECT app.platform_resolve_issuer($1, 'create', '{}'::jsonb)", [pending.id]);
+    expect(await importNfe(toNew)).toMatchObject({ result: 'imported', kind: 'transfer' });
     const created = (await ownerPool.query('SELECT b.id, c.economic_group_id FROM branch b JOIN company c ON c.id = b.company_id WHERE b.cnpj = $1', [newCnpj])).rows[0];
     expect(created.economic_group_id).toBe(a.group.id);
     expect(await balance(productId, created.id)).toBe(1);
@@ -293,8 +322,8 @@ describe('notas emitidas pelo cliente', () => {
     expect(await importNfe(loss)).toMatchObject({ kind: 'other_output' });
     const entry = own({ operation: '0', dest: { cpf: '11144477735', name: 'Consumidor' }, items: [item({ code: ownCode, cfop: '1202', quantity: 2, total: 20 })] });
     expect(await importNfe(entry)).toMatchObject({ kind: 'own_entry' });
-    // Depois da venda (-3) e das transferências (-4 e -1): -8.
-    expect(await balance(productId, a.branch1.id)).toBe(-8 - 1 - 1 + 2);
+    // Depois da semente (-1), da venda (-3) e das transferências (-4 e -1): -9.
+    expect(await balance(productId, a.branch1.id)).toBe(-9 - 1 - 1 + 2);
     expect((await noteByKey(entry.access_key)).party_document).toBe('11144477735');
   });
 
@@ -311,12 +340,23 @@ describe('notas emitidas pelo cliente', () => {
 });
 
 describe('recebidas de terceiros e notas de fora', () => {
+  // Código do fornecedor já ligado a um produto (pela primeira compra).
+  let linked;
+  beforeAll(async () => {
+    linked = (await ownerPool.query(
+      'SELECT ps.supplier_code FROM product_supplier ps JOIN product p ON p.id = ps.product_id WHERE p.economic_group_id = $1 AND ps.deleted_at IS NULL ORDER BY ps.created_at LIMIT 1',
+      [a.group.id],
+    )).rows[0].supplier_code;
+  });
+
   it('devolução de cliente (empresa) entra no estoque, sem fornecedor', async () => {
-    const back = nfe({ issuer: party(companyCustomer, 'CLINICA EXEMPLO LTDA'), items: [item({ cfop: '5202', quantity: 1 })] });
+    const returned = gtin();
+    await seedProducts([{ code: `S${randomInt(1e9)}`, gtin: returned }]);
+    const back = nfe({ issuer: party(companyCustomer, 'CLINICA EXEMPLO LTDA'), items: [item({ gtin: returned, cfop: '5202', quantity: 1 })] });
     expect(await importNfe(back)).toMatchObject({ kind: 'customer_return' });
     const note = await noteByKey(back.access_key);
     expect(note.supplier_id).toBeNull();
-    expect(await balance((await itemsOf(note.id))[0].product_id, a.branch1.id)).toBe(1);
+    expect(await balance((await itemsOf(note.id))[0].product_id, a.branch1.id)).toBe(0);
   });
 
   it('nota de fora, de entrada de terceiro, de homologação, sem autorização ou repetida não entra', async () => {
@@ -326,7 +366,7 @@ describe('recebidas de terceiros e notas de fora', () => {
     expect(await importNfe(thirdEntry)).toMatchObject({ result: 'ignored', reason: expect.stringContaining('entrada emitida por terceiro') });
     expect(await importNfe(nfe({ environment: '2' }))).toMatchObject({ result: 'ignored' });
     expect(await importNfe(nfe({ status_code: '' }))).toMatchObject({ result: 'ignored' });
-    const once = nfe();
+    const once = nfe({ items: [item({ code: linked })] });
     expect(await importNfe(once)).toMatchObject({ result: 'imported' });
     expect(await importNfe(once)).toMatchObject({ result: 'duplicate' });
     for (const k of [outsider, thirdEntry]) expect(await noteByKey(k.access_key)).toBeUndefined();
@@ -339,7 +379,7 @@ describe('recebidas de terceiros e notas de fora', () => {
   });
 
   it('nota quebrada fica com problema, sem parar; só o processamento chama', async () => {
-    expect(await importNfe(nfe({ items: [item({ quantity: 0 })] }))).toMatchObject({ result: 'failed', code: 'FA743' });
+    expect(await importNfe(nfe({ items: [item({ code: linked, quantity: 0 })] }))).toMatchObject({ result: 'failed', code: 'FA743' });
     expect(await importNfe(nfe({ model: '65' }))).toMatchObject({ result: 'failed', code: 'FA743' });
     await expect(asUser(a.admin, 'SELECT app.import_nfe($1, $2, $3::jsonb)', [job, 'x', JSON.stringify(nfe())])).rejects.toSatisfy(hasCode('FA002'));
   });

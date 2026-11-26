@@ -802,6 +802,18 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Chame quem tem a permissão no perfil (o supervisor ou o gerente) para digitar o código e o PIN.',
     retryable: false,
   ),
+  'FA758': ErrorCatalogEntry(
+    code: 'FA758',
+    message: 'Este CNPJ já foi decidido.',
+    action: 'Atualize a lista: as notas dele já foram liberadas ou recusadas.',
+    retryable: false,
+  ),
+  'FA759': ErrorCatalogEntry(
+    code: 'FA759',
+    message: 'Nenhum item da nota tem produto cadastrado.',
+    action: 'Importe antes as NFC-e que trazem esses produtos e importe a nota de novo.',
+    retryable: false,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',

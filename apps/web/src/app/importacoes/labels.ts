@@ -8,6 +8,8 @@ export interface ImportTotals {
   ignored?: number;
   failed?: number;
   canceled?: number;
+  /** Notas de CNPJ que o cliente ainda não tem: esperam o administrador da plataforma. */
+  waiting?: number;
 }
 
 export interface ImportRow {
@@ -54,5 +56,8 @@ export function fileSize(value: number | string): string {
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
+
+/** CNPJ com pontos, barra e traço. */
+export const formatCnpj = (value: string) => value.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
 
 export const count = (value: number | undefined) => (value ?? 0).toLocaleString("pt-BR");
