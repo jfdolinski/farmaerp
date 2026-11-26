@@ -537,6 +537,34 @@ const _migrations = <String>[
     UNIQUE (series, number)
   ) STRICT;
   ''',
+  // NFC-e cancelada (pelo caixa ou pela retaguarda): a tabela é refeita com a situação nova, com as
+  // notas que já estavam nela.
+  '''
+  CREATE TABLE nfce_document_new (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    sale_id BLOB NOT NULL UNIQUE CHECK (length(sale_id) = 16),
+    series INTEGER NOT NULL,
+    number INTEGER NOT NULL,
+    access_key TEXT NOT NULL UNIQUE,
+    environment INTEGER NOT NULL CHECK (environment IN (1, 2)),
+    emission_type INTEGER NOT NULL CHECK (emission_type IN (1, 9)),
+    status TEXT NOT NULL CHECK (status IN ('authorized', 'rejected', 'pending', 'contingency', 'canceled')),
+    protocol TEXT,
+    status_code TEXT,
+    reason TEXT,
+    xml TEXT NOT NULL,
+    qr_code TEXT NOT NULL,
+    consult_url TEXT NOT NULL,
+    emitted_at TEXT NOT NULL,
+    authorized_at TEXT,
+    attempts INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL,
+    UNIQUE (series, number)
+  ) STRICT;
+  INSERT INTO nfce_document_new SELECT * FROM nfce_document;
+  DROP TABLE nfce_document;
+  ALTER TABLE nfce_document_new RENAME TO nfce_document;
+  ''',
 ];
 
 /// NFC-e do caixa, para guardar, imprimir o DANFE e subir à central.
@@ -1412,6 +1440,15 @@ class LocalDatabase {
   }
 
   /// Quantos itens esperam envio (vai no sinal de vida).
+  /// A venda (ou a NFC-e dela) ainda está na fila para a central.
+  bool outboxHasSale(String saleId) =>
+      (_db.select(
+            "SELECT count(*) AS n FROM outbox WHERE sent_at IS NULL AND kind IN ('sale', 'nfce') "
+            r"AND (json_extract(payload, '$.id') = ? OR json_extract(payload, '$.sale_id') = ?)",
+            [saleId, saleId],
+          ).first['n'] as int) >
+      0;
+
   int get outboxPending =>
       _db.select('SELECT count(*) AS n FROM outbox WHERE sent_at IS NULL').first['n'] as int;
 

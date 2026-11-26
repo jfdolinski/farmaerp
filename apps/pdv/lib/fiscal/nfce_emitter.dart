@@ -155,6 +155,11 @@ class NfceEmitter {
           noticeCode: 'FA736',
           detail: '${result.statusCode} ${result.reason}',
         );
+      case SefazDuplicate() || SefazCanceled() || SefazNotFound():
+        // A Sefaz já tem esta nota (a resposta de antes se perdeu): fica pendente com a mesma chave
+        // e a retransmissão consulta e pega o protocolo. (Cancelada e "não consta" só vêm da consulta.)
+        logger?.warn('NFC-e já recebida pela Sefaz; consultar depois', fields: {'number': numbering.number});
+        return NfceOutcome(nfce: nfce(status: 'pending', reason: 'A Sefaz já recebeu esta nota; falta o protocolo.'));
       case SefazUnavailable():
         // Contingência offline: a mesma numeração, outra chave (tpEmis 9) e o QR Code com o digest.
         logger?.warn('NFC-e em contingência', fields: {'number': numbering.number, 'err': result.reason});

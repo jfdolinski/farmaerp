@@ -198,6 +198,10 @@ Future<void> main() async {
     openQuotes: () async => api.openQuotes(accessToken: await controller.accessToken()),
     saleForReturn: (code) async => api.saleForReturn(accessToken: await controller.accessToken(), code: code),
     returnDocument: (code) async => api.returnDocument(accessToken: await controller.accessToken(), code: code),
+    cancelNfce: (documentId, reason, supervisorId) async => api.cancelNfce(
+      accessToken: await controller.accessToken(), documentId: documentId, reason: reason, supervisorId: supervisorId,
+    ),
+    syncNow: () => controller.tick(),
     returnCredit: (code) async => api.returnCredit(accessToken: await controller.accessToken(), code: code),
     cashbackBalance: (customerId) async => api.cashback(accessToken: await controller.accessToken(), customerId: customerId),
     cashbackReserve: (customerId, amount, saleTotal) async => api.cashbackReserve(

@@ -71,6 +71,92 @@ class SefazUnavailable extends SefazResult {
   final String reason;
 }
 
+/// A mesma nota já está na Sefaz (204): a resposta da primeira vez se perdeu. Consultar.
+class SefazDuplicate extends SefazResult {
+  const SefazDuplicate({required this.statusCode, required this.reason});
+
+  final String statusCode;
+  final String reason;
+}
+
+/// A consulta mostra a nota cancelada (pela retaguarda ou pela central).
+class SefazCanceled extends SefazResult {
+  const SefazCanceled({required this.statusCode, required this.reason});
+
+  final String statusCode;
+  final String reason;
+}
+
+/// A consulta diz que a Sefaz não tem a nota (217): pode enviar.
+class SefazNotFound extends SefazResult {
+  const SefazNotFound();
+}
+
+/// Consulta da NFC-e pela chave (NFeConsultaProtocolo4) por UF. RS e SC usam a SVRS.
+///
+/// CONFERIR com o portal de cada UF antes de produção (os mesmos da central, em nfce-sefaz.ts).
+const _consult = <String, (String homologation, String production)>{
+  'SP': ('https://homologacao.nfce.fazenda.sp.gov.br/ws/NFeConsultaProtocolo4.asmx', 'https://nfce.fazenda.sp.gov.br/ws/NFeConsultaProtocolo4.asmx'),
+  'PR': ('https://homologacao.nfce.sefa.pr.gov.br/nfce/NFeConsultaProtocolo4', 'https://nfce.sefa.pr.gov.br/nfce/NFeConsultaProtocolo4'),
+  'RS': ('https://nfce-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx', 'https://nfce.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx'),
+  'SC': ('https://nfce-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx', 'https://nfce.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx'),
+  'MG': ('https://hnfce.fazenda.mg.gov.br/nfce/services/NFeConsultaProtocolo4', 'https://nfce.fazenda.mg.gov.br/nfce/services/NFeConsultaProtocolo4'),
+};
+
+/// Endereço da consulta na UF e no ambiente. Null se não atendida.
+Uri? consultUrl(String uf, int environment) {
+  final urls = _consult[uf];
+  if (urls == null) return null;
+  return Uri.parse(environment == 1 ? urls.$2 : urls.$1);
+}
+
+/// Pedido de consulta da situação da nota pela chave.
+String consultEnvelope(String accessKey, {required int environment}) =>
+    '<?xml version="1.0" encoding="utf-8"?>'
+    '<soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
+    'xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">'
+    '<soap12:Body><nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4">'
+    '<consSitNFe xmlns="$_nfeNamespace" versao="4.00"><tpAmb>$environment</tpAmb><xServ>CONSULTAR</xServ>'
+    '<chNFe>$accessKey</chNFe></consSitNFe></nfeDadosMsg></soap12:Body></soap12:Envelope>';
+
+/// Lê a consulta: 100/150 autorizada (junta a nota assinada e o protocolo no nfeProc); 101/151/155
+/// cancelada; 217 não consta; 108/109 parada; o resto fica como indisponível (tenta depois).
+SefazResult parseConsult(String response, {required String signedNfe}) {
+  final XmlDocument document;
+  try {
+    document = XmlDocument.parse(response);
+  } on XmlException {
+    return const SefazUnavailable('Resposta da Sefaz fora do formato.');
+  }
+  final result = _first(document, 'retConsSitNFe');
+  if (result == null) return const SefazUnavailable('Resposta da Sefaz sem o retorno da consulta.');
+  final status = _text(result, 'cStat');
+  final reason = _first(result, 'xMotivo')?.innerText.trim() ?? '';
+  if (status == '217') return const SefazNotFound();
+  if (status == '101' || status == '151' || status == '155') return SefazCanceled(statusCode: status, reason: reason);
+  if (status != '100' && status != '150') return SefazUnavailable('Sefaz: $status $reason');
+  final protocol = _first(result, 'infProt');
+  final protNfe = _cut(response, 'protNFe');
+  if (protocol == null || protNfe == null) return const SefazUnavailable('Consulta sem o protocolo.');
+  final nfe = signedNfe.replaceFirst(RegExp(r'^<\?xml[^>]*\?>\s*'), '');
+  return SefazAuthorized(
+    protocol: _text(protocol, 'nProt'),
+    statusCode: status,
+    reason: reason,
+    authorizedAt: DateTime.tryParse(_text(protocol, 'dhRecbto')) ?? DateTime.now(),
+    procXml: '<?xml version="1.0" encoding="UTF-8"?><nfeProc xmlns="$_nfeNamespace" versao="4.00">$nfe$protNfe</nfeProc>',
+  );
+}
+
+/// Recorta o elemento da resposta como veio (a Sefaz pode assiná-lo), sem prefixo de namespace.
+String? _cut(String response, String name) {
+  final start = response.indexOf(RegExp('<(\\w+:)?$name[\\s>]'));
+  if (start < 0) return null;
+  final end = RegExp('</(\\w+:)?$name>').firstMatch(response.substring(start));
+  if (end == null) return null;
+  return response.substring(start, start + end.end).replaceAllMapped(RegExp(r'(</?)\w+:'), (match) => match[1]!);
+}
+
 /// Leva o envelope até a Sefaz com o certificado do caixa no TLS. Separado para os testes.
 abstract class SefazTransport {
   Future<String> post(Uri url, String body, {required NfceCredentials credentials, required Duration timeout});
@@ -131,6 +217,9 @@ SefazResult parseAuthorization(String response, {required String signedNfe}) {
   final protocol = _first(batch, 'infProt');
   final status = _text(protocol, 'cStat');
   final reason = _text(protocol, 'xMotivo');
+  // 204: a mesma nota já chegou antes (a resposta se perdeu); consultar pega o protocolo. O 539
+  // (mesmo número, outra chave) é recusa de verdade.
+  if (status == '204') return SefazDuplicate(statusCode: status, reason: reason);
   if (status != '100' && status != '150') return SefazRejected(statusCode: status, reason: reason);
   // O protocolo vai como veio (a Sefaz pode assiná-lo): recorte do texto, sem remontar o XML.
   final start = response.indexOf(RegExp(r'<(\w+:)?protNFe[\s>]'));
@@ -177,6 +266,30 @@ class SefazClient {
         timeout: timeout,
       );
       return parseAuthorization(response, signedNfe: signedNfe);
+    } on TimeoutException {
+      return const SefazUnavailable('A Sefaz não respondeu a tempo.');
+    } on SocketException catch (error) {
+      return SefazUnavailable('Sem conexão com a Sefaz: ${error.message}');
+    } on HandshakeException catch (error) {
+      return SefazUnavailable('Falha no TLS com a Sefaz: ${error.message}');
+    } on HttpException catch (error) {
+      return SefazUnavailable(error.message);
+    }
+  }
+
+  /// Situação da nota pela chave. Autorizada volta com o nfeProc (a nota assinada e o protocolo).
+  Future<SefazResult> consult({
+    required String accessKey,
+    required String signedNfe,
+    required String uf,
+    required int environment,
+    required NfceCredentials credentials,
+  }) async {
+    final url = consultUrl(uf, environment);
+    if (url == null) return SefazUnavailable('UF $uf sem serviço de consulta configurado.');
+    try {
+      final response = await _transport.post(url, consultEnvelope(accessKey, environment: environment), credentials: credentials, timeout: timeout);
+      return parseConsult(response, signedNfe: signedNfe);
     } on TimeoutException {
       return const SefazUnavailable('A Sefaz não respondeu a tempo.');
     } on SocketException catch (error) {

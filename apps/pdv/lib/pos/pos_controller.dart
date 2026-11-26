@@ -26,9 +26,11 @@ import 'receipt.dart';
 
 /// Venda concluída, para a tela e a reimpressão.
 class CompletedSale {
-  const CompletedSale({required this.code, required this.totalCents, required this.changeCents, required this.lines});
+  const CompletedSale({required this.code, required this.totalCents, required this.changeCents, required this.lines, this.saleId});
 
   final String code;
+  /// Id da venda (para cancelar a NFC-e dela). Vazio no orçamento.
+  final String? saleId;
   final int totalCents;
   final int changeCents;
   final List<ReceiptLine> lines;
@@ -78,6 +80,8 @@ class PosController extends ChangeNotifier {
     this.cashbackBalance,
     this.cashbackReserve,
     this.cashbackRelease,
+    this.cancelNfce,
+    this.syncNow,
     this.logger,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now;
@@ -106,6 +110,10 @@ class PosController extends ChangeNotifier {
   final Future<Map<String, dynamic>> Function(String customerId)? cashbackBalance;
   final Future<Map<String, dynamic>> Function(String customerId, double amount, double saleTotal)? cashbackReserve;
   final Future<void> Function(String reservationId)? cashbackRelease;
+  /// Pede à central o cancelamento da NFC-e (id da nota, motivo, supervisor). Com internet.
+  final Future<Map<String, dynamic>> Function(String documentId, String reason, String supervisorId)? cancelNfce;
+  /// Sincroniza agora (manda a fila para a central).
+  final Future<void> Function()? syncNow;
 
   /// Controlados do orçamento esperando a receita, um por vez.
   /// Pagamento pedido com controlado sem receita: depois do último liberado, segue para o pagamento.
@@ -1792,7 +1800,14 @@ class PosController extends ChangeNotifier {
         nfce: document,
       );
       saleCashback = null;
-      lastSale = CompletedSale(code: draft.code, totalCents: cart.totalCents, changeCents: cart.changeCents, lines: lines);
+      lastSale = CompletedSale(
+        code: draft.code,
+        totalCents: cart.totalCents,
+        changeCents: cart.changeCents,
+        lines: lines,
+        saleId: draft.payload['id']! as String,
+      );
+      lastSaleCanceled = false;
       logger?.info('Venda concluída', fields: {'sale_code': draft.code, 'items': cart.lines.length});
       cart.clear();
       paying = false;
@@ -1850,6 +1865,75 @@ class PosController extends ChangeNotifier {
           : 'Orçamento ${draft.code} concluído na plaquinha $cardNumber.';
       onSaleSaved?.call();
       if (printCoupon || cardNumber == null) await _print(lastQuote!);
+      return true;
+    } on PosException catch (error) {
+      notice = ErrorDisplay.fromCode(error.code);
+      return false;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  /// A última venda foi cancelada neste caixa (o botão some).
+  bool lastSaleCanceled = false;
+
+  /// Prazo do cancelamento da NFC-e (o mesmo da central).
+  static const cancelWindow = Duration(minutes: 30);
+
+  /// NFC-e autorizada da última venda, ainda no prazo de cancelar. Null quando não dá.
+  LocalNfce? get cancelableNfce {
+    final sale = lastSale;
+    if (quoteMode || sale == null || sale.saleId == null || lastSaleCanceled || cancelNfce == null) return null;
+    final document = database.nfceOfSale(sale.saleId!);
+    final authorizedAt = document?.authorizedAt;
+    if (document == null || document.status != 'authorized' || authorizedAt == null) return null;
+    return _clock().difference(authorizedAt) < cancelWindow ? document : null;
+  }
+
+  /// Cancela a última venda: o supervisor (outra pessoa, com "Cancelar NFC-e") libera no caixa e a
+  /// central cancela a NFC-e na Sefaz e desfaz a venda. Antes, a fila sobe: a central precisa ter a
+  /// venda e a nota. Devolve true quando a central confirmou.
+  Future<bool> cancelLastSale({required String reason, required String supervisorCode, required String supervisorPin}) async {
+    final current = operator;
+    final document = cancelableNfce;
+    final request = cancelNfce;
+    final sale = lastSale;
+    if (current == null || document == null || request == null || sale == null) return false;
+    busy = true;
+    notice = null;
+    notifyListeners();
+    try {
+      final text = reason.trim();
+      if (text.length < 15 || text.length > 255) throw const PosException('FA005');
+      final supervisor = await auth.verify(supervisorCode, supervisorPin, permission: 'fiscal.cancel');
+      if (supervisor.id == current.id) throw const PosException('FA982');
+      await syncNow?.call();
+      if (database.outboxHasSale(sale.saleId!)) throw const PosException('FA756');
+      final Map<String, dynamic> result;
+      try {
+        result = await request(document.id, text, supervisor.id);
+      } on ApiException catch (error) {
+        if (error.code == 'FA001') {
+          // Sem resposta: a central pode ter cancelado. Pedir de novo é seguro (responde que já está feito).
+          notice = ErrorDisplay.fromCode('FA001');
+          info = 'Sem resposta da central: o cancelamento pode ter sido feito. Tente de novo para confirmar.';
+          return false;
+        }
+        throw PosException(error.code);
+      }
+      database.updateNfce(document.copyWith(status: 'canceled', reason: text), now: _clock());
+      lastSaleCanceled = true;
+      final cash = result['cash_refund'] as String?;
+      info = switch (cash) {
+        'same_session' => 'Venda ${sale.code} cancelada. Devolva o dinheiro ao cliente pela gaveta.',
+        'open_session' => 'Venda ${sale.code} cancelada. A devolução do dinheiro foi registrada como sangria.',
+        'no_session' => 'Venda ${sale.code} cancelada. Devolva o dinheiro e registre a saída à mão.',
+        _ when result['sale_kept'] != null => 'NFC-e cancelada, mas a venda não foi desfeita: acerte pela devolução.',
+        _ => 'Venda ${sale.code} cancelada.',
+      };
+      logger?.info('Venda cancelada no caixa', fields: {'sale_code': sale.code, 'supervisor_code': supervisor.code});
+      onSaleSaved?.call();
       return true;
     } on PosException catch (error) {
       notice = ErrorDisplay.fromCode(error.code);

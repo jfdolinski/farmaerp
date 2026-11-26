@@ -23,6 +23,7 @@ final _terminalId = _fixture['terminalId'] as String;
 
 const branchId = '019a0000-0000-7000-8000-000000000005';
 const operatorId = '019a0000-0000-7000-8000-000000000009';
+const supervisorId = '019a0000-0000-7000-8000-0000000000c7';
 const dipirona = '019a0000-0000-7000-8000-000000000017';
 const semTributacao = '019a0000-0000-7000-8000-000000000027';
 const seriesId = '019a0000-0000-7000-8000-0000000000e1';
@@ -82,6 +83,10 @@ Future<LocalDatabase> seeded(String pin, {String? credentialVersion}) async {
         'code': 3, 'name': 'Operador Centro', 'is_admin': false, 'roles': const [], 'permissions': const ['sales.sell'],
         'limits': const {}, 'pin_hash': pin,
       }),
+      PullItem(type: 'user', id: supervisorId, data: {
+        'code': 7, 'name': 'Gerente Centro', 'is_admin': false, 'roles': const [], 'permissions': const ['sales.sell', 'fiscal.cancel'],
+        'limits': const {}, 'pin_hash': pin,
+      }),
       product(dipirona, 1, 'Dipirona Sódica 500 mg', '7890000000017', taxes: [
         {'id': '019a0000-0000-7000-8000-0000000000d1', 'valid_from': '2026-01-01', 'cfop': '5405', 'origin': 0, 'icms_csosn': '500',
          'pis_cst': '04', 'cofins_cst': '04'},
@@ -103,7 +108,13 @@ void main() {
 
   setUpAll(() async => pin = await hashFor('2468'));
 
-  Future<void> setUpPos({String? credentialVersion, bool withCredentials = true}) async {
+  Future<void> setUpPos({
+    String? credentialVersion,
+    bool withCredentials = true,
+    Future<Map<String, dynamic>> Function(String documentId, String reason, String supervisorId)? cancelNfce,
+    Future<void> Function()? syncNow,
+    DateTime Function()? clock,
+  }) async {
     database = await seeded(pin, credentialVersion: credentialVersion);
     addTearDown(database.close);
     final store = _Store()..values['terminal_fiscal_seed'] = _fixture['seed'] as String;
@@ -124,6 +135,9 @@ void main() {
       auth: PosAuth(database: database),
       printer: () => FakePrinter(),
       terminalNumber: () => 1,
+      cancelNfce: cancelNfce,
+      syncNow: syncNow,
+      clock: clock,
     );
     await controller.login('3', '2468');
     controller.openShift(0);
@@ -208,39 +222,126 @@ void main() {
     expect([payload['status'], payload['emission_type']], ['contingency', 9]);
   });
 
-  test('retransmissão: autorizada atualiza a nota e sobe de novo; recusada fica com o motivo; sem resposta espera', () async {
+  test('retransmissão: consulta antes; envia o que a Sefaz não tem; 204 pega o protocolo pela consulta; cancelada e recusada', () async {
     await setUpPos();
     final first = await sellWith(controller, database, FakeTransport(() => throw const SocketException('sem rede')), '7890000000017');
     final second = await sellWith(controller, database, FakeTransport(() => throw const SocketException('sem rede')), '7890000000017');
+    final third = await sellWith(controller, database, FakeTransport(() => throw const SocketException('sem rede')), '7890000000017');
+    final fourth = await sellWith(controller, database, FakeTransport(() => throw const SocketException('sem rede')), '7890000000017');
     final emitter = controller.nfce!;
-    NfceRetransmitter retransmitter(FakeTransport transport) => NfceRetransmitter(
+    NfceRetransmitter retransmitter(SefazTransport transport) => NfceRetransmitter(
       database: database,
       credentials: emitter.credentials,
       sefaz: SefazClient(transport: transport),
       terminalId: emitter.terminalId,
     );
 
-    // Ainda sem resposta: nada muda, para na primeira.
+    // Ainda sem resposta: nada muda, para na primeira (na consulta).
     final offline = FakeTransport(() => throw const SocketException('sem rede'));
     expect(await retransmitter(offline).tick(), 0);
     expect(offline.calls, hasLength(1));
+    expect(offline.calls.single.$1.path, contains('Consulta'));
     expect(database.nfceOfSale(first)!.status, 'contingency');
 
-    // Volta a internet: a primeira é autorizada, a segunda recusada.
-    var call = 0;
-    final online = FakeTransport(() => ++call == 1 ? response() : response(status: '204', reason: 'Duplicidade de NF-e'));
-    expect(await retransmitter(online).tick(), 2);
+    // Volta a internet. Por nota, na ordem: (1) não consta, envia, autoriza; (2) não consta, envia,
+    // 204 (já estava lá), consulta e pega o protocolo; (3) cancelada pela retaguarda; (4) recusada.
+    final keys = [first, second, third, fourth].map((sale) => database.nfceOfSale(sale)!.accessKey).toList();
+    late final RoutingTransport online;
+    online = RoutingTransport((url, body) {
+      final key = keys.firstWhere(body.contains, orElse: () => '');
+      final consult = url.path.contains('Consulta');
+      if (key == keys[0]) return consult ? consultResponse('217') : response();
+      if (key == keys[1]) {
+        if (!consult) return response(status: '204', reason: 'Duplicidade de NF-e');
+        final asked = online.calls.where((call) => call.$2.contains(keys[1]) && call.$1.path.contains('Consulta')).length;
+        return asked == 1 ? consultResponse('217') : consultResponse('100');
+      }
+      if (key == keys[2]) return consultResponse('101');
+      return consult ? consultResponse('217') : response(status: '778', reason: 'NCM inexistente');
+    });
+    expect(await retransmitter(online).tick(), 4);
     final authorized = database.nfceOfSale(first)!;
     expect([authorized.status, authorized.protocol, authorized.emissionType], ['authorized', '135260000000123', 9]);
     expect(authorized.xml, startsWith('<?xml version="1.0" encoding="UTF-8"?><nfeProc'));
-    final rejected = database.nfceOfSale(second)!;
-    expect([rejected.status, rejected.statusCode], ['rejected', '204']);
+    final duplicate = database.nfceOfSale(second)!;
+    expect([duplicate.status, duplicate.protocol], ['authorized', '135260000000777']);
+    expect(duplicate.xml, contains('<nProt>135260000000777</nProt>'));
+    expect(database.nfceOfSale(third)!.status, 'canceled');
+    expect([database.nfceOfSale(fourth)!.status, database.nfceOfSale(fourth)!.statusCode], ['rejected', '778']);
+    // A cancelada não foi enviada (só consultada).
+    expect(online.calls.where((call) => call.$2.contains(keys[2]) && !call.$1.path.contains('Consulta')), isEmpty);
     // A nota sobe de novo com o mesmo id e a situação nova.
     final updates = database.nextOutboxBatch().where((item) => item.kind == 'nfce' && item.payload['id'] == authorized.id).toList();
     expect(updates.map((item) => item.payload['status']), ['contingency', 'authorized']);
     // Nada mais a transmitir.
     expect(database.nfceToTransmit(), isEmpty);
     expect(await retransmitter(online).tick(), 0);
+  });
+
+
+  test('cancelar a última venda: supervisor com a permissão, venda na central, a central cancela e a nota fica cancelada', () async {
+    final asked = <List<String>>[];
+    var now = DateTime.parse('2026-11-26T15:10:00-03:00');
+    Object? failure;
+    Map<String, dynamic> answer = const {'cash': 10, 'cash_refund': 'same_session'};
+    // Sincronizar = a fila sobe (marcada como enviada).
+    var synced = false;
+    await setUpPos(
+      cancelNfce: (documentId, reason, supervisorId) async {
+        asked.add([documentId, reason, supervisorId]);
+        if (failure != null) throw failure;
+        return answer;
+      },
+      // Dez minutos depois da autorização (a Sefaz falsa autoriza às 15:00).
+      clock: () => now,
+      syncNow: () async {
+        if (!synced) return;
+        final batch = database.nextOutboxBatch();
+        database.markSent(batch, [for (final item in batch) PushResult(id: item.id, status: 'applied', result: 'applied')], now: DateTime.now());
+      },
+    );
+    await sell('7890000000017');
+    final saleId = controller.lastSale!.saleId!;
+    final document = controller.cancelableNfce!;
+    expect(document.status, 'authorized');
+    // Passados os 30 minutos da autorização, não oferece mais.
+    now = DateTime.parse('2026-11-26T15:31:00-03:00');
+    expect(controller.cancelableNfce, isNull);
+    now = DateTime.parse('2026-11-26T15:10:00-03:00');
+
+    // Motivo curto; o próprio operador; quem não tem a permissão.
+    expect(await controller.cancelLastSale(reason: 'curto', supervisorCode: '7', supervisorPin: '2468'), isFalse);
+    expect(noticeCode(), 'FA005');
+    expect(await controller.cancelLastSale(reason: 'Cliente desistiu da compra', supervisorCode: '3', supervisorPin: '2468'), isFalse);
+    expect(noticeCode(), 'FA969');
+    // A venda ainda está na fila: espera a central receber.
+    expect(await controller.cancelLastSale(reason: 'Cliente desistiu da compra', supervisorCode: '7', supervisorPin: '2468'), isFalse);
+    expect(noticeCode(), 'FA756');
+    expect(asked, isEmpty);
+
+    // Sem resposta da central: avisa que pode ter sido feito (pedir de novo é seguro).
+    synced = true;
+    failure = const ApiException('FA001');
+    expect(await controller.cancelLastSale(reason: 'Cliente desistiu da compra', supervisorCode: '7', supervisorPin: '2468'), isFalse);
+    expect(controller.info, startsWith('Sem resposta da central'));
+    expect(database.nfceOfSale(saleId)!.status, 'authorized');
+
+    // A central cancela.
+    failure = null;
+    expect(await controller.cancelLastSale(reason: 'Cliente desistiu da compra', supervisorCode: '7', supervisorPin: '2468'), isTrue);
+    expect(asked.last, [document.id, 'Cliente desistiu da compra', supervisorId]);
+    expect(database.nfceOfSale(saleId)!.status, 'canceled');
+    expect(controller.info, contains('Devolva o dinheiro ao cliente pela gaveta'));
+    // O botão some.
+    expect(controller.cancelableNfce, isNull);
+    answer = const {'already': true};
+    expect(now.isBefore(DateTime.parse('2026-11-26T15:30:00-03:00')), isTrue);
+  });
+
+  test('sem o pedido à central (sem internet configurada) ou depois de 30 minutos, não oferece cancelar', () async {
+    await setUpPos();
+    await sell('7890000000017');
+    expect(controller.cancelableNfce, isNull);
   });
 
   test('alerta da contingência: aviso na metade do prazo da filial, vencido no prazo', () async {
@@ -324,4 +425,29 @@ Future<String> sellWith(PosController controller, LocalDatabase database, FakeTr
   controller.info = replaced.info;
   controller.lastSale = replaced.lastSale;
   return database.nextOutboxBatch().where((item) => item.kind == 'sale').last.payload['id']! as String;
+}
+
+/// Sefaz falsa que responde conforme o endereço (consulta ou autorização) e o corpo (a chave).
+class RoutingTransport implements SefazTransport {
+  RoutingTransport(this.reply);
+
+  final String Function(Uri url, String body) reply;
+  final calls = <(Uri, String)>[];
+
+  @override
+  Future<String> post(Uri url, String body, {required NfceCredentials credentials, required Duration timeout}) async {
+    calls.add((url, body));
+    return reply(url, body);
+  }
+}
+
+/// Resposta da consulta pela chave (retConsSitNFe), com o protocolo quando autorizada.
+String consultResponse(String status) {
+  final protocol = status == '100'
+      ? '<protNFe versao="4.00"><infProt><tpAmb>2</tpAmb><dhRecbto>2026-11-26T15:00:01-03:00</dhRecbto>'
+          '<nProt>135260000000777</nProt><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe>'
+      : '';
+  return '<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope"><soap:Body>'
+      '<nfeResultMsg><retConsSitNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>2</tpAmb>'
+      '<cStat>$status</cStat><xMotivo>Motivo $status</xMotivo>$protocol</retConsSitNFe></nfeResultMsg></soap:Body></soap:Envelope>';
 }

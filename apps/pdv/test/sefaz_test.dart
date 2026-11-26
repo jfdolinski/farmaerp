@@ -101,4 +101,38 @@ void main() {
         isA<SefazUnavailable>());
     expect(none.calls, isEmpty);
   });
+
+  test('204 é a mesma nota já recebida (consultar); 539 é mesmo número com outra chave (recusa)', () {
+    expect(parseAuthorization(response(status: '204', reason: 'Duplicidade de NF-e'), signedNfe: signedNfe), isA<SefazDuplicate>());
+    expect(parseAuthorization(response(status: '539', reason: 'Duplicidade com diferenca na chave'), signedNfe: signedNfe), isA<SefazRejected>());
+  });
+
+  test('consulta: pedido pela chave; autorizada monta o nfeProc; cancelada, não consta, parada e lixo', () {
+    expect(consultEnvelope('3' * 44, environment: 2), contains('<consSitNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>2</tpAmb><xServ>CONSULTAR</xServ><chNFe>${'3' * 44}</chNFe></consSitNFe>'));
+    expect(consultUrl('SP', 2).toString(), 'https://homologacao.nfce.fazenda.sp.gov.br/ws/NFeConsultaProtocolo4.asmx');
+    expect(consultUrl('SC', 1).toString(), 'https://nfce.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx');
+    expect(consultUrl('AM', 1), isNull);
+    String consult(String status, {String protocol = ''}) => '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope"><soap:Body><nfeResultMsg>'
+        '<retConsSitNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><cStat>$status</cStat><xMotivo>Motivo $status</xMotivo>$protocol</retConsSitNFe>'
+        '</nfeResultMsg></soap:Body></soap:Envelope>';
+    const prot = '<protNFe versao="4.00"><infProt><dhRecbto>2026-11-26T15:00:01-03:00</dhRecbto><nProt>135260000000777</nProt><cStat>100</cStat></infProt></protNFe>';
+    final authorized = parseConsult(consult('100', protocol: prot), signedNfe: signedNfe) as SefazAuthorized;
+    expect(authorized.protocol, '135260000000777');
+    expect(authorized.procXml, '<?xml version="1.0" encoding="UTF-8"?><nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">'
+        '<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe1"/></NFe>$prot</nfeProc>');
+    expect(parseConsult(consult('101'), signedNfe: signedNfe), isA<SefazCanceled>());
+    expect(parseConsult(consult('155'), signedNfe: signedNfe), isA<SefazCanceled>());
+    expect(parseConsult(consult('217'), signedNfe: signedNfe), isA<SefazNotFound>());
+    expect(parseConsult(consult('109'), signedNfe: signedNfe), isA<SefazUnavailable>());
+    expect(parseConsult(consult('100'), signedNfe: signedNfe), isA<SefazUnavailable>());
+    expect(parseConsult('não é xml', signedNfe: signedNfe), isA<SefazUnavailable>());
+  });
+
+  test('cliente da consulta: sem conexão vira sem resposta; UF sem serviço também', () async {
+    final offline = SefazClient(transport: FakeTransport(() => throw const SocketException('sem rede')));
+    expect(await offline.consult(accessKey: '3' * 44, signedNfe: signedNfe, uf: 'SP', environment: 2, credentials: credentials), isA<SefazUnavailable>());
+    final transport = FakeTransport(() => '');
+    expect(await SefazClient(transport: transport).consult(accessKey: '3' * 44, signedNfe: signedNfe, uf: 'AM', environment: 2, credentials: credentials), isA<SefazUnavailable>());
+    expect(transport.calls, isEmpty);
+  });
 }

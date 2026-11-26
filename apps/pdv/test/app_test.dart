@@ -290,6 +290,23 @@ class FakeApi implements TerminalApi {
   @override
   Future<Map<String, dynamic>> nfceCredentials({required String accessToken}) async => throw const ApiException('FA730');
 
+  /// Pedidos de cancelamento recebidos; a resposta (ou o erro) é a do teste.
+  final cancels = <Map<String, String>>[];
+  Map<String, dynamic> cancelAnswer = const {'cash': 0, 'cash_refund': 'none'};
+  Object? cancelFailure;
+
+  @override
+  Future<Map<String, dynamic>> cancelNfce({
+    required String accessToken,
+    required String documentId,
+    required String reason,
+    required String supervisorId,
+  }) async {
+    cancels.add({'document': documentId, 'reason': reason, 'supervisor': supervisorId});
+    if (cancelFailure != null) throw cancelFailure!;
+    return cancelAnswer;
+  }
+
   @override
   Future<PullPage> pull({
     required String accessToken,

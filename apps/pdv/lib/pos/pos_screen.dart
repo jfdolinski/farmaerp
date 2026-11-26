@@ -1029,6 +1029,14 @@ class _TotalsPanel extends StatelessWidget {
                 icon: const Icon(Icons.print),
                 label: const Text('Reimprimir'),
               ),
+              // Até 30 minutos depois da autorização, com internet e supervisor.
+              if (controller.cancelableNfce != null)
+                TextButton.icon(
+                  key: const Key('cancel-sale'),
+                  onPressed: controller.busy ? null : () => showCancelSaleDialog(context, controller),
+                  icon: const Icon(Icons.undo),
+                  label: const Text('Cancelar venda'),
+                ),
             ],
           ],
         ),
