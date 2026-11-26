@@ -80,6 +80,23 @@ describe('consulta pela chave', () => {
     expectCode(() => parseStatus(soap('<retConsSitNFe><cStat>100</cStat></retConsSitNFe>')), 'FA944');
   });
 
+  it('cancelada: o protocolo e a hora vêm do evento de cancelamento, não da autorização', () => {
+    const proc = (type: string, protocol: string, at: string) => '<procEventoNFe versao="1.00"><evento versao="1.00"><infEvento Id="x">'
+      + `<tpEvento>${type}</tpEvento><detEvento versao="1.00"><nProt>135260000000777</nProt></detEvento></infEvento></evento>`
+      + `<retEvento versao="1.00"><infEvento><tpEvento>${type}</tpEvento><cStat>135</cStat><nProt>${protocol}</nProt><dhRegEvento>${at}</dhRegEvento></infEvento></retEvento></procEventoNFe>`;
+    // Carta de correção antes, o cancelamento depois.
+    const canceled = parseStatus(soap(`<retConsSitNFe versao="4.00"><cStat>101</cStat><xMotivo>Cancelamento homologado</xMotivo>${prot('100')}`
+      + `${proc('110110', '135260000000111', '2026-11-26T10:05:00-03:00')}${proc('110111', '135260000000888', '2026-11-26T10:10:05-03:00')}</retConsSitNFe>`));
+    expect(canceled).toMatchObject({ kind: 'canceled', protocol: '135260000000777', cancelProtocol: '135260000000888', cancelRegisteredAt: '2026-11-26T10:10:05-03:00' });
+    expect(canceled.kind === 'canceled' && canceled.cancelEvent).toMatch(/^<procEventoNFe versao="1.00">.*<tpEvento>110111<\/tpEvento>.*<\/procEventoNFe>$/);
+    expect(canceled.kind === 'canceled' && canceled.cancelEvent).not.toContain('110110');
+    // Sem o evento (ou sem protocolo nele), nada para registrar.
+    expect(parseStatus(soap('<retConsSitNFe><cStat>101</cStat><xMotivo>Cancelamento homologado</xMotivo></retConsSitNFe>')))
+      .toMatchObject({ kind: 'canceled', cancelEvent: null, cancelProtocol: null, cancelRegisteredAt: null });
+    expect(parseStatus(soap(`<retConsSitNFe><cStat>101</cStat><xMotivo>Cancelamento homologado</xMotivo>${proc('110111', '', '2026-11-26T10:10:05-03:00')}</retConsSitNFe>`)))
+      .toMatchObject({ kind: 'canceled', cancelEvent: null, cancelProtocol: null });
+  });
+
   it('junta a nota assinada e o protocolo da consulta no nfeProc', () => {
     const proc = procFromStatus(SIGNED, prot('100'));
     expect(proc).toBe(`<?xml version="1.0" encoding="UTF-8"?><nfeProc xmlns="${NS}" versao="4.00"><NFe xmlns="${NS}"><infNFe Id="NFe${KEY}" versao="4.00"><ide/></infNFe></NFe>${prot('100')}</nfeProc>`);
@@ -123,16 +140,19 @@ describe('cancelamento', () => {
     expect(verify(envelope.replace('<tpAmb>2</tpAmb>', '<tpAmb>1</tpAmb>'), 'evento', pem.cert)).toBe(false);
   });
 
-  it('135, 155 e 573 registram, com o procEventoNFe; o resto recusa', () => {
+  it('135 e 155 registram, com o procEventoNFe; 573 e registro sem protocolo vão para consulta; o resto recusa', () => {
     const { event } = cancellationEnvelope(request, pem);
-    const answer = (status: string) => soap(
+    const answer = (status: string, protocol = '135260000000888') => soap(
       `<retEnvEvento versao="1.00"><cStat>128</cStat><xMotivo>Lote processado</xMotivo><retEvento versao="1.00"><infEvento>`
-      + `<cStat>${status}</cStat><xMotivo>Motivo ${status}</xMotivo><nProt>135260000000888</nProt><dhRegEvento>2026-11-26T10:10:05-03:00</dhRegEvento></infEvento></retEvento></retEnvEvento>`);
+      + `<cStat>${status}</cStat><xMotivo>Motivo ${status}</xMotivo><nProt>${protocol}</nProt><dhRegEvento>2026-11-26T10:10:05-03:00</dhRegEvento></infEvento></retEvento></retEnvEvento>`);
     const done = parseEvent(answer('135'), event);
     expect(done).toMatchObject({ kind: 'registered', protocol: '135260000000888', registeredAt: '2026-11-26T10:10:05-03:00' });
     expect(done.kind === 'registered' && done.procXml).toMatch(/<procEventoNFe xmlns="[^"]+" versao="1.00"><evento .*<\/evento><retEvento versao="1.00">.*<\/retEvento><\/procEventoNFe>$/);
     expect(parseEvent(answer('155'), event)).toMatchObject({ kind: 'registered' });
-    expect(parseEvent(answer('573'), event)).toMatchObject({ kind: 'registered' });
+    expect(parseEvent(answer('573', ''), event)).toEqual({ kind: 'duplicate', status: '573', reason: 'Motivo 573' });
+    expect(parseEvent(answer('573'), event)).toMatchObject({ kind: 'duplicate' });
+    expect(parseEvent(answer('135', ''), event)).toMatchObject({ kind: 'duplicate', status: '135' });
+    expect(parseEvent(answer('135', '1352600'), event)).toMatchObject({ kind: 'duplicate' });
     expect(parseEvent(answer('501'), event)).toMatchObject({ kind: 'refused', status: '501', reason: 'Motivo 501' });
     expect(parseEvent(soap('<retEnvEvento><cStat>108</cStat><xMotivo>Parado</xMotivo></retEnvEvento>'), event)).toMatchObject({ kind: 'unavailable' });
     expect(parseEvent(soap('<retEnvEvento><cStat>489</cStat><xMotivo>CNPJ invalido</xMotivo></retEnvEvento>'), event)).toMatchObject({ kind: 'refused', status: '489' });

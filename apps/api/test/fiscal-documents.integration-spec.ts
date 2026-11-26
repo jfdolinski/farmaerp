@@ -10,6 +10,7 @@ import { TLSSocket } from 'node:tls';
 import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { AppModule } from './../src/app.module.js';
+import { DatabaseService } from './../src/database.service.js';
 import { NfceActionsService } from './../src/fiscal/nfce-actions.service.js';
 import { AppLogger, createPinoLogger } from './../src/observability/app-logger.js';
 import { challengeMessage, pairingProofMessage } from './../src/terminals/terminal-crypto.js';
@@ -110,7 +111,10 @@ describe('notas fiscais pela central contra o banco real', () => {
           answer = soap(onAuthorization.get(key) ?? `<retEnviNFe><cStat>104</cStat><xMotivo>Lote processado</xMotivo>${prot(key, '100', '135260000000555')}</retEnviNFe>`);
         } else if (path.endsWith('/event')) {
           answer = soap(`<retEnvEvento versao="1.00"><cStat>128</cStat><xMotivo>Lote processado</xMotivo><retEvento versao="1.00"><infEvento>`
-            + `<cStat>${eventStatus}</cStat><xMotivo>${eventStatus === '135' ? 'Evento registrado' : 'Prazo de cancelamento superior ao previsto'}</xMotivo><nProt>135260000000888</nProt><dhRegEvento>2026-11-26T10:10:05-03:00</dhRegEvento></infEvento></retEvento></retEnvEvento>`);
+            + (eventStatus === '573'
+              // Evento repetido: a Sefaz não devolve protocolo.
+              ? '<cStat>573</cStat><xMotivo>Rejeicao: Duplicidade de evento</xMotivo></infEvento></retEvento></retEnvEvento>'
+              : `<cStat>${eventStatus}</cStat><xMotivo>${eventStatus === '135' ? 'Evento registrado' : 'Prazo de cancelamento superior ao previsto'}</xMotivo><nProt>135260000000888</nProt><dhRegEvento>2026-11-26T10:10:05-03:00</dhRegEvento></infEvento></retEvento></retEnvEvento>`));
         } else if (path.endsWith('/voiding')) {
           answer = soap(`<retInutNFe versao="4.00"><infInut><tpAmb>2</tpAmb><cStat>${voidingStatus}</cStat><xMotivo>${voidingStatus === '102' ? 'Inutilizacao homologada' : 'Numero ja inutilizado'}</xMotivo>`
             + '<nProt>135260000000999</nProt><dhRecbto>2026-11-26T11:00:00-03:00</dhRecbto></infInut></retInutNFe>');
@@ -273,5 +277,46 @@ describe('notas fiscais pela central contra o banco real', () => {
     expect(sent()).toHaveLength(1);
     // Sem o token do caixa, nada.
     await request(server()).post(path).set('X-Forwarded-For', ip).send({ reason: 'Cliente desistiu no caixa', supervisorId: adminId }).expect(401);
+  });
+
+  it('pedido repetido (573, sem protocolo): consulta a chave e registra com o evento que a Sefaz guardou', async () => {
+    const canceledAt = (key: string, protocol: string) => '<retConsSitNFe versao="4.00"><cStat>101</cStat><xMotivo>Cancelamento de NF-e homologado</xMotivo>'
+      + `${prot(key, '100', '135260000000123')}<procEventoNFe versao="1.00"><evento versao="1.00"><infEvento Id="ID110111${key}01"><chNFe>${key}</chNFe>`
+      + '<tpEvento>110111</tpEvento><detEvento versao="1.00"><nProt>135260000000123</nProt></detEvento></infEvento></evento>'
+      + `<retEvento versao="1.00"><infEvento><tpEvento>110111</tpEvento><cStat>135</cStat><xMotivo>Evento registrado</xMotivo><nProt>${protocol}</nProt>`
+      + '<dhRegEvento>2026-11-26T10:10:05-03:00</dhRegEvento></infEvento></retEvento></procEventoNFe></retConsSitNFe>';
+    const adminId = ((await request(server()).get('/auth/me').set('X-Forwarded-For', ip)
+      .set('Authorization', `Bearer ${sessions.get(ADMIN_EMAIL)}`).expect(200)).body as Json).userId as string;
+    eventStatus = '573';
+    try {
+      // Pela retaguarda.
+      const fromAdmin = await saleWithNote({});
+      onStatus.set(fromAdmin.accessKey, canceledAt(fromAdmin.accessKey, '135260000000901'));
+      expect((await admin('post', `/fiscal-documents/${fromAdmin.id}/cancel`).send({ reason: 'Cliente desistiu da compra' }).expect(200)).body)
+        .toMatchObject({ cash_refund: 'same_session', sefaz: '573 Rejeicao: Duplicidade de evento' });
+      const file = (await admin('get', `/fiscal-documents/${fromAdmin.id}/xml?kind=cancel`).expect(200)).text;
+      expect(file).toContain('<nProt>135260000000901</nProt>');
+      // Grava o protocolo do evento de cancelamento, não o da autorização.
+      const eventOf = (documentId: string) => app.get(DatabaseService).withContext(async (client) => (await client.query<{ protocol: string; registered_at: Date }>(
+        "SELECT protocol, registered_at FROM public.fiscal_event WHERE fiscal_document_id = $1 AND kind = 'cancellation'", [documentId])).rows[0], { userId: adminId });
+      expect(await eventOf(fromAdmin.id)).toMatchObject({ protocol: '135260000000901', registered_at: new Date('2026-11-26T13:10:05Z') });
+      // Pelo caixa.
+      const fromTerminal = await saleWithNote({});
+      onStatus.set(fromTerminal.accessKey, canceledAt(fromTerminal.accessKey, '135260000000902'));
+      expect((await request(server()).post(`/terminals/fiscal-documents/${fromTerminal.id}/cancel`).set('X-Forwarded-For', ip)
+        .set('Authorization', `Bearer ${token}`).send({ reason: 'Cliente desistiu no caixa', supervisorId: adminId }).expect(200)).body)
+        .toMatchObject({ cash_refund: 'same_session' });
+      expect((await admin('get', `/fiscal-documents/${fromTerminal.id}/xml?kind=cancel`).expect(200)).text).toContain('<nProt>135260000000902</nProt>');
+      expect((await eventOf(fromTerminal.id)).protocol).toBe('135260000000902');
+      // 573 e a consulta ainda mostra autorizada: não cancela nada e diz o motivo.
+      const still = await saleWithNote({});
+      onStatus.set(still.accessKey, `<retConsSitNFe versao="4.00"><cStat>100</cStat><xMotivo>Autorizado</xMotivo>${prot(still.accessKey, '100', '135260000000123')}</retConsSitNFe>`);
+      const refused = (await admin('post', `/fiscal-documents/${still.id}/cancel`).send({ reason: 'Cliente desistiu da compra' }).expect(422)).body as Json;
+      expect(refused).toMatchObject({ code: 'FA754' });
+      expect(String(refused.detail)).toMatch(/^Sefaz 573: /);
+      expect(((await admin('get', '/fiscal-documents?status=authorized').expect(200)).body as Json[]).some((row) => row.id === still.id)).toBe(true);
+    } finally {
+      eventStatus = '135';
+    }
   });
 });
