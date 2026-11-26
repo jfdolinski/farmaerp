@@ -5,7 +5,7 @@ import 'package:cryptography/cryptography.dart';
 /// Chaves públicas que assinam as versões (cópia de scripts/release/update-keys.json, conferida
 /// por teste). Pode ser trocada na compilação: `--dart-define=UPDATE_PUBLIC_KEYS=chave1,chave2`.
 const updatePublicKeysDefine = String.fromEnvironment('UPDATE_PUBLIC_KEYS');
-const builtInUpdatePublicKeys = <String>[];
+const builtInUpdatePublicKeys = <String>['Ysd70sEK+5+9mtWwd4Iv7Q8o7NEl+sR6sds2ijlsg1U='];
 
 List<String> configuredUpdateKeys() => updatePublicKeysDefine.isEmpty
     ? builtInUpdatePublicKeys
