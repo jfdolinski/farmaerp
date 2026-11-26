@@ -161,6 +161,21 @@ describe('importação das notas contra o banco real', () => {
     expect(xml.headers['content-disposition']).toContain(`NFCe-${key}.xml`);
     expect(xml.text).toContain('<nfeProc');
     expect(codeOf(await call('get', '/admin/imported-sales?from=10-06-2026').expect(422))).toBe('FA005');
+
+    // A compra em NF-e aparece nas notas importadas, com o item ligado ao código do fornecedor.
+    const notes = (await call('get', '/admin/imported-notes?from=2026-05-02&to=2026-05-02&kind=purchase').expect(200)).body as Json[];
+    let purchase: Json | null = null;
+    for (const row of notes) {
+      const detail = (await call('get', `/admin/imported-notes/${row.id as string}`).expect(200)).body as Json;
+      if (detail.access_key === purchaseKey) {
+        purchase = detail;
+        break;
+      }
+    }
+    expect(purchase).toMatchObject({ kind: 'purchase', supplier_name: 'DISTRIBUIDORA EXEMPLO SA', items: [{ supplier_code: 'FORN-77', note_quantity: 3 }] });
+    const nfeFile = await call('get', `/admin/imported-notes/${purchase?.id as string}/xml`).expect(200);
+    expect(nfeFile.headers['content-disposition']).toContain(`NFe-${purchaseKey}.xml`);
+    expect(codeOf(await call('get', '/admin/imported-notes?kind=venda').expect(422))).toBe('FA005');
     expect(codeOf(await call('get', '/admin/imported-sales/01900000-0000-7000-8000-000000000000').expect(404))).toBe('FA006');
 
     // O mesmo arquivo de novo: tudo repetido.

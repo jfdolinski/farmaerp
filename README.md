@@ -651,6 +651,7 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - **Emitida:** pelo CFOP (`app.import_cfop_kind`): venda vira venda importada (modelo 55, cliente pelo destinatário); devolução ao fornecedor e outras saídas baixam; transferência entre filiais sai de uma e entra na outra (filial nova da mesma raiz é cadastrada); entrada emitida pelo cliente (tpNF 0) soma.
   - **Custo:** o da compra importada mais recente por produto e filial (`product_cost.imported_stock_item_id`), só nos itens de CFOP de venda (bonificação entra sem custo). Compra lançada no próprio sistema manda. Cancelamento estorna o custo se ele ainda for o vigente.
   - Lotes ficam no item (sem saldo por lote) e nada entra no SNGPC. Nota sem filial do cliente, entrada emitida por terceiro, homologação ou sem autorização: ignorada, e o relatório conta as ignoradas por motivo.
+- **Notas importadas (I3b, migration 0065):** `GET /admin/imported-notes` (filial, que inclui a que recebeu a transferência, período e natureza), `/:id` (itens com o código do fornecedor, quantidade da nota e do estoque, custo e lotes) e `/:id/xml`, para quem tem `stock.view` ou `purchases.view` numa das filiais da nota. Tela `/notas-importadas` e o detalhe.
 
 **Profissionais da saúde (prescritores)**
 

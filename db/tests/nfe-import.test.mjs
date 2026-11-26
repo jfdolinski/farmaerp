@@ -351,3 +351,47 @@ describe('recebidas de terceiros e notas de fora', () => {
     expect(kinds).toEqual(['sale', 'sale', 'sale', 'sale', 'transfer', 'transfer', 'return', 'return', 'other', 'other', 'other', 'other']);
   });
 });
+
+describe('consulta das notas importadas', () => {
+  let branch2User;
+
+  beforeAll(async () => {
+    // Usuário com stock.view só na filial 2.
+    const role = (await ownerPool.query("INSERT INTO role (economic_group_id, name) VALUES ($1, 'Estoque filial 2') RETURNING id", [a.group.id])).rows[0].id;
+    await ownerPool.query("INSERT INTO role_permission (role_id, permission_id) SELECT $1, id FROM permission WHERE code = 'stock.view'", [role]);
+    branch2User = (await ownerPool.query("INSERT INTO user_account (economic_group_id, name) VALUES ($1, 'Estoquista 2') RETURNING *", [a.group.id])).rows[0];
+    await ownerPool.query('INSERT INTO user_branch (user_id, branch_id) VALUES ($1, $2)', [branch2User.id, a.branch2.id]);
+    await ownerPool.query('INSERT INTO user_role (user_id, role_id, branch_id) VALUES ($1, $2, $3)', [branch2User.id, role, a.branch2.id]);
+  });
+
+  it('lista por natureza e filial (a transferência aparece nas duas); cada um vê as filiais dele', async () => {
+    const purchases = await asUser(a.admin, "SELECT * FROM app.list_imported_notes(NULL, NULL, NULL, 'purchase')");
+    expect(purchases.length).toBeGreaterThan(3);
+    expect(new Set(purchases.map((r) => r.kind))).toEqual(new Set(['purchase']));
+    expect(purchases[0]).toMatchObject({ party_document: supplierCnpj, item_count: expect.any(Number) });
+    const atBranch2 = await asUser(a.admin, 'SELECT * FROM app.list_imported_notes($1)', [a.branch2.id]);
+    const transfer = atBranch2.find((r) => r.kind === 'transfer');
+    expect(transfer).toMatchObject({ branch_id: a.branch1.id, counterpart_branch_name: a.branch2.name });
+    const mine = await asUser(branch2User, 'SELECT * FROM app.list_imported_notes()');
+    expect(mine.length).toBeGreaterThan(0);
+    expect(mine.every((r) => r.branch_id === a.branch2.id || r.kind === 'transfer')).toBe(true);
+    expect(mine.some((r) => r.kind === 'transfer' && r.counterpart_branch_name === a.branch2.name)).toBe(true);
+    expect(await asUser(a.oneBranchUser, 'SELECT * FROM app.list_imported_notes()')).toEqual([]);
+    expect(await asUser(b.admin, 'SELECT * FROM app.list_imported_notes()')).toEqual([]);
+    const window = await asUser(a.admin, "SELECT * FROM app.list_imported_notes(NULL, '2026-05-10', '2026-05-10', 'purchase')");
+    expect(window.length).toBeGreaterThan(0);
+    expect(window.every((r) => r.emitted_at.toISOString().startsWith('2026-05-10'))).toBe(true);
+  });
+
+  it('detalhe com fornecedor, itens (código do fornecedor, quantidades, custo, lotes) e XML só para quem vê', async () => {
+    const [row] = await asUser(a.admin, "SELECT id FROM app.list_imported_notes($1, '2026-05-10', '2026-05-10', 'purchase') WHERE branch_id = $1 ORDER BY number LIMIT 1", [a.branch1.id]);
+    const detail = (await asUser(a.admin, 'SELECT app.imported_note_detail($1) AS d', [row.id]))[0].d;
+    expect(detail).toMatchObject({ kind: 'purchase', supplier_name: 'DISTRIBUIDORA TESTE SA', file_name: 'nfe.zip', counterpart_branch_name: null });
+    expect(detail.items[0]).toMatchObject({ supplier_code: expect.any(String), note_quantity: expect.any(Number), quantity: expect.any(Number) });
+    expect(detail).not.toHaveProperty('xml');
+    expect((await asUser(a.admin, 'SELECT app.imported_note_xml($1) AS x', [row.id]))[0].x).toMatchObject({ xml: XML });
+    expect((await asUser(b.admin, 'SELECT app.imported_note_detail($1) AS d', [row.id]))[0].d).toBeNull();
+    // Compra na filial 1: quem só vê a filial 2 não abre.
+    expect((await asUser(branch2User, 'SELECT app.imported_note_xml($1) AS x', [row.id]))[0].x).toBeNull();
+  });
+});
