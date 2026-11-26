@@ -142,8 +142,11 @@ Future<void> main() async {
     api: api,
     store: store,
     sync: SyncService(api: api, database: database, logger: logger),
-    afterSync: (accessToken, terminalId, sign) =>
-        nfceCredentials.refresh(accessToken: accessToken, terminalId: terminalId, sign: sign),
+    afterSync: (accessToken, terminalId, sign) async {
+      await nfceCredentials.refresh(accessToken: accessToken, terminalId: terminalId, sign: sign);
+      // Ao abrir, a primeira verificação de versão roda aqui, com o terminal já pronto.
+      unawaited(updates.tickIfDue());
+    },
     platform: Platform.operatingSystem,
     deviceName: Platform.localHostname,
     appVersion: _appVersion,

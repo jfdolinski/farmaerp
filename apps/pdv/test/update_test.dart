@@ -217,6 +217,34 @@ void main() {
     expect(again.hasReady, isFalse);
   });
 
+  test('depois da sincronização, verifica se ainda não deu certo ou se passou o intervalo', () async {
+    var ready = false;
+    final updates = UpdateService(
+      api: api,
+      // Ao abrir, o terminal ainda não carregou a identidade: o token falha.
+      accessToken: () async => ready ? 'token' : throw StateError('terminal ainda não pronto'),
+      directory: Directory('${root.path}/updates'),
+      databaseFile: File('${root.path}/data/farmaerp.db'),
+      currentVersion: '1.0.0',
+      platform: 'windows',
+      publicKeys: [publicKey],
+      installerCache: File('${root.path}/app/installer/FarmaERP-PDV-Setup.exe'),
+      launch: (installer, arguments) async => launched.add([installer, arguments]),
+    );
+    await updates.load();
+    await updates.tick();
+    expect(api.checks, 0);
+    // Terminal pronto: a sincronização chama e a verificação acontece na hora.
+    ready = true;
+    await updates.tickIfDue();
+    expect(api.checks, 1);
+    // Dentro do intervalo, não repete; passado o intervalo, verifica de novo.
+    await updates.tickIfDue();
+    expect(api.checks, 1);
+    await updates.tickIfDue(now: DateTime.now().add(const Duration(minutes: 31)));
+    expect(api.checks, 2);
+  });
+
   test('sem instalador anterior não há como voltar; fora do Windows nada acontece', () async {
     File('${root.path}/app/installer/FarmaERP-PDV-Setup.exe').deleteSync();
     final content = utf8.encode('instalador 1.1.0');
