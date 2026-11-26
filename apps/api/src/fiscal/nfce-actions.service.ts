@@ -1,6 +1,7 @@
 import { Inject, Injectable, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { v7 as uuidv7 } from 'uuid';
 import { DatabaseService, DbClient } from '../database.service.js';
+import { getError } from '@farmaerp/error-catalog';
 import { AppError } from '../observability/app-error.js';
 import { AppLogger } from '../observability/app-logger.js';
 import { runWithContext } from '../observability/request-context.js';
@@ -54,6 +55,14 @@ export type ResendOutcome =
   | { kind: 'canceled'; reason: string; protocol: string | null; xml: string | null };
 
 const codeOf = (error: unknown) => (error instanceof AppError ? error.code : 'FA944');
+
+/** Falhas que não se resolvem sozinhas (certificado, UF, ambiente): aviso, fora do lote. */
+const BLOCKING = new Set(['FA943', 'FA753', 'FA754']);
+export function failureResult(error: unknown): { kind: 'blocked' | 'unavailable'; reason: string } {
+  const code = codeOf(error);
+  if (!BLOCKING.has(code)) return { kind: 'unavailable', reason: `Falha ${code}.` };
+  return { kind: 'blocked', reason: `${getError(code).message} (${code})` };
+}
 
 /**
  * NFC-e na Sefaz da UF pela central: consulta, reenvio (automático e pelo botão), cancelamento e
@@ -136,7 +145,7 @@ export class NfceActionsService implements OnApplicationBootstrap, OnModuleDestr
     const result = outcome.kind === 'canceled'
       ? { kind: 'unavailable', reason: 'A Sefaz mostra a nota cancelada: consulte pela tela de notas fiscais.' }
       : outcome;
-    await client.query('SELECT app.fiscal_resend_result($1, $2::jsonb)', [id, JSON.stringify(result)]);
+    await client.query('SELECT app.fiscal_resend_result_checked($1, $2::jsonb)', [id, JSON.stringify(result)]);
   }
 
   /** Rodada do reenvio automático: lote de até 30 notas por grupo. Nunca lança. */
@@ -160,10 +169,10 @@ export class NfceActionsService implements OnApplicationBootstrap, OnModuleDestr
             await this.database.withContext((client) => this.record(client, id, outcome), { worker: 'fiscal' });
             done += 1;
           } catch (error) {
-            // A nota fica marcada; o motivo vai para o log e ela volta como "sem Sefaz" na próxima hora.
+            // Falha que não se resolve sozinha vira aviso e sai do lote; o resto tenta na próxima hora.
             this.logger.pino.warn({ context: 'NfceActionsService', documentId: id, code: codeOf(error), err: error }, 'reenvio da NFC-e não concluído');
             await this.database
-              .withContext((client) => client.query('SELECT app.fiscal_resend_result($1, $2::jsonb)', [id, JSON.stringify({ kind: 'unavailable', reason: `Falha ${codeOf(error)}.` })]), { worker: 'fiscal' })
+              .withContext((client) => client.query('SELECT app.fiscal_resend_result_checked($1, $2::jsonb)', [id, JSON.stringify(failureResult(error))]), { worker: 'fiscal' })
               .catch(() => undefined);
           }
         }
@@ -193,7 +202,7 @@ export class NfceActionsService implements OnApplicationBootstrap, OnModuleDestr
         return { status: 'authorized' };
       }
       if (status.kind === 'canceled' && status.cancelEvent && status.protocol) {
-        await client.query('SELECT app.fiscal_cancel_register($1, $2::jsonb)', [id, JSON.stringify({
+        await client.query('SELECT app.fiscal_consult_canceled($1, $2::jsonb)', [id, JSON.stringify({
           reason: 'Cancelamento registrado na Sefaz (consulta pela chave).', protocol: status.protocol, status_code: status.status,
           xml: status.cancelEvent, registered_at: new Date().toISOString(),
         })]);
@@ -225,7 +234,9 @@ export class NfceActionsService implements OnApplicationBootstrap, OnModuleDestr
     }, pemFromPfx(certificate.pfx, certificate.passphrase));
     const result = parseEvent(await this.call(context, 'event', envelope, certificate), event);
     if (result.kind === 'unavailable') throw new AppError('FA944', { cause: new Error(`${result.status} ${result.reason}`) });
-    if (result.kind === 'refused') throw new AppError('FA754', { cause: new Error(`${result.status} ${result.reason}`) });
+    if (result.kind === 'refused') {
+      throw new AppError('FA754', { cause: new Error(`${result.status} ${result.reason}`), detail: `Sefaz ${result.status}: ${result.reason}`.slice(0, 300) });
+    }
     return this.database.withContext(async (client) => {
       const { rows } = await client.query<{ r: Record<string, unknown> }>('SELECT app.fiscal_cancel_register($1, $2::jsonb) AS r', [id, JSON.stringify({
         reason, protocol: result.protocol, status_code: result.status, xml: result.procXml, registered_at: result.registeredAt || new Date().toISOString(),
@@ -248,7 +259,9 @@ export class NfceActionsService implements OnApplicationBootstrap, OnModuleDestr
     }, pemFromPfx(certificate.pfx, certificate.passphrase));
     const result = parseVoiding(await this.call(context, 'voiding', envelope, certificate), message);
     if (result.kind === 'unavailable') throw new AppError('FA944', { cause: new Error(`${result.status} ${result.reason}`) });
-    if (result.kind === 'refused') throw new AppError('FA754', { cause: new Error(`${result.status} ${result.reason}`) });
+    if (result.kind === 'refused') {
+      throw new AppError('FA754', { cause: new Error(`${result.status} ${result.reason}`), detail: `Sefaz ${result.status}: ${result.reason}`.slice(0, 300) });
+    }
     return this.database.withContext(async (client) => {
       const { rows } = await client.query<{ id: string }>('SELECT app.fiscal_void_register($1, $2, $3, $4, $5, $6::jsonb) AS id', [
         branchId, series, first, last, reason,

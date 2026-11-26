@@ -14,6 +14,10 @@ export const PAYMENT_LABELS: Record<string, string> = {
 
 export const FISCAL_LABELS: Record<string, string> = {
   pending: "Nota pendente de emissão",
+  authorized: "NFC-e autorizada",
+  rejected: "NFC-e rejeitada",
+  contingency: "NFC-e em contingência",
+  canceled: "NFC-e cancelada",
 };
 
 export const ALERT_LABELS: Record<string, string> = {

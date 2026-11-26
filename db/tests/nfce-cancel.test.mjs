@@ -244,11 +244,11 @@ describe('reenvio pela central', () => {
 
   it('autorizada fica autorizada; recusada vira aviso e não volta; sem Sefaz tenta na próxima hora', async () => {
     const [ok, refused, down] = stuck;
-    await asWorker("SELECT app.fiscal_resend_result($1, $2::jsonb)", [ok, JSON.stringify({
+    await asWorker("SELECT app.fiscal_resend_result_checked($1, $2::jsonb)", [ok, JSON.stringify({
       kind: 'authorized', protocol: '135260000000555', authorized_at: new Date().toISOString(), xml: XML, status_code: '100', reason: 'Autorizado',
     })]);
-    await asWorker('SELECT app.fiscal_resend_result($1, $2::jsonb)', [refused, JSON.stringify({ kind: 'rejected', status_code: '778', reason: 'NCM inexistente' })]);
-    await asWorker('SELECT app.fiscal_resend_result($1, $2::jsonb)', [down, JSON.stringify({ kind: 'unavailable', reason: 'Sem conexão' })]);
+    await asWorker('SELECT app.fiscal_resend_result_checked($1, $2::jsonb)', [refused, JSON.stringify({ kind: 'rejected', status_code: '778', reason: 'NCM inexistente' })]);
+    await asWorker('SELECT app.fiscal_resend_result_checked($1, $2::jsonb)', [down, JSON.stringify({ kind: 'unavailable', reason: 'Sem conexão' })]);
     const rows = Object.fromEntries((await ownerPool.query('SELECT id, status, resend_status, resend_message FROM fiscal_document WHERE id = ANY ($1)', [[ok, refused, down]])).rows.map((r) => [r.id, r]));
     expect(rows[ok]).toMatchObject({ status: 'authorized', resend_status: 'authorized' });
     expect(rows[refused]).toMatchObject({ status: 'rejected', resend_status: 'refused', resend_message: '778 NCM inexistente' });
@@ -270,7 +270,7 @@ describe('reenvio pela central', () => {
     await expect(asUser(operator, "SELECT id FROM app.fiscal_action_context($1, 'resend')", [refused])).rejects.toSatisfy(hasCode('FA006'));
     await expect(asUser(a.admin, "SELECT id FROM app.fiscal_action_context($1, 'resend')", [ok])).rejects.toSatisfy(hasCode('FA753'));
     // Resultado repetido de nota já autorizada não muda nada.
-    expect((await asWorker('SELECT app.fiscal_resend_result($1, $2::jsonb) AS r', [ok, JSON.stringify({ kind: 'rejected', status_code: '999', reason: 'x' })]))[0].r).toBe('authorized');
+    expect((await asWorker('SELECT app.fiscal_resend_result_checked($1, $2::jsonb) AS r', [ok, JSON.stringify({ kind: 'rejected', status_code: '999', reason: 'x' })]))[0].r).toBe('authorized');
   });
 });
 
@@ -318,5 +318,67 @@ describe('inutilização', () => {
     const voids = await asUser(a.admin, 'SELECT * FROM app.list_fiscal_voids($1)', [a.branch2.id]);
     expect(voids[0]).toMatchObject({ series: series2.series, protocol: '135260000000999', requested_by_name: a.admin.name });
     expect(await asUser(b.admin, 'SELECT * FROM app.list_fiscal_voids($1)', [a.branch2.id])).toEqual([]);
+  });
+});
+
+describe('correções do reenvio e conferência no banco (0068)', () => {
+  const stale = (hoursAgo) => ({
+    status: 'contingency', emission_type: 9, protocol: null, authorized_at: null, status_code: null, reason: null,
+    emitted_at: new Date(Date.now() - hoursAgo * 3_600_000).toISOString(),
+  });
+  // Libera o grupo para um novo lote (como se a hora tivesse passado).
+  const nextHour = () => ownerPool.query(
+    "UPDATE fiscal_document SET resend_attempted_at = resend_attempted_at - interval '2 hours' WHERE economic_group_id = $1 AND resend_attempted_at IS NOT NULL", [a.group.id],
+  );
+
+  it('nunca tentadas vêm antes; falha que não se resolve vira aviso e sai do lote; seis rodadas sem Sefaz também', async () => {
+    await nextHour();
+    // Tudo o que sobrou dos outros testes sai do caminho.
+    await ownerPool.query("UPDATE fiscal_document SET resend_status = 'refused', alert_dismissed_at = now() WHERE economic_group_id = $1 AND status IN ('pending', 'contingency')", [a.group.id]);
+    const old = await document((await newSale({ quantity: 1 })).id, stale(30));
+    await ownerPool.query("UPDATE fiscal_document SET resend_attempted_at = now() - interval '3 hours', resend_status = 'unavailable', resend_attempts = 1 WHERE id = $1", [old.id]);
+    const fresh = await document((await newSale({ quantity: 1 })).id, stale(13));
+    const [first] = (await asWorker('SELECT * FROM app.claim_fiscal_resend(1) AS id')).map((r) => r.id);
+    expect(first).toBe(fresh.id);
+    expect((await ownerPool.query('SELECT resend_attempts FROM fiscal_document WHERE id = $1', [fresh.id])).rows[0].resend_attempts).toBe(1);
+
+    // Sem certificado (falha que não se resolve sozinha): aviso, a nota continua em contingência e não volta.
+    await asWorker('SELECT app.fiscal_resend_result_checked($1, $2::jsonb)', [fresh.id, JSON.stringify({ kind: 'blocked', reason: 'A filial não tem certificado digital válido. (FA943)' })]);
+    expect((await ownerPool.query('SELECT status, resend_status, resend_message FROM fiscal_document WHERE id = $1', [fresh.id])).rows[0])
+      .toEqual({ status: 'contingency', resend_status: 'refused', resend_message: 'A filial não tem certificado digital válido. (FA943)' });
+    const alerts = (await asUser(a.admin, 'SELECT id FROM app.list_fiscal_documents(NULL, NULL, NULL, NULL, true)')).map((r) => r.id);
+    expect(alerts).toContain(fresh.id);
+    const [row] = await asUser(a.admin, 'SELECT alert FROM app.list_fiscal_documents() WHERE id = $1', [fresh.id]);
+    expect(row.alert).toBe(true);
+    await nextHour();
+    expect((await asWorker('SELECT * FROM app.claim_fiscal_resend(30) AS id')).map((r) => r.id)).toEqual([old.id]);
+
+    // Na sexta rodada sem Sefaz, vira aviso.
+    await ownerPool.query('UPDATE fiscal_document SET resend_attempts = 5 WHERE id = $1', [old.id]);
+    await asWorker('SELECT app.fiscal_resend_result_checked($1, $2::jsonb)', [old.id, JSON.stringify({ kind: 'unavailable', reason: 'Sem resposta da Sefaz.' })]);
+    expect((await ownerPool.query('SELECT resend_status FROM fiscal_document WHERE id = $1', [old.id])).rows[0].resend_status).toBe('unavailable');
+    await ownerPool.query('UPDATE fiscal_document SET resend_attempts = 6 WHERE id = $1', [old.id]);
+    await asWorker('SELECT app.fiscal_resend_result_checked($1, $2::jsonb)', [old.id, JSON.stringify({ kind: 'unavailable', reason: 'Sem resposta da Sefaz.' })]);
+    expect((await ownerPool.query('SELECT status, resend_status FROM fiscal_document WHERE id = $1', [old.id])).rows[0]).toEqual({ status: 'contingency', resend_status: 'refused' });
+    await nextHour();
+    expect(await asWorker('SELECT * FROM app.claim_fiscal_resend(30) AS id')).toEqual([]);
+  });
+
+  it('o resultado e o cancelamento conferem quem pede', async () => {
+    const pending = await document((await newSale({ quantity: 1 })).id, stale(1));
+    const ok = JSON.stringify({ kind: 'authorized', protocol: '135260000000321', authorized_at: new Date().toISOString(), xml: XML, status_code: '100', reason: 'ok' });
+    // Outro grupo e quem não pode reenviar não gravam resultado.
+    await expect(asUser(b.admin, 'SELECT app.fiscal_resend_result_checked($1, $2::jsonb)', [pending.id, ok])).rejects.toSatisfy(hasCode('FA006'));
+    await expect(asUser(operator, 'SELECT app.fiscal_resend_result_checked($1, $2::jsonb)', [pending.id, ok])).rejects.toSatisfy(hasCode('FA006'));
+    // O núcleo não fica exposto.
+    await expect(asUser(a.admin, 'SELECT app.fiscal_apply_result($1, $2::jsonb)', [pending.id, ok])).rejects.toMatchObject({ code: '42501' });
+    await expect(asUser(a.admin, "SELECT app.fiscal_cancel_apply($1, $2::jsonb, 'sales.view')", [pending.id, cancelEvent()])).rejects.toMatchObject({ code: '42501' });
+    expect((await asUser(a.admin, 'SELECT app.fiscal_resend_result_checked($1, $2::jsonb) AS r', [pending.id, ok]))[0].r).toBe('authorized');
+    // Quem só consulta grava a consulta, mas não registra cancelamento pela entrada da tela.
+    const sold = await newSale({ quantity: 1 });
+    const doc = await document(sold.id);
+    await expect(asUser(operator, 'SELECT app.fiscal_cancel_register($1, $2::jsonb)', [doc.id, cancelEvent()])).rejects.toSatisfy(hasCode('FA006'));
+    expect((await asUser(operator, 'SELECT app.fiscal_consult_canceled($1, $2::jsonb) AS r', [doc.id, cancelEvent()]))[0].r).toMatchObject({ cash_refund: 'same_session' });
+    expect((await ownerPool.query('SELECT status FROM fiscal_document WHERE id = $1', [doc.id])).rows[0].status).toBe('canceled');
   });
 });
