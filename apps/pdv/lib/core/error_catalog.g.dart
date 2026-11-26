@@ -694,6 +694,30 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'A Sefaz não respondeu: entregue o DANFE de contingência. A nota é transmitida sozinha quando a conexão voltar.',
     retryable: true,
   ),
+  'FA740': ErrorCatalogEntry(
+    code: 'FA740',
+    message: 'O arquivo de importação é inválido.',
+    action: 'Envie um arquivo .zip de até 1 GB.',
+    retryable: false,
+  ),
+  'FA741': ErrorCatalogEntry(
+    code: 'FA741',
+    message: 'O envio do arquivo saiu de ordem.',
+    action: 'Envie o arquivo de novo.',
+    retryable: true,
+  ),
+  'FA742': ErrorCatalogEntry(
+    code: 'FA742',
+    message: 'O CNPJ do emitente é de uma filial de outro cliente.',
+    action: 'Confira se o arquivo é desta empresa. Se for, fale com o suporte.',
+    retryable: false,
+  ),
+  'FA743': ErrorCatalogEntry(
+    code: 'FA743',
+    message: 'A nota não pôde ser importada.',
+    action: 'Confira o motivo no relatório da importação.',
+    retryable: false,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',

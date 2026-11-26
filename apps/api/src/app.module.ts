@@ -45,6 +45,8 @@ import { SalesController } from './sales/sales.controller.js';
 import { OfflineRulesController, TerminalStockController } from './terminals/offline-rules.controller.js';
 import { TerminalNfceController } from './terminals/terminal-nfce.controller.js';
 import { HealthProfessionalsController } from './sales/health-professionals.controller.js';
+import { ImportsController } from './imports/imports.controller.js';
+import { ImportsService } from './imports/imports.service.js';
 import { TerminalCashbackController } from './terminals/terminal-cashback.controller.js';
 import { TerminalCustomersController } from './terminals/terminal-customers.controller.js';
 import { TerminalSyncController } from './terminals/terminal-sync.controller.js';
@@ -97,6 +99,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     TerminalStockController,
     TerminalNfceController,
     HealthProfessionalsController,
+    ImportsController,
     SyncConflictsController,
     TerminalAdminController,
   ],
@@ -104,6 +107,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     DatabaseService,
     DfeService,
     SngpcService,
+    ImportsService,
     SessionGuard,
     TerminalGuard,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
