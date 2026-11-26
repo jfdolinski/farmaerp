@@ -16,8 +16,8 @@ class NfceOutcome {
   /// Nota montada e assinada: autorizada, recusada ou pendente (sem resposta da Sefaz).
   final LocalNfce? nfce;
 
-  /// Aviso quando a nota não saiu autorizada: FA736 recusada, FA737 sem resposta, FA738 sem
-  /// certificado, FA723 a FA726 dados fiscais. A venda é concluída mesmo assim (nota pendente).
+  /// Aviso quando a nota não saiu autorizada: FA736 recusada, FA739 em contingência, FA737 sem
+  /// resposta e sem contingência, FA738 sem certificado, FA723 a FA726 dados fiscais. A venda é concluída mesmo assim (nota pendente).
   final String? noticeCode;
 
   /// Motivo técnico, só para o log.
@@ -38,8 +38,12 @@ NfcePayment nfcePayment(Payment payment) => switch (payment.method) {
   PaymentMethod.cashback => NfcePayment(type: '99', cents: payment.amountCents, description: 'Cashback'),
 };
 
-/// Emite a NFC-e da venda no caixa, direto na Sefaz da UF (sem contingência ainda: sem resposta,
-/// a nota fica pendente). Nunca impede a venda: o que der errado vira aviso.
+/// Motivo da contingência que vai na nota (xJust, 15 a 256 caracteres).
+const contingencyReason = 'Sem comunicacao com a Sefaz no momento da venda';
+
+/// Emite a NFC-e da venda no caixa, direto na Sefaz da UF. Sem resposta da Sefaz, a nota sai em
+/// contingência offline (tpEmis 9), com o mesmo número, e é transmitida depois. Nunca impede a
+/// venda: o que der errado vira aviso.
 class NfceEmitter {
   NfceEmitter({
     required this.database,
@@ -68,32 +72,38 @@ class NfceEmitter {
     final terminal = terminalId();
     final opened = terminal == null ? null : await _credentials(terminal);
     if (opened == null) return const NfceOutcome(noticeCode: 'FA738');
-    final NfceDocument document;
-    final ({int series, int number}) numbering;
-    try {
-      final fiscal = database.fiscal;
-      if (fiscal == null) throw const FiscalException('FA724', 'Sem dados fiscais da filial.');
-      final issuer = NfceIssuer.fromFiscal(fiscal);
-      final next = database.nextNfceNumber();
-      if (next == null) throw const FiscalException('FA724', 'Caixa sem série do modelo 65.');
-      numbering = next;
-      document = buildNfce(
+    NfceDocument build({required ({int series, int number}) numbering, int emissionType = 1}) {
+      final issuer = NfceIssuer.fromFiscal(database.fiscal!);
+      return buildNfce(
         NfceInput(
           issuer: issuer,
           items: [for (final line in cart.lines) _item(line, now)],
           payments: [for (final payment in cart.payments) nfcePayment(payment)],
           changeCents: cart.changeCents,
-          series: next.series,
-          number: next.number,
+          series: numbering.series,
+          number: numbering.number,
           emittedAt: now,
           environment: credentials.environment,
-          numericCode: randomNumericCode(next.number),
+          emissionType: emissionType,
+          contingencyAt: emissionType == 9 ? now : null,
+          contingencyReason: emissionType == 9 ? contingencyReason : null,
+          numericCode: randomNumericCode(numbering.number),
           appVersion: appVersion,
           customerCpf: _customerCpf(cart),
           csc: Csc(id: opened.cscId, token: opened.csc),
         ),
         SigningCredential.fromPem(privateKeyPem: opened.privateKeyPem, certificatePem: opened.certificatePem),
       );
+    }
+
+    late NfceDocument document;
+    final ({int series, int number}) numbering;
+    try {
+      if (database.fiscal == null) throw const FiscalException('FA724', 'Sem dados fiscais da filial.');
+      final next = database.nextNfceNumber();
+      if (next == null) throw const FiscalException('FA724', 'Caixa sem série do modelo 65.');
+      numbering = next;
+      document = build(numbering: next);
     } on FiscalException catch (error) {
       logger?.warn('NFC-e não montada', fields: {'error_code': error.code, 'err': error.detail});
       return NfceOutcome(noticeCode: error.code, detail: error.detail);
@@ -105,7 +115,7 @@ class NfceEmitter {
       environment: credentials.environment,
       credentials: opened,
     );
-    LocalNfce nfce({required String status, String? protocol, String? statusCode, String? reason, String? xml, DateTime? authorizedAt}) =>
+    LocalNfce nfce({required String status, String? protocol, String? statusCode, String? reason, String? xml, DateTime? authorizedAt, int emissionType = 1}) =>
         LocalNfce(
           id: const Uuid().v7(),
           saleId: saleId,
@@ -113,7 +123,7 @@ class NfceEmitter {
           number: numbering.number,
           accessKey: document.accessKey,
           environment: credentials.environment,
-          emissionType: 1,
+          emissionType: emissionType,
           status: status,
           protocol: protocol,
           statusCode: statusCode,
@@ -146,8 +156,18 @@ class NfceEmitter {
           detail: '${result.statusCode} ${result.reason}',
         );
       case SefazUnavailable():
-        logger?.warn('Sefaz sem resposta para a NFC-e', fields: {'number': numbering.number, 'err': result.reason});
-        return NfceOutcome(nfce: nfce(status: 'pending', reason: result.reason), noticeCode: 'FA737', detail: result.reason);
+        // Contingência offline: a mesma numeração, outra chave (tpEmis 9) e o QR Code com o digest.
+        logger?.warn('NFC-e em contingência', fields: {'number': numbering.number, 'err': result.reason});
+        try {
+          document = build(numbering: numbering, emissionType: 9);
+        } on FiscalException catch (error) {
+          return NfceOutcome(nfce: nfce(status: 'pending', reason: result.reason), noticeCode: 'FA737', detail: error.detail);
+        }
+        return NfceOutcome(
+          nfce: nfce(status: 'contingency', reason: result.reason, emissionType: 9),
+          noticeCode: 'FA739',
+          detail: result.reason,
+        );
     }
   }
 

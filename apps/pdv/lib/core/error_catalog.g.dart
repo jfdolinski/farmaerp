@@ -688,6 +688,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'A venda foi concluída com a nota pendente. Confira a internet do caixa e a tela Fiscal da retaguarda.',
     retryable: true,
   ),
+  'FA739': ErrorCatalogEntry(
+    code: 'FA739',
+    message: 'NFC-e emitida em contingência.',
+    action: 'A Sefaz não respondeu: entregue o DANFE de contingência. A nota é transmitida sozinha quando a conexão voltar.',
+    retryable: true,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',

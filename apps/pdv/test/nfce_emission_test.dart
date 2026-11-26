@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:farmaerp_pdv/core/secret_store.dart';
 import 'package:farmaerp_pdv/fiscal/nfce_credentials.dart';
 import 'package:farmaerp_pdv/fiscal/nfce_emitter.dart';
+import 'package:farmaerp_pdv/fiscal/nfce_retransmitter.dart';
 import 'package:farmaerp_pdv/fiscal/sefaz.dart';
 import 'package:farmaerp_pdv/local/local_database.dart';
 import 'package:farmaerp_pdv/pos/cart.dart';
@@ -189,11 +190,74 @@ void main() {
     expect(controller.info, 'Venda ${controller.lastSale!.code} concluída.');
   });
 
-  test('sem resposta da Sefaz: nota pendente (FA737), guardada para transmitir depois', () async {
+  test('sem resposta da Sefaz: contingência offline com o mesmo número, DANFE de contingência e aviso FA739', () async {
     await setUpPos();
     final saleId = await sellWith(controller, database, FakeTransport(() => throw const SocketException('sem rede')), '7890000000017');
-    expect(noticeCode(), 'FA737');
-    expect(database.nfceOfSale(saleId)!.status, 'pending');
+    expect(noticeCode(), 'FA739');
+    final nfce = database.nfceOfSale(saleId)!;
+    expect([nfce.status, nfce.emissionType, nfce.number], ['contingency', 9, 42]);
+    // Chave com tpEmis 9; a nota traz a hora e o motivo da contingência.
+    expect(nfce.accessKey.substring(34, 35), '9');
+    expect(nfce.xml, contains('<tpEmis>9</tpEmis>'));
+    expect(nfce.xml, contains('<xJust>Sem comunicacao com a Sefaz no momento da venda</xJust>'));
+    expect(nfce.xml, contains('<dhCont>'));
+    final receipt = controller.lastSale!.lines;
+    expect(receipt.map((line) => line.text), containsAll(['DANFE NFC-e', 'EMITIDA EM CONTINGÊNCIA', 'Pendente de autorização']));
+    expect(receipt.singleWhere((line) => line.qr).text, nfce.qrCode);
+    final payload = database.nextOutboxBatch().lastWhere((item) => item.kind == 'nfce').payload;
+    expect([payload['status'], payload['emission_type']], ['contingency', 9]);
+  });
+
+  test('retransmissão: autorizada atualiza a nota e sobe de novo; recusada fica com o motivo; sem resposta espera', () async {
+    await setUpPos();
+    final first = await sellWith(controller, database, FakeTransport(() => throw const SocketException('sem rede')), '7890000000017');
+    final second = await sellWith(controller, database, FakeTransport(() => throw const SocketException('sem rede')), '7890000000017');
+    final emitter = controller.nfce!;
+    NfceRetransmitter retransmitter(FakeTransport transport) => NfceRetransmitter(
+      database: database,
+      credentials: emitter.credentials,
+      sefaz: SefazClient(transport: transport),
+      terminalId: emitter.terminalId,
+    );
+
+    // Ainda sem resposta: nada muda, para na primeira.
+    final offline = FakeTransport(() => throw const SocketException('sem rede'));
+    expect(await retransmitter(offline).tick(), 0);
+    expect(offline.calls, hasLength(1));
+    expect(database.nfceOfSale(first)!.status, 'contingency');
+
+    // Volta a internet: a primeira é autorizada, a segunda recusada.
+    var call = 0;
+    final online = FakeTransport(() => ++call == 1 ? response() : response(status: '204', reason: 'Duplicidade de NF-e'));
+    expect(await retransmitter(online).tick(), 2);
+    final authorized = database.nfceOfSale(first)!;
+    expect([authorized.status, authorized.protocol, authorized.emissionType], ['authorized', '135260000000123', 9]);
+    expect(authorized.xml, startsWith('<?xml version="1.0" encoding="UTF-8"?><nfeProc'));
+    final rejected = database.nfceOfSale(second)!;
+    expect([rejected.status, rejected.statusCode], ['rejected', '204']);
+    // A nota sobe de novo com o mesmo id e a situação nova.
+    final updates = database.nextOutboxBatch().where((item) => item.kind == 'nfce' && item.payload['id'] == authorized.id).toList();
+    expect(updates.map((item) => item.payload['status']), ['contingency', 'authorized']);
+    // Nada mais a transmitir.
+    expect(database.nfceToTransmit(), isEmpty);
+    expect(await retransmitter(online).tick(), 0);
+  });
+
+  test('alerta da contingência: aviso na metade do prazo da filial, vencido no prazo', () async {
+    await setUpPos();
+    expect(nfceContingencyAlert(database, DateTime.now(), limit: contingencyLimitOf(database)), isNull);
+    await sellWith(controller, database, FakeTransport(() => throw const SocketException('sem rede')), '7890000000017');
+    final emitted = database.nfceContingency().oldest!;
+    final limit = contingencyLimitOf(database);
+    expect(limit, const Duration(hours: 24));
+    final fresh = nfceContingencyAlert(database, emitted.add(const Duration(hours: 1)), limit: limit)!;
+    expect([fresh.count, fresh.warning, fresh.overdue], [1, false, false]);
+    expect(fresh.text, 'NFC-e em contingência: 1 (a mais antiga há 1 h)');
+    final half = nfceContingencyAlert(database, emitted.add(const Duration(hours: 12)), limit: limit)!;
+    expect([half.warning, half.overdue], [true, false]);
+    final late = nfceContingencyAlert(database, emitted.add(const Duration(hours: 25)), limit: limit)!;
+    expect([late.warning, late.overdue], [true, true]);
+    expect(late.text, contains('prazo vencido'));
   });
 
   test('sem certificado no caixa ou produto sem tributação: venda concluída sem nota (FA738, FA723)', () async {
@@ -212,7 +276,7 @@ void main() {
     expect(database.nextNfceNumber(), (series: 1, number: 42));
   });
 
-  test('o XML assinado da venda passa no schema oficial da NF-e', () async {
+  test('a nota da venda em contingência passa no schema oficial da NF-e', () async {
     await setUpPos();
     final saleId = await sellWith(controller, database, FakeTransport(() => throw const SocketException('sem rede')), '7890000000017');
     final file = File('${Directory.systemTemp.createTempSync('nfce-venda').path}/nota.xml')

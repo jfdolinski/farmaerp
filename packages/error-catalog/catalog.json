@@ -3333,5 +3333,13 @@
     "severity": "warning",
     "retryable": true,
     "dbConstraints": []
+  },
+  "FA739": {
+    "message": "NFC-e emitida em contingência.",
+    "action": "A Sefaz não respondeu: entregue o DANFE de contingência. A nota é transmitida sozinha quando a conexão voltar.",
+    "httpStatus": 503,
+    "severity": "warning",
+    "retryable": true,
+    "dbConstraints": []
   }
 }

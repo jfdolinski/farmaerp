@@ -82,7 +82,7 @@ List<ReceiptLine> buildReceipt({
     ReceiptLine('${branch['name'] ?? ''} · CNPJ ${_cnpj(branch['cnpj'] as String?)}', center: true),
     if (address.isNotEmpty) for (final line in _wrap(address)) ReceiptLine(line, center: true),
     const ReceiptLine(''),
-    if (nfce != null && nfce.authorized) ...[
+    if (nfce != null && nfce.printable) ...[
       const ReceiptLine('DANFE NFC-e', bold: true, center: true),
       for (final line in _wrap('Documento Auxiliar da Nota Fiscal de Consumidor Eletrônica')) ReceiptLine(line, center: true),
     ] else ...[
@@ -154,7 +154,7 @@ List<ReceiptLine> buildReceipt({
       const ReceiptLine('Reconheço a compra no crediário.', center: true),
       const ReceiptLine(''),
     ],
-    if (nfce != null && nfce.authorized) ...nfceReceiptLines(nfce, customer: customer)
+    if (nfce != null && nfce.printable) ...nfceReceiptLines(nfce, customer: customer)
     else
       const ReceiptLine('Nota fiscal pendente de emissão.', center: true),
     const ReceiptLine('Obrigado pela preferência!', center: true),
@@ -171,6 +171,10 @@ List<ReceiptLine> nfceReceiptLines(LocalNfce nfce, {SaleCustomer? customer}) {
 
   final key = nfce.accessKey.replaceAllMapped(RegExp(r'(\d{4})(?=\d)'), (match) => '${match[1]} ');
   return [
+    if (nfce.status == 'contingency') ...[
+      const ReceiptLine('EMITIDA EM CONTINGÊNCIA', bold: true, center: true),
+      const ReceiptLine('Pendente de autorização', center: true),
+    ],
     if (nfce.environment == 2) ...[
       const ReceiptLine('EMITIDA EM AMBIENTE DE HOMOLOGAÇÃO', bold: true, center: true),
       const ReceiptLine('SEM VALOR FISCAL', bold: true, center: true),
