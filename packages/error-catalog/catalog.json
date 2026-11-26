@@ -3127,5 +3127,13 @@
     "dbConstraints": [
       "terminal_update_ring_check"
     ]
+  },
+  "FA879": {
+    "message": "A atualização do PDV falhou e a versão anterior não pôde ser reinstalada.",
+    "action": "Os dados do caixa estão preservados. Informe o código e a referência ao suporte.",
+    "httpStatus": 500,
+    "severity": "error",
+    "retryable": false,
+    "dbConstraints": []
   }
 }

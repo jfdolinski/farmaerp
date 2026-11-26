@@ -1030,6 +1030,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Escolha "teste" ou "rede".',
     retryable: false,
   ),
+  'FA879': ErrorCatalogEntry(
+    code: 'FA879',
+    message: 'A atualização do PDV falhou e a versão anterior não pôde ser reinstalada.',
+    action: 'Os dados do caixa estão preservados. Informe o código e a referência ao suporte.',
+    retryable: false,
+  ),
   'FA880': ErrorCatalogEntry(
     code: 'FA880',
     message: 'Este código não é de um vendedor desta loja.',

@@ -232,7 +232,21 @@ A central passa a guardar as versões do PDV e a entregar a atualização aos te
 
 3. Em **Ambiente**, inclua `RELEASES_DIR` com `/data/releases` e `RELEASE_UPLOAD_TOKEN` com o token. Salve.
 4. Implante a API, confira e implante a retaguarda.
-5. No GitHub (Settings → Secrets and variables → Actions), cadastre o mesmo token no segredo `RELEASE_UPLOAD_TOKEN`. A chave de assinatura (`UPDATE_SIGNING_KEY`) vem com o instalador do PDV.
+5. No GitHub (Settings → Secrets and variables → Actions), cadastre o mesmo token no segredo `RELEASE_UPLOAD_TOKEN`.
+6. Gere a chave de assinatura das versões, **uma vez**, no seu computador, com um arquivo **fora** do repositório:
+
+   ```bash
+   node scripts/release/generate-update-key.mjs C:caminhoseguroarmaerp-update-key.txt
+   ```
+
+   - O conteúdo do arquivo (chave privada) vai no segredo `UPDATE_SIGNING_KEY` do GitHub: `gh secret set UPDATE_SIGNING_KEY < C:caminhoseguroarmaerp-update-key.txt`. Guarde uma cópia em local seguro e não mande por chat.
+   - A chave pública, mostrada na tela, entra em `scripts/release/update-keys.json`, `apps/api/src/releases/update-keys.ts` e `apps/pdv/lib/update/update_signature.dart` (os testes conferem que são iguais). Só depois disso o CI consegue publicar.
+
+### Publicar uma versão do PDV
+
+1. Com o `main` como deve ir para as lojas, crie a tag: `git tag pdv-v1.2.3` e `git push origin pdv-v1.2.3`.
+2. O workflow "Versão do PDV" gera e assina o instalador e envia para a homologação, só para os terminais de teste. O instalador também fica nos artefatos do workflow, para a primeira instalação em uma máquina nova.
+3. Confira nos terminais de teste (Terminais → versão e última atualização) e libere para a rede em `/plataforma/versoes`.
 
 Cuidados:
 

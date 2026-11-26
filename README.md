@@ -168,6 +168,18 @@ O aparelho guarda uma chave Ed25519, responde a um desafio assinado e recebe um 
 - **Terminal:** `GET /terminals/updates?platform=&current=` devolve a versão mais nova do anel dele, acima da que ele tem e que ele não tenha precisado desfazer; `GET /terminals/updates/{id}/file` baixa (com retomada por Range; FA875 se não puder); `POST /terminals/updates/{id}/report` informa baixou, aplicou, voltou à anterior ou falhou (`terminal_update_event`).
 - **Retaguarda:** em Terminais, a versão, o anel e a última atualização de cada terminal; em `/plataforma/versoes`, quantos terminais estão em cada versão, quantos aplicaram e quantos voltaram.
 
+### Instalador e atualização automática (PDV)
+
+- **Instalador Windows** (`apps/pdv/installer/farmaerp-pdv.iss`, Inno Setup 6): "avançar e concluir", por usuário em `%LOCALAPPDATA%ProgramsFarmaERP PDV`, sem pedir administrador. Guarda uma cópia de si mesmo em `{app}installer`, usada para voltar a esta versão. Os dados (banco local e chave do terminal, em `%APPDATA%`) ficam na desinstalação e na atualização.
+- **Gerar na máquina:** em `apps/pdv`, `powershell -ExecutionPolicy Bypass -File tool/build-installer.ps1 -Version 1.2.3 -ApiUrl https://... -AppEnv homologation` (precisa do Inno Setup 6). Sai em `build/installer/FarmaERP-PDV-Setup-1.2.3.exe`.
+- **Publicar uma versão:** crie a tag `pdv-v1.2.3` no `main`. O workflow "Versão do PDV" roda os testes, gera o instalador, guarda como artefato, assina (`UPDATE_SIGNING_KEY`) e envia à homologação (`RELEASE_UPLOAD_TOKEN`), só para os terminais de teste. Em PR que mexe no instalador, ele só gera o instalador para conferência.
+- **No PDV** (`lib/update/`): a cada 30 minutos (e na abertura) pergunta à central, baixa em segundo plano retomando de onde parou, confere tamanho, SHA-256 e assinatura (chaves em `update_signature.dart`, iguais às de `scripts/release/update-keys.json`, conferido por teste). Arquivo que não confere é apagado e informado, e a versão não é tentada de novo.
+- **Momento seguro:** a versão baixada é aplicada depois do fechamento de caixa ou na próxima abertura do PDV, nunca com venda em andamento. Antes, o PDV copia o banco local e o instalador da versão atual; abre o instalador sem perguntas e fecha. O instalador reabre o PDV.
+- **Volta à versão anterior:** se a versão nova não abrir o banco local (migração), o PDV devolve a cópia do banco, reinstala a anterior e informa a central ("voltou à versão anterior"). Sem o instalador anterior, mostra FA879 (os dados ficam preservados). Se o instalador não concluir, o PDV abre na versão antiga e informa "falhou".
+- **Migração do banco local:** a falha de migração não põe mais o banco de lado (isso fica só para a chave errada); o erro sobe para a volta à versão anterior.
+- **Só no build de release e no Windows.** O pacote do Linux vem depois.
+- **Sem certificado de assinatura de código** por enquanto: na primeira instalação o Windows mostra "Editor desconhecido" (Mais informações → Executar assim mesmo). As atualizações não passam por isso e continuam protegidas pela assinatura própria.
+
 ## Código humano
 
 O UUID é a identidade do registro. O código humano serve para tela, cupom e atendimento.
