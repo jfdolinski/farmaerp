@@ -633,7 +633,7 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 
 **Importação das notas do sistema anterior (I1: NFC-e)**
 
-- **Envio:** `POST /admin/imports` (nome e tamanho, .zip até 1 GB), `PUT /admin/imports/:id/parts/:n` (partes de até 20 MB, em ordem) e `POST /admin/imports/:id/complete`. Permissão `imports.manage` (Administrador). O arquivo fica em `IMPORTS_DIR` até ser processado (FA740 sem a pasta; FA741 parte fora de ordem).
+- **Envio:** `POST /admin/imports` (nome e tamanho, .zip até 1 GB), `PUT /admin/imports/:id/parts/:n` (partes de até 20 MB, em ordem) e `POST /admin/imports/:id/complete`. Permissão `imports.manage` (Administrador). O arquivo fica em `IMPORTS_DIR` (ou no volume `/data/imports`) até ser processado (FA740 sem a pasta; FA741 parte fora de ordem).
 - **Processamento** (`ImportsService`, a cada 10 s): lê o .zip entrada por entrada (`yauzl`), cada XML vira uma chamada a `app.import_nfce` (uma transação por nota) e os cancelamentos (evento 110111 homologado) ficam para o fim. Reprocessar é seguro: nota repetida é ignorada pela chave.
 - **Regras (migration 0061):** só NFC-e de produção autorizada (100/150); homologação e sem protocolo são ignoradas; NF-e 55 e outros documentos são contados para as próximas etapas.
   - **Filial** do emitente pelo CNPJ (criada com a empresa, se a raiz for nova; CNPJ de outro cliente: FA742).
