@@ -718,6 +718,30 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Confira o motivo no relatório da importação.',
     retryable: false,
   ),
+  'FA744': ErrorCatalogEntry(
+    code: 'FA744',
+    message: 'Já existe um inventário em contagem nesta filial.',
+    action: 'Continue o inventário aberto ou cancele-o antes de abrir outro.',
+    retryable: false,
+  ),
+  'FA745': ErrorCatalogEntry(
+    code: 'FA745',
+    message: 'Este inventário não pode mais ser alterado.',
+    action: 'Ele já foi aplicado ou cancelado. Abra um novo inventário, se precisar.',
+    retryable: false,
+  ),
+  'FA746': ErrorCatalogEntry(
+    code: 'FA746',
+    message: 'Produto que exige lote precisa de lote e validade na contagem.',
+    action: 'Informe o lote e a validade e confira de novo.',
+    retryable: false,
+  ),
+  'FA747': ErrorCatalogEntry(
+    code: 'FA747',
+    message: 'A data e hora de corte do inventário são inválidas.',
+    action: 'Use um momento que já passou e depois do último inventário aplicado na filial.',
+    retryable: false,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',
