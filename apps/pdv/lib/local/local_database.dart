@@ -724,8 +724,9 @@ class LocalDatabase {
   }) async {
     final key = await _loadOrCreateKey(store);
     file.parent.createSync(recursive: true);
+    Database db;
     try {
-      return LocalDatabase._(_openEncrypted(file.path, key));
+      db = _openEncrypted(file.path, key);
     } on SqliteException catch (error) {
       if (!file.existsSync()) rethrow;
       final aside = File(
@@ -736,7 +737,15 @@ class LocalDatabase {
         'Banco local ilegível com a chave atual; começando uma cópia nova',
         fields: {'error_code': 'FA957', 'sqlite_code': error.extendedResultCode},
       );
-      return LocalDatabase._(_openEncrypted(file.path, key));
+      db = _openEncrypted(file.path, key);
+    }
+    // A migração fica fora do tratamento acima: se falhar, o banco não é posto de lado (os dados
+    // continuam no arquivo) e o erro sobe, para a atualização voltar à versão anterior.
+    try {
+      return LocalDatabase._(db);
+    } catch (_) {
+      db.close();
+      rethrow;
     }
   }
 

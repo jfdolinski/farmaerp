@@ -60,6 +60,7 @@ class PosController extends ChangeNotifier {
     required this.printer,
     required this.terminalNumber,
     this.onSaleSaved,
+    this.onShiftClosed,
     this.customers,
     this.networkStock,
     this.openQuotes,
@@ -119,6 +120,9 @@ class PosController extends ChangeNotifier {
 
   /// Chamado depois de gravar a venda: adianta o envio, sem esperar o próximo sinal de vida.
   final void Function()? onSaleSaved;
+
+  /// Chamado depois do fechamento de caixa (momento seguro para a atualização automática).
+  final Future<void> Function()? onShiftClosed;
   final LocalLogger? logger;
   final DateTime Function() _clock;
 
@@ -1447,6 +1451,8 @@ class PosController extends ChangeNotifier {
     notice = printProblem;
     info = 'Caixa fechado. A conferência fica com a gerência.';
     notifyListeners();
+    // Momento seguro para aplicar uma atualização já baixada.
+    await onShiftClosed?.call();
     return true;
   }
 

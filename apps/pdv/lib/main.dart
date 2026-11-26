@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 import 'package:path_provider/path_provider.dart';
 
@@ -24,6 +25,9 @@ import 'terminal/terminal_api.dart';
 import 'terminal/terminal_controller.dart';
 import 'terminal/terminal_screen.dart';
 import 'ui/caps.dart';
+import 'update/update_api.dart';
+import 'update/update_service.dart';
+import 'update/update_signature.dart';
 
 const _apiUrl = String.fromEnvironment(
   'API_URL',
@@ -76,16 +80,38 @@ Future<void> main() async {
     dataDirectory: dataDirectory,
     logger: logger,
   );
+  final databaseFile = File('${dataDirectory.path}${Platform.pathSeparator}farmaerp.db');
+  // Atualização automática: só no PDV instalado (build de release). O token vem do terminal,
+  // criado mais abaixo.
+  TerminalController? terminal;
+  final updates = UpdateService(
+    api: HttpUpdateApi(baseUrl: _apiUrl),
+    accessToken: () => terminal == null ? Future.error(StateError('Terminal ainda não iniciado')) : terminal.accessToken(),
+    directory: Directory('${dataDirectory.path}${Platform.pathSeparator}updates'),
+    databaseFile: databaseFile,
+    currentVersion: _appVersion,
+    platform: kReleaseMode ? Platform.operatingSystem : 'desenvolvimento',
+    publicKeys: configuredUpdateKeys(),
+    installerCache: File(
+      '${File(Platform.resolvedExecutable).parent.path}${Platform.pathSeparator}installer${Platform.pathSeparator}FarmaERP-PDV-Setup.exe',
+    ),
+    launch: (installer, arguments) async {
+      await Process.start(installer, arguments, mode: ProcessStartMode.detached);
+    },
+    logger: logger,
+  );
+  await updates.load();
+
   final LocalDatabase database;
   try {
-    database = await LocalDatabase.open(
-      file: File(
-        '${dataDirectory.path}${Platform.pathSeparator}farmaerp.db',
-      ),
-      store: store,
-      logger: logger,
-    );
+    database = await LocalDatabase.open(file: databaseFile, store: store, logger: logger);
   } catch (error, stack) {
+    // Versão nova recém-instalada que não abriu o banco: volta para a anterior.
+    if (updates.verifyingNewVersion) {
+      if (await updates.rollback(error)) exit(0);
+      runApp(const InvalidConfigurationApp(code: 'FA879'));
+      return;
+    }
     logger.error(
       'Banco local indisponível',
       traceId: newTraceId(),
@@ -97,10 +123,18 @@ Future<void> main() async {
     return;
   }
 
+  await updates.confirmApplied();
+  // Próxima abertura: a versão já baixada é aplicada antes de começar a vender.
+  if (updates.hasReady) {
+    database.close();
+    await updates.apply();
+    exit(0);
+  }
+
   // Avisos e erros sobem para a central pela outbox.
   logger.onEntry = (entry) => database.enqueueLog(entry, now: DateTime.now());
 
-  final controller = TerminalController(
+  final controller = terminal = TerminalController(
     api: api,
     store: store,
     sync: SyncService(api: api, database: database, logger: logger),
@@ -121,6 +155,13 @@ Future<void> main() async {
     terminalNumber: () => controller.terminalNumber,
     // A venda sobe logo, sem esperar o próximo sinal de vida.
     onSaleSaved: () => unawaited(controller.tick()),
+    // Fechamento de caixa: momento seguro para aplicar a atualização já baixada.
+    onShiftClosed: () async {
+      if (!updates.hasReady) return;
+      database.close();
+      await updates.apply();
+      exit(0);
+    },
     customers: CustomerService(api: api, database: database, accessToken: controller.accessToken, logger: logger),
     networkStock: (productId) async => api.networkStock(accessToken: await controller.accessToken(), productId: productId),
     openQuotes: () async => api.openQuotes(accessToken: await controller.accessToken()),
@@ -150,6 +191,7 @@ Future<void> main() async {
     face: face,
   ));
   unawaited(controller.start());
+  updates.start();
 }
 
 LocalLogger _createLogger(Directory dataDirectory) => LocalLogger(

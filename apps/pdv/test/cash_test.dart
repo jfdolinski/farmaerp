@@ -59,6 +59,7 @@ void main() {
   late FakePrinter printer;
   late DateTime now;
   late PosController controller;
+  late int shiftClosedCalls;
 
   setUpAll(() async {
     pin = await hashFor('2468');
@@ -68,12 +69,14 @@ void main() {
     database = seeded();
     printer = FakePrinter();
     now = synced.add(const Duration(minutes: 5));
+    shiftClosedCalls = 0;
     controller = PosController(
       database: database,
       auth: PosAuth(database: database, clock: () => now),
       printer: () => printer,
       terminalNumber: () => 1,
       clock: () => now,
+      onShiftClosed: () async => shiftClosedCalls += 1,
     );
   });
   tearDown(() => database.close());
@@ -193,11 +196,15 @@ void main() {
       expect(await controller.closeShift({'cash': 1, 'credit_card': 0, 'debit_card': 0, 'pix': 0}), isFalse);
       expect(noticeCode(), 'FA998');
       controller.remove(controller.cart.lines.single);
+      // Fechamento recusado não é momento de atualizar.
+      expect(shiftClosedCalls, 0);
 
       expect(await controller.closeShift({'cash': 109500, 'credit_card': 0, 'debit_card': 0, 'pix': 0}, note: ' Faltou troco '), isTrue);
       expect(controller.operator, isNull);
       expect(controller.session, isNull);
       expect(controller.info, contains('Caixa fechado'));
+      // Caixa fechado: a atualização baixada pode ser aplicada agora.
+      expect(shiftClosedCalls, 1);
       expect(database.openCashSession, isNull);
       expect(outbox('cash_session_close').single, {
         'cash_session_id': sessionId,
