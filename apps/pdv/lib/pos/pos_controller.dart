@@ -1903,13 +1903,18 @@ class PosController extends ChangeNotifier {
   /// Quem está no terminal (operador ou vendedor) pode fazer sozinho?
   bool can(String permission) => actor?.can(permission) ?? false;
 
+  /// O descarte pede código e PIN? No autoatendimento, sempre: quem está na tela é o cliente, não
+  /// quem abriu o turno. Nas outras telas, só quando quem está no terminal não tem a permissão.
+  bool get discardNeedsRelease => screen == 'self_service' || !can(discardPermission);
+
   /// Supervisor libera o que quem está no terminal não pode: código e PIN, a permissão e outra
   /// pessoa. Devolve quem liberou, ou null com o aviso.
-  Future<LocalUser?> authorize(String permission, String code, String pin) async {
+  /// [allowSelf]: no autoatendimento quem abriu o turno pode liberar (quem pediu foi o cliente).
+  Future<LocalUser?> authorize(String permission, String code, String pin, {bool allowSelf = false}) async {
     try {
       final supervisor = await auth.verify(code, pin);
       if (!supervisor.can(permission)) throw const PosException('FA757');
-      if (supervisor.id == actor?.id) throw const PosException('FA982');
+      if (!allowSelf && supervisor.id == actor?.id) throw const PosException('FA982');
       return supervisor;
     } on PosException catch (error) {
       _fail(error.code);
@@ -1924,8 +1929,8 @@ class PosController extends ChangeNotifier {
     if (busy || cart.isEmpty) return false;
     final user = actor;
     LocalUser? supervisor;
-    if (user == null || !user.can(discardPermission)) {
-      supervisor = await authorize(discardPermission, supervisorCode, supervisorPin);
+    if (discardNeedsRelease) {
+      supervisor = await authorize(discardPermission, supervisorCode, supervisorPin, allowSelf: screen == 'self_service');
       if (supervisor == null) return false;
     }
     final responsible = user ?? supervisor!;
@@ -1935,7 +1940,8 @@ class PosController extends ChangeNotifier {
       'id': const Uuid().v7(),
       'screen': screen,
       'user_id': responsible.id,
-      'authorized_by': user == null ? null : supervisor?.id,
+      // Quem liberou, quando não é quem estava no terminal.
+      'authorized_by': user == null || supervisor?.id == user.id ? null : supervisor?.id,
       'items_count': items,
       'total': totalCents / 100,
       'discarded_at': _clock().toUtc().toIso8601String(),

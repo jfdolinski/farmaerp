@@ -147,6 +147,25 @@ void main() {
     expect(noticeCode(), 'FA757');
     expect(await controller.discardCart(supervisorCode: '2', supervisorPin: '2468'), isTrue);
     expect(discards().single, containsPair('screen', 'self_service'));
+    expect(discards().single, containsPair('authorized_by', supervisorId));
+  });
+
+  test('autoatendimento: sempre código e PIN, mesmo com o turno aberto por quem tem a permissão; ele mesmo pode liberar', () async {
+    await cashierWithItems('self_service', login: '2');
+    expect(controller.can('pdv.self_service_cancel'), isTrue);
+    expect(controller.discardNeedsRelease, isTrue);
+    // Um toque do cliente não cancela.
+    expect(await controller.discardCart(), isFalse);
+    expect(controller.cart.isEmpty, isFalse);
+    // Quem abriu o turno digita o código e o PIN: vale, e o registro fica só com ele.
+    expect(await controller.discardCart(supervisorCode: '2', supervisorPin: '2468'), isTrue);
+    expect(discards().single, containsPair('user_id', supervisorId));
+    expect(discards().single, containsPair('authorized_by', null));
+  });
+
+  test('no caixa, quem abriu o turno com a permissão não precisa de código', () async {
+    await cashierWithItems('cashier', login: '2');
+    expect(controller.discardNeedsRelease, isFalse);
   });
 
   test('orçamento: "Limpar tela" com a permissão do vendedor; o próximo vendedor se identifica de novo', () async {

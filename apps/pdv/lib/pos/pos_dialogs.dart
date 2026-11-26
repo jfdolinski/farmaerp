@@ -829,12 +829,14 @@ class ReleaseDialog extends StatefulWidget {
     required this.needsSupervisor,
     required this.confirmLabel,
     required this.onConfirm,
+    this.supervisorHint = 'Você não tem esta permissão: chame um supervisor para liberar.',
   });
 
   final PosController controller;
   final String title;
   final String message;
   final bool needsSupervisor;
+  final String supervisorHint;
   final String confirmLabel;
   final Future<bool> Function(String code, String pin) onConfirm;
 
@@ -887,7 +889,7 @@ class _ReleaseDialogState extends State<ReleaseDialog> {
             Text(widget.message, key: const Key('release-message')),
             if (widget.needsSupervisor) ...[
               const SizedBox(height: 8),
-              const Text('Você não tem esta permissão: chame um supervisor para liberar.'),
+              Text(widget.supervisorHint, key: const Key('release-hint')),
               TextField(
                 key: const Key('release-code'),
                 controller: _code,
@@ -937,7 +939,10 @@ Future<void> showDiscardCartDialog(BuildContext context, PosController controlle
       title: controller.discardLabel,
       message: 'Descartar $what? ${count == 1 ? '1 item' : '$count itens'}, total ${formatCents(cart.totalCents)}. '
           'Os itens, o cliente e os pagamentos saem da tela.',
-      needsSupervisor: !controller.can(controller.discardPermission),
+      needsSupervisor: controller.discardNeedsRelease,
+      supervisorHint: controller.screen == 'self_service'
+          ? 'No autoatendimento, o cancelamento precisa do código e do PIN de um responsável da loja.'
+          : 'Você não tem esta permissão: chame um supervisor para liberar.',
       confirmLabel: controller.discardLabel,
       onConfirm: (code, pin) => controller.discardCart(supervisorCode: code, supervisorPin: pin),
     ),
