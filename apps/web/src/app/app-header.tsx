@@ -47,6 +47,7 @@ export function AppHeader({ user }: { user: CurrentUser }) {
         )}
         {can(user, "releases.view") && <Link href="/liberacoes">Liberações</Link>}
         {can(user, "sales.view") && <Link href="/vendas">Vendas</Link>}
+        {can(user, "sales.view") && <Link href="/vendas-importadas">Vendas importadas</Link>}
         {can(user, "sales.view") && <Link href="/caixas">Caixas</Link>}
         {can(user, "sales.view") && <Link href="/orcamentos">Orçamentos</Link>}
         {can(user, "sales.view") && <Link href="/devolucoes">Devoluções</Link>}

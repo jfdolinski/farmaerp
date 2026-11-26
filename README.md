@@ -644,6 +644,7 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
   - Nota com problema fica no relatório (FA743), com o motivo; as outras seguem.
 - **Relatório** (`GET /admin/imports/:id`): situação, contagens por modelo e resultado, problemas e a última numeração por filial, modelo e série.
 - **Tela** `/importacoes` (permissão `imports.manage`): envio do .zip em partes de 8 MB pela retaguarda (rota `/importacoes/envio/:id/:parte`, que recusa parte cortada pelo limite de 10 MB do proxy do Next), lista dos arquivos e relatório que se atualiza sozinho enquanto processa.
+- **Vendas importadas (I2b, migration 0062):** `GET /admin/imported-sales` (filial, período e cliente), `/:id` (itens com o código anterior e pagamentos) e `/:id/xml`, com `sales.view` na filial. Telas `/vendas-importadas` e o detalhe; o histórico do cliente (retaguarda e PDV) soma as importadas não canceladas, com o número da nota no lugar do código da venda.
 
 **Profissionais da saúde (prescritores)**
 

@@ -42,6 +42,7 @@ import { TerminalReturnsController } from './terminals/terminal-returns.controll
 import { ReturnsController } from './sales/returns.controller.js';
 import { PdvAuthEventsController } from './auth/pdv-auth-events.controller.js';
 import { SalesController } from './sales/sales.controller.js';
+import { ImportedSalesController } from './sales/imported-sales.controller.js';
 import { OfflineRulesController, TerminalStockController } from './terminals/offline-rules.controller.js';
 import { TerminalNfceController } from './terminals/terminal-nfce.controller.js';
 import { HealthProfessionalsController } from './sales/health-professionals.controller.js';
@@ -84,6 +85,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     TerminalCustomersController,
     TerminalCashbackController,
     SalesController,
+    ImportedSalesController,
     ControlledController,
     SngpcController,
     ReleasesController,
