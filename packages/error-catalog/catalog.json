@@ -264,7 +264,10 @@
       "cashback_entry_id_uuid_v7_check",
       "cashback_allocation_id_uuid_v7_check",
       "agreement_invoice_id_uuid_v7_check",
-      "agreement_invoice_item_id_uuid_v7_check"
+      "agreement_invoice_item_id_uuid_v7_check",
+      "sngpc_branch_id_uuid_v7_check",
+      "sngpc_movement_id_uuid_v7_check",
+      "sngpc_dispensing_complement_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -2962,5 +2965,100 @@
     "dbConstraints": [
       "agreement_closing_day_check"
     ]
+  },
+  "FA861": {
+    "message": "O SNGPC já foi aberto nesta filial.",
+    "action": "Atualize a tela: o inventário inicial já está na manutenção do SNGPC.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "sngpc_branch_branch_key"
+    ]
+  },
+  "FA862": {
+    "message": "O SNGPC ainda não foi aberto nesta filial.",
+    "action": "Abra o SNGPC da filial para gerar o inventário inicial.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA863": {
+    "message": "Esta movimentação do SNGPC não pode mais ser alterada.",
+    "action": "Movimentação conferida não muda. Atualize a tela e confira as pendentes.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "sngpc_movement_state_check",
+      "sngpc_movement_stock_key",
+      "sngpc_complement_dispensing_key"
+    ]
+  },
+  "FA864": {
+    "message": "A conferência do SNGPC tem pendências.",
+    "action": "Simule a conferência para ver o que falta em cada movimentação.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA865": {
+    "message": "Os dados da movimentação do SNGPC são inválidos.",
+    "action": "Confira o lote, a quantidade e o motivo informados.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "sngpc_movement_kind_check",
+      "sngpc_movement_quantity_check",
+      "sngpc_movement_loss_reason_check",
+      "sngpc_movement_status_check",
+      "sngpc_movement_status_reason_check",
+      "sngpc_movement_ms_check",
+      "sngpc_movement_source_check",
+      "sngpc_movement_dispensing_check",
+      "sngpc_movement_loss_kind_check",
+      "sngpc_complement_prescription_type_check",
+      "sngpc_complement_prescription_number_check",
+      "sngpc_complement_prescriber_name_check",
+      "sngpc_complement_prescriber_council_check",
+      "sngpc_complement_prescriber_number_check",
+      "sngpc_complement_prescriber_state_check",
+      "sngpc_complement_buyer_name_check",
+      "sngpc_complement_buyer_document_type_check",
+      "sngpc_complement_buyer_document_check",
+      "sngpc_complement_buyer_issuer_check",
+      "sngpc_complement_buyer_state_check",
+      "sngpc_complement_patient_name_check",
+      "sngpc_complement_patient_age_check",
+      "sngpc_complement_patient_sex_check",
+      "sngpc_complement_rules_check"
+    ]
+  },
+  "FA866": {
+    "message": "Confira a data da movimentação do SNGPC.",
+    "action": "A data não pode ser no futuro, e o envio é de hoje em diante.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA867": {
+    "message": "Só a venda de controlado liberada como pendente recebe os dados da receita.",
+    "action": "As outras vendas já chegaram com a receita do caixa.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA868": {
+    "message": "Só o inventário e os ajustes podem ficar fora do SNGPC.",
+    "action": "Compras, vendas, perdas e transferências precisam ser conferidas.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
   }
 }

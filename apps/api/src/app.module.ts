@@ -32,6 +32,7 @@ import { TerminalAdminController } from './terminals/terminal-admin.controller.j
 import { TerminalDeviceController } from './terminals/terminal-device.controller.js';
 import { SyncConflictsController } from './terminals/sync-conflicts.controller.js';
 import { ControlledController } from './sales/controlled.controller.js';
+import { SngpcController } from './sales/sngpc.controller.js';
 import { CashSessionsController } from './sales/cash-sessions.controller.js';
 import { QuotesController } from './sales/quotes.controller.js';
 import { TerminalQuotesController } from './terminals/terminal-quotes.controller.js';
@@ -78,6 +79,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     TerminalCashbackController,
     SalesController,
     ControlledController,
+    SngpcController,
     CashSessionsController,
     QuotesController,
     TerminalQuotesController,

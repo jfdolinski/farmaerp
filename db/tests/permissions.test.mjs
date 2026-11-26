@@ -15,7 +15,7 @@ afterAll(closePools);
 const ALL = [
   'agreements.manage', 'audit.view', 'branches.view_all', 'controlled.dispense', 'controlled.view', 'credit.manage', 'credit.policy', 'credit.view', 'customers.manage', 'customers.view', 'fiscal.certificate', 'fiscal.manage', 'fiscal.view', 'products.manage', 'products.price', 'products.reactivate',
   'products.status', 'products.view', 'purchases.cost_override', 'purchases.manage', 'purchases.post', 'purchases.view', 'releases.view', 'roles.assign', 'roles.manage', 'rules.manage', 'rules.view', 'sales.discount_override', 'sales.quote', 'sales.return', 'sales.sell', 'sales.view', 'sales.zero_stock_release',
-  'stock.adjust', 'stock.batch', 'stock.batch_override', 'stock.loss', 'stock.transfer', 'stock.view', 'structure.manage', 'sync.resolve', 'sync.view',
+  'sngpc.manage', 'stock.adjust', 'stock.batch', 'stock.batch_override', 'stock.loss', 'stock.transfer', 'stock.view', 'structure.manage', 'sync.resolve', 'sync.view',
   'terminals.approve', 'terminals.block', 'terminals.request', 'terminals.revoke', 'terminals.view',
   'users.biometrics', 'users.manage', 'users.release_login', 'users.reset_password', 'users.view',
 ];
@@ -69,7 +69,7 @@ describe('catálogo e perfis iniciais', () => {
   it.each([
     ['Administrador', ALL],
     ['Gerente', MANAGER],
-    ['Farmacêutico', ['controlled.dispense', 'controlled.view', 'sales.quote', 'sales.sell']],
+    ['Farmacêutico', ['controlled.dispense', 'controlled.view', 'sales.quote', 'sales.sell', 'sngpc.manage']],
     ['Operador de caixa', ['sales.quote', 'sales.sell']],
     ['Balconista', ['sales.quote']],
   ])('%s tem as permissões da tabela', async (name, expected) => {
