@@ -75,6 +75,16 @@ export class TerminalCustomersController {
     });
   }
 
+  /** Histórico de compras do cliente na rede (com internet). */
+  @Get(':id/history')
+  history(@Param('id') id: string) {
+    const customerId = requireUuid(id);
+    return this.database.withContext(async (client) => {
+      const { rows } = await client.query<{ result: unknown }>('SELECT app.pdv_customer_history($1) AS result', [customerId]);
+      return rows[0].result;
+    });
+  }
+
   @Get(':id')
   customer(@Param('id') id: string) {
     const customerId = requireUuid(id);

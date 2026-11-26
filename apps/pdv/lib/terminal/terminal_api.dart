@@ -92,6 +92,9 @@ abstract class TerminalApi {
     required String id,
   });
 
+  /// Histórico de compras do cliente na rede (com internet).
+  Future<Map<String, dynamic>> customerHistory({required String accessToken, required String id});
+
   /// Cadastro do cliente na tela de vendas (com internet). Devolve o cliente como na escolha.
   Future<PullItem> createCustomer({required String accessToken, required Map<String, Object?> data});
 
@@ -454,5 +457,12 @@ class HttpTerminalApi implements TerminalApi {
   Future<PullItem> createCustomer({required String accessToken, required Map<String, Object?> data}) async {
     final json = await _post('/terminals/customers', data, accessToken: accessToken);
     return PullItem(type: 'customer', id: json['id'] as String, data: json['data'] as Map<String, dynamic>?);
+  }
+
+  @override
+  Future<Map<String, dynamic>> customerHistory({required String accessToken, required String id}) async {
+    final json = await _request('/terminals/customers/${Uri.encodeComponent(id)}/history', accessToken: accessToken);
+    if (json is! Map<String, dynamic>) throw const ApiException('FA000');
+    return json;
   }
 }

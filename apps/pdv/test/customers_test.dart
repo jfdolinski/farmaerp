@@ -132,6 +132,34 @@ void main() {
     });
   });
 
+  group('histórico', () {
+    test('ticket médio, últimos 30 dias e recorrentes, em centavos e milésimos', () async {
+      api.customerHistories[joaoId] = {
+        'sales_12m': 3, 'total_12m': '150.50', 'average_ticket': '50.17', 'last_purchase_at': '2026-11-20T15:00:00Z',
+        'last_30_days': [
+          {'sale_id': 's1', 'code': '1-000010', 'sold_at': '2026-11-20T15:00:00Z', 'branch_name': 'Loja Centro', 'total': '70.00', 'items': 2},
+        ],
+        'recurring': [
+          {'product_id': 'p1', 'name': 'Losartana 50 mg', 'purchases': 3, 'quantity': '4.500', 'last_at': '2026-11-20T15:00:00Z'},
+        ],
+      };
+      final history = await customers.history(joaoId);
+      expect([history.sales12m, history.total12mCents, history.averageTicketCents], [3, 15050, 5017]);
+      expect([history.recent.single.code, history.recent.single.totalCents, history.recent.single.items], ['1-000010', 7000, 2]);
+      expect([history.recurring.single.name, history.recurring.single.purchases, history.recurring.single.quantityMilli],
+          ['Losartana 50 mg', 3, 4500]);
+
+      api.customerHistories[mariaId] = {'sales_12m': 0, 'total_12m': 0, 'average_ticket': null, 'last_purchase_at': null,
+          'last_30_days': [], 'recurring': []};
+      final empty = await customers.history(mariaId);
+      expect([empty.averageTicketCents, empty.lastPurchaseAt, empty.recent, empty.recurring], [null, null, isEmpty, isEmpty]);
+
+      // Só com internet.
+      api.historyFailure = const ApiException('FA001');
+      await expectLater(customers.history(joaoId), throwsA(isA<ApiException>().having((e) => e.code, 'code', 'FA001')));
+    });
+  });
+
   group('cliente HTTP', () {
     test('a busca vai no corpo, e o detalhe pelo id', () async {
       final requests = <http.Request>[];

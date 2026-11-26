@@ -625,6 +625,12 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - Só com internet (`POST /terminals/customers`, `app.pdv_create_customer`, migration 0058): a central confere o CPF repetido na hora (FA901, com o atalho "Buscar o cliente por este CPF"). Sem internet: FA984, e a venda segue sem cliente.
 - Quem cadastra é o operador do caixa, conferido pela permissão de vender na filial do terminal. O cliente novo já fica guardado no terminal e escolhido na venda.
 
+**Histórico de compras do cliente**
+
+- Ticket médio dos últimos 12 meses (com o total e o número de compras), compras dos últimos 30 dias (data, venda, loja, itens e total) e produtos recorrentes (em 2 ou mais compras nos últimos 180 dias). Migration 0059.
+- **Retaguarda:** seção "Compras" na ficha do cliente (`GET /admin/customers/:id/history`), só com as filiais que o usuário vê; exige `customers.view` ou `customers.manage`.
+- **Caixa:** botão de histórico no painel do cliente da venda (`GET /terminals/customers/:id/history`), com a rede inteira do grupo. Só com internet (FA984 sem conexão).
+
 **Profissionais da saúde (prescritores)**
 
 - **Cadastro** (`health_professional`, migration 0057, por grupo): nome, conselho (CRM, CRO, CRMV, COREN, CRF, RMS), número, UF, especialidade (opcional) e situação. O mesmo conselho, número (sem zeros à esquerda, sem diferença de maiúsculas) e UF não se repete (FA733); dados inválidos: FA734.

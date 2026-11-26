@@ -344,6 +344,45 @@ void main() {
       expect(find.byKey(const Key('customer-new-save')), findsNothing);
     });
 
+    testWidgets('cliente: o histórico abre pelo painel; sem internet avisa', (tester) async {
+      await tester.runAsync(() => controller.login('3', '2468'));
+      controller.openShift(0);
+      await tester.runAsync(() => controller.identifySeller('3'));
+      const id = '019a0000-0000-7000-8000-000000000032';
+      api.customerData[id] = {
+        'code': 7, 'person_type': 'individual', 'name': 'Cliente Demonstração', 'document': '11144477735', 'agreements': const [],
+      };
+      api.customerHistories[id] = {
+        'sales_12m': 2, 'total_12m': '90.00', 'average_ticket': '45.00', 'last_purchase_at': '2026-11-20T15:00:00Z',
+        'last_30_days': [
+          {'sale_id': 's1', 'code': '1-000010', 'sold_at': '2026-11-20T15:00:00Z', 'branch_name': 'Loja Centro', 'total': '70.00', 'items': 2},
+        ],
+        'recurring': [
+          {'product_id': 'p1', 'name': 'Losartana 50 mg', 'purchases': 2, 'quantity': '3', 'last_at': '2026-11-20T15:00:00Z'},
+        ],
+      };
+      await tester.runAsync(() => controller.selectCustomer(id));
+      await tester.binding.setSurfaceSize(const Size(1500, 1000));
+      await tester.pumpWidget(MaterialApp(home: PosScreen(controller: controller)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('customer-history-open')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pumpAndSettle();
+      expect(findTextContaining('Ticket médio: '), findsOneWidget);
+      expect(findTextContaining('45,00'), findsOneWidget);
+      expect(findTextContaining('1-000010 · Loja Centro · 2 itens'), findsOneWidget);
+      expect(find.byKey(const Key('customer-history-p1')), findsOneWidget);
+      await tester.tap(findText('Fechar').last);
+      await tester.pumpAndSettle();
+
+      api.historyFailure = const ApiException('FA001');
+      await tester.tap(find.byKey(const Key('customer-history-open')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('customer-history-error')), findsOneWidget);
+      expect(findTextContaining('A consulta precisa de internet.'), findsOneWidget);
+    });
+
     testWidgets('cliente: busca sozinha a partir de 3 letras e Enter escolhe o marcado', (tester) async {
       await tester.runAsync(() => controller.login('3', '2468'));
       controller.openShift(0);

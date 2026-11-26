@@ -7,6 +7,7 @@ import { ErrorNotice } from "../../error-notice";
 import { CustomerGroupSelect } from "../../descontos/ui";
 import { CreditSection } from "../../crediario/section";
 import { CashbackSection } from "../../cashback/section";
+import { CustomerHistorySection } from "../history";
 import { CHANNELS, documentText, PURPOSES } from "../format";
 import {
   AgreementRow,
@@ -116,6 +117,11 @@ async function CustomerContent({ params }: { params: Params }) {
           {documentText(customer.document)}
         </p>
         <EditCustomerForm values={customer} canManage={canManage} />
+      </section>
+
+      <section className={styles.card}>
+        <h2>Compras</h2>
+        <CustomerHistorySection customerId={customer.id} canSeeSales={can(user, "sales.view")} />
       </section>
 
       <section className={styles.card}>

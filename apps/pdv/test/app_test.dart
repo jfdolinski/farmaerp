@@ -256,6 +256,18 @@ class FakeApi implements TerminalApi {
     throw next;
   }
 
+  /// Histórico por cliente; [historyFailure] simula a falta de internet.
+  final customerHistories = <String, Map<String, dynamic>>{};
+  Object? historyFailure;
+
+  @override
+  Future<Map<String, dynamic>> customerHistory({required String accessToken, required String id}) async {
+    if (historyFailure != null) throw historyFailure!;
+    final history = customerHistories[id];
+    if (history == null) throw const ApiException('FA006');
+    return history;
+  }
+
   /// Cadastros recebidos; [createFailure] simula a recusa (ex.: FA901) ou a falta de internet.
   final createdCustomers = <Map<String, Object?>>[];
   Object? createFailure;
