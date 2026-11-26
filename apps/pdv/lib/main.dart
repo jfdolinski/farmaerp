@@ -201,7 +201,7 @@ Future<void> main() async {
     cancelNfce: (documentId, reason, supervisorId) async => api.cancelNfce(
       accessToken: await controller.accessToken(), documentId: documentId, reason: reason, supervisorId: supervisorId,
     ),
-    syncNow: () => controller.tick(),
+    syncNow: controller.syncNow,
     returnCredit: (code) async => api.returnCredit(accessToken: await controller.accessToken(), code: code),
     cashbackBalance: (customerId) async => api.cashback(accessToken: await controller.accessToken(), customerId: customerId),
     cashbackReserve: (customerId, amount, saleTotal) async => api.cashbackReserve(

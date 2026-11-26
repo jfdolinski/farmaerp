@@ -7,6 +7,8 @@ import 'package:farmaerp_pdv/fiscal/nfce_emitter.dart';
 import 'package:farmaerp_pdv/fiscal/nfce_retransmitter.dart';
 import 'package:farmaerp_pdv/fiscal/sefaz.dart';
 import 'package:farmaerp_pdv/local/local_database.dart';
+import 'package:farmaerp_pdv/pos/pos_screen.dart';
+import 'package:flutter/material.dart';
 import 'package:farmaerp_pdv/pos/cart.dart';
 import 'package:farmaerp_pdv/pos/pos_auth.dart';
 import 'package:farmaerp_pdv/pos/pos_controller.dart';
@@ -332,10 +334,69 @@ void main() {
     expect(asked.last, [document.id, 'Cliente desistiu da compra', supervisorId]);
     expect(database.nfceOfSale(saleId)!.status, 'canceled');
     expect(controller.info, contains('Devolva o dinheiro ao cliente pela gaveta'));
+    expect(controller.info, contains('Cartão ou PIX: estorne'));
     // O botão some.
     expect(controller.cancelableNfce, isNull);
-    answer = const {'already': true};
-    expect(now.isBefore(DateTime.parse('2026-11-26T15:30:00-03:00')), isTrue);
+    expect(controller.lastSaleCanceled, isTrue);
+  });
+
+  test('a central já tinha cancelado (resposta perdida): avisa e lembra de devolver o que foi pago', () async {
+    final now = DateTime.parse('2026-11-26T15:10:00-03:00');
+    var calls = 0;
+    await setUpPos(
+      cancelNfce: (documentId, reason, supervisorId) async {
+        calls += 1;
+        if (calls == 1) throw const ApiException('FA001');
+        return const {'already': true};
+      },
+      clock: () => now,
+      syncNow: () async {
+        final batch = database.nextOutboxBatch();
+        database.markSent(batch, [for (final item in batch) PushResult(id: item.id, status: 'applied', result: 'applied')], now: DateTime.now());
+      },
+    );
+    await sell('7890000000017');
+    final saleId = controller.lastSale!.saleId!;
+    expect(await controller.cancelLastSale(reason: 'Cliente desistiu da compra', supervisorCode: '7', supervisorPin: '2468'), isFalse);
+    expect(controller.info, 'Sem resposta da central. Tente de novo: se a venda já tiver sido cancelada, o caixa avisa.');
+    expect(await controller.cancelLastSale(reason: 'Cliente desistiu da compra', supervisorCode: '7', supervisorPin: '2468'), isTrue);
+    expect(controller.info, allOf(contains('já estava cancelada'), contains('estorno na maquininha')));
+    expect(database.nfceOfSale(saleId)!.status, 'canceled');
+  });
+
+  testWidgets('tela: sem internet não oferece cancelar; cancelada, some o cancelar e o reimprimir', (tester) async {
+    final now = DateTime.parse('2026-11-26T15:10:00-03:00');
+    await tester.runAsync(() async {
+      await setUpPos(
+        cancelNfce: (documentId, reason, supervisorId) async => const {'cash': 10, 'cash_refund': 'same_session'},
+        clock: () => now,
+        syncNow: () async {
+          final batch = database.nextOutboxBatch();
+          database.markSent(batch, [for (final item in batch) PushResult(id: item.id, status: 'applied', result: 'applied')], now: DateTime.now());
+        },
+      );
+      await sell('7890000000017');
+    });
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(home: PosScreen(controller: controller, online: false)));
+    expect(find.byKey(const Key('reprint')), findsOneWidget);
+    expect(find.byKey(const Key('cancel-sale')), findsNothing);
+    await tester.pumpWidget(MaterialApp(home: PosScreen(controller: controller)));
+    expect(find.byKey(const Key('cancel-sale')), findsOneWidget);
+    await tester.runAsync(() => controller.cancelLastSale(reason: 'Cliente desistiu da compra', supervisorCode: '7', supervisorPin: '2468'));
+    await tester.pump();
+    expect(find.byKey(const Key('cancel-sale')), findsNothing);
+    expect(find.byKey(const Key('reprint')), findsNothing);
+  });
+
+  test('mensagem do cancelamento: sempre lembra da devolução; venda mantida pede a devolução', () {
+    for (final refund in ['same_session', 'open_session', 'no_session', 'none']) {
+      expect(PosController.cancelMessage('C1-5', {'cash_refund': refund}), allOf(startsWith('Venda C1-5 cancelada.'), endsWith('Cartão ou PIX: estorne na maquininha ou pelo banco.')));
+    }
+    expect(PosController.cancelMessage('C1-5', {'cash_refund': 'none'}), contains('Devolva ao cliente o que foi pago'));
+    expect(PosController.cancelMessage('C1-5', {'cash_refund': 'none', 'sale_kept': 'late'}), contains('acerte pela devolução'));
+    expect(PosController.cancelMessage('C1-5', {'already': true}), startsWith('A venda C1-5 já estava cancelada'));
   });
 
   test('sem o pedido à central (sem internet configurada) ou depois de 30 minutos, não oferece cancelar', () async {

@@ -1875,6 +1875,22 @@ class PosController extends ChangeNotifier {
     }
   }
 
+  /// O que dizer ao operador depois do cancelamento. Sempre lembra de devolver o que foi pago.
+  static String cancelMessage(String code, Map<String, dynamic> result) {
+    const others = 'Cartão ou PIX: estorne na maquininha ou pelo banco.';
+    if (result['already'] == true) {
+      return 'A venda $code já estava cancelada na central. Confira se o cliente recebeu de volta o que pagou '
+          '(dinheiro pela gaveta; cartão ou PIX, estorno na maquininha ou pelo banco).';
+    }
+    if (result['sale_kept'] != null) return 'NFC-e cancelada, mas a venda não foi desfeita: acerte pela devolução.';
+    return switch (result['cash_refund'] as String?) {
+      'same_session' => 'Venda $code cancelada. Devolva o dinheiro ao cliente pela gaveta. $others',
+      'open_session' => 'Venda $code cancelada. A devolução do dinheiro foi registrada como sangria. $others',
+      'no_session' => 'Venda $code cancelada. Devolva o dinheiro e registre a saída à mão. $others',
+      _ => 'Venda $code cancelada. Devolva ao cliente o que foi pago. $others',
+    };
+  }
+
   /// A última venda foi cancelada neste caixa (o botão some).
   bool lastSaleCanceled = false;
 
@@ -1915,23 +1931,17 @@ class PosController extends ChangeNotifier {
         result = await request(document.id, text, supervisor.id);
       } on ApiException catch (error) {
         if (error.code == 'FA001') {
-          // Sem resposta: a central pode ter cancelado. Pedir de novo é seguro (responde que já está feito).
+          // Sem resposta: a central pode ter cancelado ou nem ter recebido. Pedir de novo é seguro:
+          // já cancelada, ela responde que está feito; na Sefaz, o pedido repetido é conferido pela chave.
           notice = ErrorDisplay.fromCode('FA001');
-          info = 'Sem resposta da central: o cancelamento pode ter sido feito. Tente de novo para confirmar.';
+          info = 'Sem resposta da central. Tente de novo: se a venda já tiver sido cancelada, o caixa avisa.';
           return false;
         }
         throw PosException(error.code);
       }
       database.updateNfce(document.copyWith(status: 'canceled', reason: text), now: _clock());
       lastSaleCanceled = true;
-      final cash = result['cash_refund'] as String?;
-      info = switch (cash) {
-        'same_session' => 'Venda ${sale.code} cancelada. Devolva o dinheiro ao cliente pela gaveta.',
-        'open_session' => 'Venda ${sale.code} cancelada. A devolução do dinheiro foi registrada como sangria.',
-        'no_session' => 'Venda ${sale.code} cancelada. Devolva o dinheiro e registre a saída à mão.',
-        _ when result['sale_kept'] != null => 'NFC-e cancelada, mas a venda não foi desfeita: acerte pela devolução.',
-        _ => 'Venda ${sale.code} cancelada.',
-      };
+      info = cancelMessage(sale.code, result);
       logger?.info('Venda cancelada no caixa', fields: {'sale_code': sale.code, 'supervisor_code': supervisor.code});
       onSaleSaved?.call();
       return true;
