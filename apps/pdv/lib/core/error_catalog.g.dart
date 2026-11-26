@@ -574,6 +574,24 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Atualize a tela e tente novamente.',
     retryable: false,
   ),
+  'FA720': ErrorCatalogEntry(
+    code: 'FA720',
+    message: 'Esta remessa do SNGPC não pode mais ser alterada.',
+    action: 'A remessa enviada não muda. Atualize a tela.',
+    retryable: false,
+  ),
+  'FA721': ErrorCatalogEntry(
+    code: 'FA721',
+    message: 'Não foi possível enviar ao SNGPC agora.',
+    action: 'A rotina tenta de novo sozinha. Se continuar, confira a credencial do SNGPC da filial.',
+    retryable: true,
+  ),
+  'FA722': ErrorCatalogEntry(
+    code: 'FA722',
+    message: 'O SNGPC recusou a credencial da filial.',
+    action: 'Confira o usuário e a senha do SNGPC do farmacêutico responsável e cadastre de novo.',
+    retryable: false,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',

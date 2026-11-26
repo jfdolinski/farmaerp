@@ -254,6 +254,19 @@ Cuidados:
 - Quem tem o token consegue enviar arquivos, mas não consegue publicar versão que o PDV aceite: o PDV só instala o que estiver assinado com a chave que só o CI tem.
 - As versões ficam em `/plataforma/versoes`, só para o administrador da plataforma: liberar para a rede ou retirar. Em Terminais, cada cliente marca os terminais de teste, que recebem a versão primeiro.
 
+## Atualizar para o envio do SNGPC
+
+Não há variável obrigatória nova. A credencial do SNGPC de cada filial é criptografada com a `FISCAL_ENCRYPTION_KEY` que já existe; sem ela, o cadastro da credencial responde FA915.
+
+O envio real fica **desligado** até a documentação da API nova da Anvisa ser conferida. Para ligar, mais tarde, no serviço `api`:
+
+| Nome | Valor |
+|---|---|
+| `SNGPC_LIVE` | `true` |
+| `SNGPC_URL` | Endereço HTTPS do SNGPC (da documentação oficial) |
+
+Desligado, a rotina monta as remessas e espera; nada sai da VPS.
+
 ## Antes de publicar a produção
 
 A produção usa os mesmos passos, em um projeto próprio e com segredos próprios, mas depende destes itens:

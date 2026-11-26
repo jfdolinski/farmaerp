@@ -112,3 +112,22 @@ export async function confirmMovements(
   refresh();
   return { confirmed: result.data.confirmed };
 }
+
+/** Credencial do SNGPC da filial (a API criptografa; a tela nunca recebe o valor de volta). */
+export async function setCredential(_previous: SngpcState, form: FormData): Promise<SngpcState> {
+  const result = await apiFetch(`/admin/sngpc/branches/${encodeURIComponent(text(form, "branchId"))}/credential`, {
+    method: "PUT",
+    body: { username: text(form, "username"), password: String(form.get("password") ?? "") },
+  });
+  if (!result.ok) {
+    expired(result.error);
+    return { error: result.error };
+  }
+  refresh();
+  return { done: true };
+}
+
+/** Recusada pela Anvisa: volta para pendente, para corrigir e conferir de novo. */
+export async function reopenMovement(_previous: SngpcState, form: FormData): Promise<SngpcState> {
+  return send(`/admin/sngpc/movements/${encodeURIComponent(text(form, "movementId"))}/reopen`, "POST", {});
+}

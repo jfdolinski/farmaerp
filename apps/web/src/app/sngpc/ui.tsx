@@ -9,6 +9,8 @@ import {
   confirmMovements,
   disregardMovement,
   openSngpc,
+  reopenMovement,
+  setCredential,
   SngpcState,
   updateMovement,
 } from "./actions";
@@ -447,5 +449,44 @@ export function PendingBoard({
       {message && <p className={styles.success}>{message}</p>}
       <ErrorNotice error={error} />
     </div>
+  );
+}
+
+/** Usuário e senha do SNGPC do farmacêutico responsável pela filial. */
+export function CredentialForm({ branchId, registeredAt }: { branchId: string; registeredAt: string | null }) {
+  const [state, action, pending] = useActionState<SngpcState, FormData>(setCredential, {});
+  return (
+    <details className={styles.reason}>
+      <summary>{registeredAt ? "Trocar a credencial do SNGPC" : "Cadastrar a credencial do SNGPC"}</summary>
+      <form action={action} className={styles.rowForm}>
+        <input type="hidden" name="branchId" value={branchId} />
+        <label>
+          Usuário do SNGPC
+          <input name="username" required maxLength={100} autoComplete="off" />
+        </label>
+        <label>
+          Senha do SNGPC
+          <input name="password" type="password" required maxLength={100} autoComplete="new-password" />
+        </label>
+        <button type="submit" disabled={pending}>
+          Salvar credencial
+        </button>
+      </form>
+      <p className={styles.hint}>Fica criptografada; nem a tela nem os relatórios mostram o valor depois de salvo.</p>
+      <Saved state={state} />
+    </details>
+  );
+}
+
+export function ReopenButton({ movementId }: { movementId: string }) {
+  const [state, action, pending] = useActionState<SngpcState, FormData>(reopenMovement, {});
+  return (
+    <form action={action}>
+      <input type="hidden" name="movementId" value={movementId} />
+      <button type="submit" disabled={pending}>
+        Reabrir para corrigir
+      </button>
+      <ErrorNotice error={state.error} />
+    </form>
   );
 }
