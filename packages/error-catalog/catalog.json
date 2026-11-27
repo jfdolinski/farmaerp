@@ -296,7 +296,10 @@
       "purchase_invoice_installment_id_uuid_v7_check",
       "purchase_invoice_audit_id_uuid_v7_check",
       "purchase_return_id_uuid_v7_check",
-      "purchase_return_item_id_uuid_v7_check"
+      "purchase_return_item_id_uuid_v7_check",
+      "central_nfe_id_uuid_v7_check",
+      "central_nfe_series_id_uuid_v7_check",
+      "purchase_return_tax_setting_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -1732,7 +1735,36 @@
       "purchase_return_item_total_value_check",
       "purchase_return_item_unit_cost_check",
       "stock_movement_purchase_return_check",
-      "purchase_return_number_key"
+      "purchase_return_number_key",
+      "central_nfe_series_series_check",
+      "central_nfe_series_last_used_check",
+      "purchase_return_tax_cfop_internal_check",
+      "purchase_return_tax_cfop_interstate_check",
+      "purchase_return_tax_cfop_st_internal_check",
+      "purchase_return_tax_cfop_st_interstate_check",
+      "purchase_return_tax_simples_csosn_check",
+      "purchase_return_tax_simples_csosn_st_check",
+      "purchase_return_tax_normal_cst_check",
+      "purchase_return_tax_normal_cst_st_check",
+      "purchase_return_tax_pis_cst_check",
+      "purchase_return_tax_cofins_cst_check",
+      "central_nfe_kind_check",
+      "central_nfe_series_check",
+      "central_nfe_number_check",
+      "central_nfe_access_key_check",
+      "central_nfe_environment_check",
+      "central_nfe_status_check",
+      "central_nfe_protocol_check",
+      "central_nfe_status_code_check",
+      "central_nfe_reason_check",
+      "central_nfe_xml_check",
+      "central_nfe_total_value_check",
+      "central_nfe_authorized_check",
+      "central_nfe_source_check",
+      "central_nfe_series_branch_key",
+      "purchase_return_tax_setting_branch_key",
+      "central_nfe_access_key_key",
+      "central_nfe_number_key"
     ]
   },
   "FA932": {
@@ -3804,6 +3836,40 @@
   "FA770": {
     "message": "Escolha um lote que entrou por este item da nota.",
     "action": "Escolha o lote na lista do item.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA771": {
+    "message": "O cadastro do fornecedor está sem o endereço completo para a NF-e.",
+    "action": "Complete o endereço (com o código do município) e o CNPJ do fornecedor em Fornecedores e emita de novo.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA772": {
+    "message": "Esta NF-e já teve resposta da Sefaz e não muda mais.",
+    "action": "Atualize a página para ver a situação atual da nota.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA773": {
+    "message": "Esta devolução já tem NF-e emitida ou em transmissão.",
+    "action": "Veja a situação da nota na tela; se estiver pendente, transmita de novo.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "central_nfe_return_live_key"
+    ]
+  },
+  "FA774": {
+    "message": "Um item da devolução está sem NCM na nota de compra.",
+    "action": "Fale com o suporte: o NCM vem do XML da nota de compra.",
     "httpStatus": 422,
     "severity": "warning",
     "retryable": false,

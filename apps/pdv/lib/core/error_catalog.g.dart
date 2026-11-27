@@ -880,6 +880,30 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Escolha o lote na lista do item.',
     retryable: false,
   ),
+  'FA771': ErrorCatalogEntry(
+    code: 'FA771',
+    message: 'O cadastro do fornecedor está sem o endereço completo para a NF-e.',
+    action: 'Complete o endereço (com o código do município) e o CNPJ do fornecedor em Fornecedores e emita de novo.',
+    retryable: false,
+  ),
+  'FA772': ErrorCatalogEntry(
+    code: 'FA772',
+    message: 'Esta NF-e já teve resposta da Sefaz e não muda mais.',
+    action: 'Atualize a página para ver a situação atual da nota.',
+    retryable: false,
+  ),
+  'FA773': ErrorCatalogEntry(
+    code: 'FA773',
+    message: 'Esta devolução já tem NF-e emitida ou em transmissão.',
+    action: 'Veja a situação da nota na tela; se estiver pendente, transmita de novo.',
+    retryable: false,
+  ),
+  'FA774': ErrorCatalogEntry(
+    code: 'FA774',
+    message: 'Um item da devolução está sem NCM na nota de compra.',
+    action: 'Fale com o suporte: o NCM vem do XML da nota de compra.',
+    retryable: false,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',

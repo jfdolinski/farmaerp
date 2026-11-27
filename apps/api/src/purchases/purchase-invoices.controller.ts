@@ -142,6 +142,7 @@ export class PurchaseInvoicesController {
                 u.name AS author, app.has_permission('purchases.manage', i.branch_id) AS can_manage,
                 app.has_permission('purchases.post', i.branch_id) AS can_post,
                 app.has_permission('purchases.cancel', i.branch_id) AS can_cancel,
+                app.has_permission('fiscal.nfe_issue', i.branch_id) AS can_issue_nfe,
                 app.has_permission('purchases.negative_stock', i.branch_id) AS can_negative_stock,
                 app.has_permission('purchases.cost_override', i.branch_id) AS can_override_cost
            FROM v_purchase_invoice i
@@ -170,6 +171,8 @@ export class PurchaseInvoicesController {
       const extra = await client.query<{ x: Record<string, unknown> | null }>('SELECT app.purchase_invoice_extra($1) AS x', [invoiceId]);
       // Devolução ao fornecedor: saldo de cada item (e lote) e as devoluções feitas.
       const returns = await client.query<{ x: Record<string, unknown> | null }>('SELECT app.purchase_invoice_returns($1) AS x', [invoiceId]);
+      // NF-e das devoluções (emitidas pela central).
+      const returnNfes = await client.query<{ x: unknown[] }>('SELECT app.purchase_invoice_return_nfes($1) AS x', [invoiceId]);
       return {
         ...rows[0],
         items: items.rows.map((item) => ({ ...item, posting: byItem.get(item.id) ?? null })),
@@ -180,6 +183,7 @@ export class PurchaseInvoicesController {
         installments: extra.rows[0]?.x?.installments ?? [],
         audit: extra.rows[0]?.x?.audit ?? [],
         returns: returns.rows[0]?.x ?? { can_return: false, items: [], returns: [] },
+        return_nfes: returnNfes.rows[0]?.x ?? [],
       };
     });
   }
