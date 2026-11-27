@@ -26,7 +26,7 @@ export class CatalogSyncController {
   async run() {
     await this.database.withContext((client) => client.query('SELECT app.require_platform_admin()'));
     if (!this.catalog.configured) throw new AppError('FA228');
-    void this.catalog.sync('manual').then(() => this.catalog.syncImages());
+    void this.catalog.sync('manual').then(() => this.catalog.syncImages()).then(() => this.catalog.syncTaxes());
     return { started: true };
   }
 }

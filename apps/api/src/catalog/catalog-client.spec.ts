@@ -29,13 +29,14 @@ describe('item do Catálogo', () => {
       `${BASE}/files/c.webp`, { url: `${BASE}/files/d.webp` }, { url: `${BASE}/files/e.webp` }, { url: `${BASE}/files/f.webp` }, { url: `${BASE}/files/g.webp` },
     ],
     pending: false,
+    tax_origin: 0,
   };
 
   it('vira o item daqui: chave, marca como fabricante, princípios ativos juntos, códigos sem repetir, até 5 imagens do próprio Catálogo', () => {
     const mapped = mapItem(item, BASE);
     expect(mapped).toMatchObject({
       sourceKey: 'catalogo:4622', name: 'Dorflex C/10 Comp', manufacturer: 'Sanofi', activeIngredient: 'dipirona 300 mg + orfenadrina',
-      msRegistration: '1.0300.0085', controlledClass: 'Antimicrobiano', ncm: '30049099', cest: null,
+      msRegistration: '1.0300.0085', controlledClass: 'Antimicrobiano', ncm: '30049099', cest: null, origin: '0',
       barcodes: ['7891058002916', '7891058002923'], pending: false,
       images: [`${BASE}/files/a.webp`, `${BASE}/files/c.webp`, `${BASE}/files/d.webp`, `${BASE}/files/e.webp`, `${BASE}/files/f.webp`],
     });
@@ -106,6 +107,15 @@ describe('cliente HTTP do Catálogo', () => {
     expect(await client(() => new Response('x', { status: 401 })).verify()).toBe('refused');
     expect(await client(() => new Response('x', { status: 403 })).verify()).toBe('suspended');
     await expect(client(() => new Response('x', { status: 500 })).verify()).rejects.toBeInstanceOf(CatalogUnavailable);
+  });
+
+  it('tributação do item no estado: os valores como vêm; 404 é null', async () => {
+    const values = await client(() => Response.json({ product_id: 7, uf: 'SP', values: { cfop: '5405', cst_icms: '60' } })).tax('7', 'SP');
+    expect(values).toEqual({ cfop: '5405', cst_icms: '60' });
+    expect(calls[0]).toMatchObject({ url: `${BASE}/api/v1/products/7/tax?uf=SP`, headers: { 'X-Api-Key': 'cat_segredo' } });
+    expect(await client(() => new Response('{}', { status: 404 })).tax('7', 'SP')).toBeNull();
+    expect(await client(() => Response.json({ uf: 'SP' })).tax('7', 'SP')).toEqual({});
+    await expect(client(() => new Response('x', { status: 401 })).tax('7', 'SP')).rejects.toBeInstanceOf(CatalogUnavailable);
   });
 
   it('código de barras: 404 é null; o código vai codificado', async () => {

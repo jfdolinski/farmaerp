@@ -10,6 +10,7 @@ const WORKER = { worker: 'catalog' };
 const BATCH = 500;
 const SYNC_EVERY_MS = 60 * 60_000;
 const IMAGES_EVERY_MS = 5 * 60_000;
+const TAXES_EVERY_MS = 5 * 60_000;
 const FIRST_SYNC_MS = 60_000;
 
 type SyncResult = 'busy' | 'unchanged' | 'updated' | 'failed' | 'no_key';
@@ -31,6 +32,7 @@ export class CatalogSyncService implements OnApplicationBootstrap, OnModuleDestr
   private url: string | null = catalogUrl();
   private fetcher: Fetcher = fetch;
   private imagesRunning = false;
+  private taxesRunning = false;
 
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
@@ -62,6 +64,7 @@ export class CatalogSyncService implements OnApplicationBootstrap, OnModuleDestr
     later(() => this.sync('schedule'), FIRST_SYNC_MS, false);
     later(() => this.sync('schedule'), SYNC_EVERY_MS, true);
     later(() => this.syncImages(), IMAGES_EVERY_MS, true);
+    later(() => this.syncTaxes(), TAXES_EVERY_MS, true);
   }
 
   onModuleDestroy(): void {
@@ -208,6 +211,51 @@ export class CatalogSyncService implements OnApplicationBootstrap, OnModuleDestr
       }
     } finally {
       this.imagesRunning = false;
+    }
+    return done;
+  }
+
+  /**
+   * Tributação de um lote de itens vinculados, em cada estado onde o grupo tem filial com chave (com a
+   * chave de uma filial dali). O banco monta a regra dos dois regimes e diz o que não fecha.
+   * Devolve quantas buscas foram feitas.
+   */
+  async syncTaxes(limit = 200): Promise<number> {
+    if (!this.url || this.taxesRunning) return 0;
+    this.taxesRunning = true;
+    let done = 0;
+    try {
+      const due = await this.database.withContext(
+        async (db) =>
+          (await db.query<{ catalog_product_id: string; external_id: string; state: string; branch_id: string; encrypted_key: Buffer; item_hash: string }>(
+            'SELECT * FROM app.catalog_tax_due($1)',
+            [limit],
+          )).rows,
+        WORKER,
+      );
+      for (const row of due) {
+        let result: Record<string, unknown>;
+        try {
+          const key = open(row.encrypted_key, keyContext(row.branch_id)).toString('utf8');
+          const values = await this.client(key).tax(row.external_id, row.state);
+          result = values ? { status: 'ok', values } : { status: 'not_found', message: 'O item não está mais no Catálogo.' };
+        } catch (error) {
+          result = {
+            status: 'failed',
+            message: error instanceof CatalogUnavailable ? error.message : 'A chave desta filial não abre. Cadastre a chave de novo em Fiscal, na aba Catálogo.',
+          };
+          this.logger.pino.warn({ context: 'CatalogSyncService', branchId: row.branch_id, err: error }, 'Tributação do Catálogo não veio');
+        }
+        await this.database.withContext(
+          (db) => db.query('SELECT app.catalog_tax_apply($1, $2, $3, $4, $5::jsonb)', [
+            row.catalog_product_id, row.state, row.branch_id, row.item_hash, JSON.stringify(result),
+          ]),
+          WORKER,
+        );
+        done += 1;
+      }
+    } finally {
+      this.taxesRunning = false;
     }
     return done;
   }

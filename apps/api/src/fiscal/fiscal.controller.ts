@@ -50,6 +50,16 @@ export class FiscalController {
     });
   }
 
+  /** Produtos da filial cuja tributação do Catálogo não fechou, com o motivo (até 200). */
+  @Get('branches/:id/catalog-tax-problems')
+  catalogTaxProblems(@Param('id') id: string) {
+    const branchId = requireUuid(id);
+    return this.database.withContext(async (client) => {
+      const { rows } = await client.query('SELECT * FROM app.catalog_tax_problems($1)', [branchId]);
+      return rows;
+    });
+  }
+
   @Get('nfce')
   nfce() {
     return this.database.withContext(async (client) => {

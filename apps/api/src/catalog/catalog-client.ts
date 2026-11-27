@@ -33,6 +33,7 @@ export interface ExternalItem {
   images?: unknown;
   pending?: unknown;
   active?: unknown;
+  tax_origin?: unknown;
 }
 
 /** Item no formato que o banco grava (app.catalog_sync_apply). */
@@ -48,6 +49,8 @@ export interface MappedItem {
   barcodes: string[];
   pending: boolean;
   images: string[];
+  /** Origem do produto para a tributação (0 a 8), como o Catálogo guarda. */
+  origin: string | null;
   hash: string;
 }
 
@@ -97,6 +100,7 @@ export function mapItem(item: ExternalItem, baseUrl: string): MappedItem | null 
     barcodes: [...new Set(barcodes)],
     pending: item.pending === true,
     images,
+    origin: text(item.tax_origin),
   };
   return { ...mapped, hash: createHash('sha256').update(JSON.stringify(mapped)).digest('hex') };
 }
@@ -161,6 +165,20 @@ export class CatalogClient {
     if (response.status === 403) return 'suspended';
     if (!response.ok) throw refused(response.status);
     return 'ok';
+  }
+
+  /**
+   * Tributação do item num estado (rota que não cadastra código desconhecido). Item que não está
+   * mais lá: null. Os valores vêm como o Catálogo guarda (cfop, cst_icms, icms_rate...).
+   */
+  async tax(externalId: string, uf: string): Promise<Record<string, unknown> | null> {
+    const path = `/api/v1/products/${encodeURIComponent(externalId)}/tax?uf=${encodeURIComponent(uf)}`;
+    const response = await this.call(path, { headers: this.headers() }, 15_000);
+    if (response.status === 404) return null;
+    if (!response.ok) throw refused(response.status);
+    const body = record(await response.json().catch(() => null));
+    const values = record(body.values);
+    return values;
   }
 
   /** Um código de barras. Desconhecido lá vira cadastro pendente; código inválido ou inativo: null. */

@@ -88,10 +88,10 @@ describe('tributação do produto contra o banco real', () => {
     await call('get', '/admin/products/nao-e-id/tax').expect(422);
   });
 
-  it('a cobertura traz só totais, e o Gerente vê as filiais dele', async () => {
+  it('a cobertura traz só totais (com a situação do Catálogo), e o Gerente vê as filiais dele', async () => {
     const admin = (await call('get', '/admin/fiscal/tax-coverage').expect(200)).body as Json[];
     const centro = admin.find((row) => row.branch_id === CENTRO) as Json;
-    expect(Object.keys(centro).sort()).toEqual(['branch_id', 'products_missing', 'products_total']);
+    expect(Object.keys(centro).sort()).toEqual(['branch_id', 'catalog_problems', 'catalog_waiting', 'has_catalog_key', 'products_missing', 'products_total']);
     expect(Number(centro.products_total)).toBeGreaterThan(0);
     const manager = (await call('get', '/admin/fiscal/tax-coverage', MANAGER).expect(200)).body as Json[];
     expect(manager.map((row) => row.branch_id)).toEqual([CENTRO]);
