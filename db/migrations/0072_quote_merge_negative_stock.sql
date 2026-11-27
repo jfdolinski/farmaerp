@@ -27,6 +27,20 @@ CREATE INDEX sale_item_quote_idx ON sale_item (quote_id);
 UPDATE sale_item i SET seller_id = s.seller_id, quote_id = s.quote_id
   FROM sale s WHERE s.id = i.sale_id AND (s.seller_id IS NOT NULL OR s.quote_id IS NOT NULL);
 
+-- As colunas novas também não mudam depois de gravadas (como as da venda e do orçamento).
+DROP TRIGGER block_immutable_columns ON sale_item;
+CREATE TRIGGER block_immutable_columns BEFORE UPDATE ON sale_item
+  FOR EACH ROW EXECUTE FUNCTION app.block_immutable_columns(
+    'economic_group_id', 'sale_id', 'line', 'product_id', 'barcode_id', 'quantity', 'unit_price', 'central_price',
+    'discount', 'total', 'batch_id', 'auto_discount', 'seller_id', 'quote_id'
+  );
+DROP TRIGGER block_immutable_columns ON quote_item;
+CREATE TRIGGER block_immutable_columns BEFORE UPDATE ON quote_item
+  FOR EACH ROW EXECUTE FUNCTION app.block_immutable_columns(
+    'economic_group_id', 'quote_id', 'line', 'product_id', 'quantity', 'unit_price', 'discount', 'total',
+    'released_by', 'release_reason', 'stock_released_by', 'stock_release_balance'
+  );
+
 CREATE OR REPLACE FUNCTION app.sync_apply_quote(p_terminal public.terminal, p_group_id uuid, p_payload jsonb)
 RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER

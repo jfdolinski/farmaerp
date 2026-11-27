@@ -195,6 +195,29 @@ describe('orçamentos juntados no caixa', () => {
     }
   });
 
+  it('o vendedor e o orçamento do item, e a liberação do orçamento, não mudam depois de gravados', async () => {
+    const q = quote(clerk, [item({ zero_stock_release: { supervisor_id: manager.id, stock: -1 } })]);
+    await push([['quote', q]]);
+    const s = sale([item({ seller_id: clerk.id, quote_id: q.id })]);
+    await push([['sale', s]]);
+    await expect(ownerPool.query('UPDATE sale_item SET seller_id = NULL WHERE sale_id = $1', [s.id])).rejects.toSatisfy(hasCode('FA104'));
+    await expect(ownerPool.query('UPDATE sale_item SET quote_id = NULL WHERE sale_id = $1', [s.id])).rejects.toSatisfy(hasCode('FA104'));
+    await expect(ownerPool.query('UPDATE quote_item SET stock_released_by = NULL WHERE quote_id = $1', [q.id])).rejects.toSatisfy(hasCode('FA104'));
+    await expect(ownerPool.query('UPDATE quote_item SET stock_release_balance = 5 WHERE quote_id = $1', [q.id])).rejects.toSatisfy(hasCode('FA104'));
+  });
+
+  it('venda juntada cancelada: os dois orçamentos voltam a ficar abertos', async () => {
+    const first = quote(clerk, [item()]);
+    const second = quote(manager, [item()]);
+    await push([['quote', first], ['quote', second]]);
+    const merged = sale([item({ seller_id: clerk.id, quote_id: first.id }), item({ line: 2, seller_id: manager.id, quote_id: second.id })],
+      { seller_id: clerk.id, quote_id: first.id });
+    await push([['sale', merged]]);
+    await ownerPool.query("SELECT app.cancel_sale_effects(s, $2, 'Cliente desistiu da compra') FROM sale s WHERE s.id = $1", [merged.id, a.admin.id]);
+    expect(await quoteRow(first.id)).toEqual({ status: 'open', converted_sale_id: null });
+    expect(await quoteRow(second.id)).toEqual({ status: 'open', converted_sale_id: null });
+  });
+
   it('orçamento do item que já virou outra venda: a venda vale e fica o alerta', async () => {
     const used = quote(clerk, [item()]);
     await push([['quote', used]]);
