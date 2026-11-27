@@ -60,6 +60,7 @@ async function CustomersContent({ searchParams }: { searchParams: SearchParams }
       <div className={styles.header}>
         <h1>Clientes</h1>
         <div className={styles.nav}>
+          <Link href="/clientes/curva-abc">Curva ABC</Link>
           {can(user, "agreements.manage") && <Link href="/convenios">Convênios</Link>}
           {canManage && <Link href="/clientes/novo">Novo cliente</Link>}
         </div>

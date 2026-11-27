@@ -96,6 +96,9 @@ async function CustomerContent({ params }: { params: Params }) {
   const canAgree = can(user, "agreements.manage");
   const agreements = canAgree ? await apiFetch<AgreementRow[]>("/admin/agreements") : null;
   const groups = await apiFetch<{ id: string; name: string }[]>("/admin/customer-groups");
+  const curves = await apiFetch<{ branch_id: string; branch_name: string; curve: string; sales_count: number; calculated_at: string }[]>(
+    `/admin/abc/customers/${encodeURIComponent(customer.id)}`,
+  );
   const available = agreements?.ok
     ? agreements.data.filter((agreement) => !customer.agreements.some((link) => link.agreement_id === agreement.id))
     : [];
@@ -127,6 +130,27 @@ async function CustomerContent({ params }: { params: Params }) {
             <Link href={`/vendas-importadas?cliente=${customer.id}`}>Ver todas as vendas importadas deste cliente</Link>
           </p>
         )}
+      </section>
+
+      <section className={styles.card}>
+        <h2>Curva ABC</h2>
+        {!curves.ok && <ErrorNotice error={curves.error} />}
+        {curves.ok && curves.data.length === 0 && (
+          <p className={styles.hint}>Ainda sem curva: o cliente entra na curva da filial no próximo recálculo depois da primeira compra.</p>
+        )}
+        {curves.ok && curves.data.length > 0 && (
+          <ul className={styles.bullets}>
+            {curves.data.map((row) => (
+              <li key={row.branch_id}>
+                {row.branch_name}: <strong>curva {row.curve}</strong> ({row.sales_count}{" "}
+                {row.sales_count === 1 ? "venda" : "vendas"} no período, calculado em {moment(row.calculated_at)})
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className={styles.hint}>
+          <Link href="/clientes/curva-abc">Ver a curva ABC da filial</Link>
+        </p>
       </section>
 
       <section className={styles.card}>

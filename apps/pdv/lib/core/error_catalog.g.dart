@@ -820,6 +820,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Peça a quem tem "Vender com estoque negativo" para liberar (botão Liberar estoque negativo) ou tire os itens.',
     retryable: false,
   ),
+  'FA761': ErrorCatalogEntry(
+    code: 'FA761',
+    message: 'Os parâmetros da curva ABC são inválidos.',
+    action: 'Use período de 7 a 730 dias, recálculo de 1 a 365 dias e a quantidade da curva A maior que a da B.',
+    retryable: false,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',
