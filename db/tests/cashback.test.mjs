@@ -86,7 +86,12 @@ const newCustomer = async (consent = true) => {
   const id = (await call(a.admin, 'SELECT app.create_customer($1::jsonb) AS id', [JSON.stringify({
     personType: 'individual', document: cpf(), name: `Cliente cashback ${tag()}`,
   })]))[0].id;
-  if (consent) await call(a.admin, "SELECT app.record_customer_consent($1, 'cashback', true, 'store')", [id]);
+  if (consent) {
+    await call(a.admin, "SELECT app.record_customer_consent($1, 'cashback', true, 'store')", [id]);
+    // O consentimento fica com a hora do banco (microssegundos) e a venda com a do teste (milissegundos,
+    // truncados): sem esperar, a venda pode cair antes do consentimento e não ganhar cashback.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
   return id;
 };
 const balance = async (customerId) => (await ownerPool.query('SELECT app.cashback_balance($1) AS b', [customerId])).rows[0].b;
