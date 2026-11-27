@@ -299,7 +299,8 @@
       "purchase_return_item_id_uuid_v7_check",
       "central_nfe_id_uuid_v7_check",
       "central_nfe_series_id_uuid_v7_check",
-      "purchase_return_tax_setting_id_uuid_v7_check"
+      "purchase_return_tax_setting_id_uuid_v7_check",
+      "product_catalog_event_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -937,7 +938,12 @@
       "product_fraction_quantity_check",
       "product_barcode_fraction_quantity_check",
       "product_group_kind_check",
-      "product_manufacturer_source_check"
+      "product_manufacturer_source_check",
+      "product_catalog_event_kind_check",
+      "product_catalog_event_source_check",
+      "product_catalog_event_query_check",
+      "product_catalog_event_result_count_check",
+      "product_catalog_event_shape_check"
     ]
   },
   "FA610": {

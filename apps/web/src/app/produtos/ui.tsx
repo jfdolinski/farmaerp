@@ -263,14 +263,27 @@ function ProductFields({
   );
 }
 
+/** Como o item do Catálogo foi achado no cadastro novo: vai para a auditoria do produto. */
+export interface CatalogOrigin {
+  source: "manual" | "barcode";
+  kind: "search" | "lookup";
+  query: string;
+  resultCount: number;
+}
+
 export function CreateProductForm({
   values,
   catalogBarcodes,
   structure,
+  origin,
+  barcode = "",
 }: {
   values: ProductValues;
   catalogBarcodes: string[];
   structure: ProductStructure;
+  origin?: CatalogOrigin | null;
+  /** Código já lido na busca automática, para o cadastro sem Catálogo. */
+  barcode?: string;
 }) {
   const [state, action, pending] = useActionState<ProductFormState, FormData>(
     createProduct,
@@ -282,6 +295,14 @@ export function CreateProductForm({
     <form action={action} onSubmit={keepValues(action)} className={styles.stack}>
       {hasCatalog && (
         <input type="hidden" name="catalogProductId" value={values.catalog_product_id ?? ""} />
+      )}
+      {hasCatalog && origin && (
+        <>
+          <input type="hidden" name="catalogSource" value={origin.source} />
+          <input type="hidden" name="lookupKind" value={origin.kind} />
+          <input type="hidden" name="lookupQuery" value={origin.query} />
+          <input type="hidden" name="lookupCount" value={origin.resultCount} />
+        </>
       )}
       <ProductFields values={values} structure={structure} hasCatalog={hasCatalog} />
       <div className={styles.inline}>
@@ -300,7 +321,7 @@ export function CreateProductForm({
           <>
             <label>
               Código de barras principal
-              <input name="barcode" required maxLength={30} />
+              <input name="barcode" required maxLength={30} defaultValue={barcode} />
             </label>
             <label className={styles.check}>
               <input type="checkbox" name="barcodeIsInternal" />
@@ -330,11 +351,14 @@ export function EditProductForm({
   structure,
   canManage,
   linkingTo,
+  linkSource,
 }: {
   values: ProductValues;
   structure: ProductStructure;
   canManage: boolean;
   linkingTo?: string | null;
+  /** O vínculo veio da busca automática pelo código de barras. */
+  linkSource?: "manual" | "barcode";
 }) {
   const [state, action, pending] = useActionState<ProductFormState, FormData>(
     updateProduct,
@@ -347,6 +371,7 @@ export function EditProductForm({
       <input type="hidden" name="id" value={values.id} />
       <input type="hidden" name="catalogProductId" value={catalogId} />
       {linkingTo && <input type="hidden" name="linking" value="1" />}
+      {linkingTo && <input type="hidden" name="catalogSource" value={linkSource ?? "manual"} />}
       <ProductFields
         values={values}
         structure={structure}
