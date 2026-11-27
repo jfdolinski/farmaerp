@@ -224,6 +224,43 @@ describe('descida para o PDV contra o banco real', () => {
       .toMatchObject({ code: 'FA006' });
   });
 
+  it('pessoa jurídica cadastrada no caixa: endereço completo e inscrição; a consulta do CNPJ confere antes de sair', async () => {
+    const auth = (call: request.Test) => call.set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`);
+    const operatorId = '019a0000-0000-7000-8000-000000000009';
+    // CNPJ com dígitos certos, gerado ao acaso (não é de ninguém de propósito).
+    const root = `${String(randomInt(10_000_000, 100_000_000))}0001`;
+    const digit = (value: string) => {
+      const weights = value.length === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+      const rest = value.split('').reduce((sum, c, index) => sum + Number(c) * weights[index], 0) % 11;
+      return rest < 2 ? 0 : 11 - rest;
+    };
+    const cnpj = `${root}${digit(root)}${digit(`${root}${digit(root)}`)}`;
+    const company = {
+      operatorId, personType: 'company', name: 'Empresa Fictícia Ltda', tradeName: 'Fictícia', document: cnpj, stateRegistration: '110042490114',
+      ieIndicator: '1', email: 'compras@exemplo.test', postalCode: '01001000', street: 'Praça da Sé', streetNumber: '100', district: 'Sé',
+      city: 'São Paulo', cityCode: '3550308', state: 'SP',
+    };
+    expect((await auth(request(server()).post('/terminals/customers')).send({ ...company, streetNumber: '' }).expect(422)).body)
+      .toMatchObject({ code: 'FA904' });
+    expect((await auth(request(server()).post('/terminals/customers')).send({ ...company, ieIndicator: '12' }).expect(422)).body)
+      .toMatchObject({ code: 'FA904' });
+    expect((await auth(request(server()).post('/terminals/customers')).send({ ...company, stateRegistration: 'ISENTO' }).expect(422)).body)
+      .toMatchObject({ code: 'FA964' });
+    const created = (await auth(request(server()).post('/terminals/customers')).send(company).expect(201)).body as Json;
+    expect(created.data).toMatchObject({
+      person_type: 'company', document: cnpj, trade_name: 'Fictícia', state_registration: '110042490114', ie_indicator: 1, city_code: '3550308',
+    });
+
+    // Consulta do CNPJ: número errado e operador sem permissão param aqui, sem chamar os serviços de fora.
+    expect((await auth(request(server()).post('/terminals/customers/cnpj')).send({ operatorId, cnpj: '11.111.111/1111-11' }).expect(422)).body)
+      .toMatchObject({ code: 'FA902' });
+    expect((await auth(request(server()).post('/terminals/customers/cnpj')).send({ operatorId, cnpj: 123 }).expect(422)).body)
+      .toMatchObject({ code: 'FA902' });
+    expect((await auth(request(server()).post('/terminals/customers/cnpj')).send({ operatorId: uuidV7(), cnpj }).expect(403)).body)
+      .toMatchObject({ code: 'FA002' });
+    expect((await auth(request(server()).post('/terminals/customers/cnpj')).send({ cnpj }).expect(422)).body).toMatchObject({ code: 'FA005' });
+  });
+
   it('clientes: busca mascarada, escolha completa, descida acompanhada e situação na retaguarda', async () => {
     const auth = (call: request.Test) => call.set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`);
     const found = (await auth(request(server()).post('/terminals/customers/search')).send({ query: 'demonstra' }).expect(200)).body as Json[];

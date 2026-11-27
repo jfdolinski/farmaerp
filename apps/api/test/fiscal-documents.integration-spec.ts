@@ -16,6 +16,7 @@ import { AppLogger, createPinoLogger } from './../src/observability/app-logger.j
 import { challengeMessage, pairingProofMessage } from './../src/terminals/terminal-crypto.js';
 import { localhostCertificate } from './fake-tls.js';
 import { buildPfx } from './fiscal-pfx.js';
+import { saleNfe } from './nfe-fixture.js';
 
 const ADMIN_EMAIL = 'admin@farmaerp.test';
 const OPERATOR_EMAIL = 'operador@farmaerp.test';
@@ -23,6 +24,7 @@ const DEV_PASSWORD = 'farmaerp-dev-123';
 const CENTRO = '019a0000-0000-7000-8000-000000000005';
 const DIPIRONA = '019a0000-0000-7000-8000-000000000027';
 const OPERATOR_ID = '019a0000-0000-7000-8000-000000000009';
+const DEMO_CUSTOMER = '019a0000-0000-7000-8000-000000000032';
 const PFX_PASSWORD = 'senha-do-pfx-da-nfce';
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -49,6 +51,7 @@ describe('notas fiscais pela central contra o banco real', () => {
   let sefaz: Server;
   let token: string;
   let series: number;
+  let series55: number;
   let sessionId: string;
   const sessions = new Map<string, string>();
   const ip = `10.${randomInt(255)}.${randomInt(255)}.${randomInt(255)}`;
@@ -156,6 +159,7 @@ describe('notas fiscais pela central contra o banco real', () => {
     const fiscal = ((await request(server()).post('/terminals/sync/pull').set('X-Forwarded-For', ip).set('Authorization', `Bearer ${token}`).send({ cursor: null }).expect(200)).body as Json)
       .items.find((item: Json) => item.type === 'fiscal')?.data as Json;
     series = (fiscal.series as Json[]).find((row) => row.model === '65')?.series as number;
+    series55 = (fiscal.series as Json[]).find((row) => row.model === '55')?.series as number;
     sessionId = uuidV7();
     await push([{ kind: 'cash_session_open', payload: { id: sessionId, operator_id: OPERATOR_ID, opened_at: new Date().toISOString(), opening_float: 0 } }]).expect(200);
   });
@@ -318,5 +322,46 @@ describe('notas fiscais pela central contra o banco real', () => {
     } finally {
       eventStatus = '135';
     }
+  });
+
+  it('NF-e de venda (55) do caixa: lista com o modelo, XML e DANFE A4 para baixar; reenvio, consulta e cancelamento recusados', async () => {
+    const saleId = uuidV7();
+    const number = base + numberOffset++;
+    expect((await push([{ kind: 'sale', payload: {
+      id: saleId, number, cash_session_id: sessionId, operator_id: OPERATOR_ID, customer_id: DEMO_CUSTOMER, sold_at: new Date().toISOString(), fiscal_model: '55',
+      items: [{ id: uuidV7(), line: 1, product_id: DIPIRONA, quantity: 1, unit_price: 12.9, discount: 0, total: 12.9 }],
+      payments: [{ id: uuidV7(), method: 'cash', amount: 12.9, change: 0 }], subtotal: 12.9, discount_total: 0, total: 12.9,
+    } }]).expect(200)).body.results[0]).toMatchObject({ status: 'applied' });
+    const nfe = saleNfe({ series: series55, number });
+    const id = uuidV7();
+    expect((await push([{ kind: 'nfce', payload: {
+      id, model: '55', sale_id: saleId, series: series55, number, access_key: nfe.key, environment: 2, emission_type: 1, status: 'authorized',
+      protocol: '135260000000124', status_code: '100', reason: 'Autorizado o uso da NF-e', xml: nfe.xml,
+      emitted_at: new Date().toISOString(), authorized_at: new Date().toISOString(),
+    } }]).expect(200)).body.results[0]).toMatchObject({ status: 'applied' });
+
+    const listed = ((await admin('get', '/fiscal-documents').expect(200)).body as Json[]).find((row) => row.id === id);
+    expect(listed).toMatchObject({ model: '55', series: series55, cancelable_until: null });
+    const xml = await admin('get', `/fiscal-documents/${id}/xml`).expect(200);
+    expect(xml.headers['content-disposition']).toContain(`NFe-${nfe.key}.xml`);
+    const danfe = await admin('get', `/fiscal-documents/${id}/danfe`).buffer(true).parse((res, done) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk: Buffer) => chunks.push(chunk));
+      res.on('end', () => done(null, Buffer.concat(chunks)));
+    }).expect(200);
+    expect(danfe.headers['content-type']).toContain('application/pdf');
+    expect((danfe.body as Buffer).subarray(0, 5).toString()).toBe('%PDF-');
+
+    const before = received.length;
+    expect(codeOf(await admin('post', `/fiscal-documents/${id}/resend`).expect(422))).toBe('FA780');
+    expect(codeOf(await admin('post', `/fiscal-documents/${id}/consult`).expect(422))).toBe('FA780');
+    expect(codeOf(await admin('post', `/fiscal-documents/${id}/cancel`).send({ reason: 'Cliente desistiu da compra' }).expect(422))).toBe('FA780');
+    // Nada foi à Sefaz.
+    expect(received.length).toBe(before);
+
+    // A NFC-e não tem DANFE A4 aqui (o cupom sai no caixa).
+    const note = await saleWithNote({});
+    expect(codeOf(await admin('get', `/fiscal-documents/${note.id}/danfe`).expect(404))).toBe('FA006');
+    expect((await admin('get', `/fiscal-documents/${note.id}/xml`).expect(200)).headers['content-disposition']).toContain('NFCe-');
   });
 });
