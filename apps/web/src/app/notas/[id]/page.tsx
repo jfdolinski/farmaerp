@@ -19,6 +19,7 @@ import {
   STATUS_LABELS,
   CONFIRMATION_LABELS,
 } from "../format";
+import { ReturnsSection, type Returns } from "./returns";
 import { BatchForm, CancelForm, DiscardForm, FractionForm, ItemActions, PostForm, ReleaseCostForm, ReverseForm } from "../ui";
 import {
   AuditEntry,
@@ -116,6 +117,7 @@ interface InvoiceDetail {
   can_negative_stock: boolean;
   cancel_reason: string | null;
   cancelled_by_name: string | null;
+  returns: Returns;
   source: string;
   confirmation: string;
   confirmation_required: boolean;
@@ -378,6 +380,17 @@ async function InvoiceContent({ params }: { params: Params }) {
             unit: item.unit,
             ...batch,
           })),
+        )}
+      />
+
+      <ReturnsSection
+        invoiceId={invoice.id}
+        data={invoice.returns}
+        values={Object.fromEntries(
+          invoice.items.map((item) => [
+            item.id,
+            { products: Number(item.products_value), entered: Number(item.posting?.stock_quantity ?? 0) },
+          ]),
         )}
       />
 

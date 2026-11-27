@@ -54,6 +54,18 @@ function batchList(body: Body): unknown[] {
   });
 }
 
+/** Itens da devolução: só confere o formato; o banco confere o resto. */
+function returnItems(body: Body): unknown[] {
+  const value = body.items;
+  if (!Array.isArray(value) || value.length === 0 || value.length > 500) throw new AppError('FA005');
+  return value.map((entry: unknown) => {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) throw new AppError('FA005');
+    const item = entry as Body;
+    if (typeof item.quantity !== 'number' || !Number.isFinite(item.quantity)) throw new AppError('FA005');
+    return { itemId: requireUuid(item.itemId), quantity: item.quantity, batchId: optionalUuid(item, 'batchId') };
+  });
+}
+
 function optionalBoolean(body: Body, field: string): boolean | null {
   const value = body[field];
   if (value === undefined || value === null) return null;
@@ -156,6 +168,8 @@ export class PurchaseInvoicesController {
       );
       // Conteúdo completo do XML, duplicatas e auditoria (lançada, estornada e as alterações).
       const extra = await client.query<{ x: Record<string, unknown> | null }>('SELECT app.purchase_invoice_extra($1) AS x', [invoiceId]);
+      // Devolução ao fornecedor: saldo de cada item (e lote) e as devoluções feitas.
+      const returns = await client.query<{ x: Record<string, unknown> | null }>('SELECT app.purchase_invoice_returns($1) AS x', [invoiceId]);
       return {
         ...rows[0],
         items: items.rows.map((item) => ({ ...item, posting: byItem.get(item.id) ?? null })),
@@ -165,6 +179,7 @@ export class PurchaseInvoicesController {
         content_error: extra.rows[0]?.x?.content_error ?? null,
         installments: extra.rows[0]?.x?.installments ?? [],
         audit: extra.rows[0]?.x?.audit ?? [],
+        returns: returns.rows[0]?.x ?? { can_return: false, items: [], returns: [] },
       };
     });
   }
@@ -202,6 +217,19 @@ export class PurchaseInvoicesController {
   }
 
   /** Cancela a nota: lançada, sai do estoque; fica guardada como cancelada. */
+  /** Devolve itens da nota lançada ao fornecedor (espelho da nota). O banco confere saldo, lote e estoque. */
+  @Post('purchase-invoices/:id/returns')
+  async returnItems(@Param('id') id: string, @RequestBody() rawBody: unknown) {
+    const invoiceId = requireUuid(id);
+    const body = asBody(rawBody);
+    const items = returnItems(body);
+    const reason = optionalText(body, 'reason', 500);
+    const { rows } = await this.database.withContext((client) =>
+      client.query<{ id: string }>('SELECT app.return_purchase_items($1, $2::jsonb, $3) AS id', [invoiceId, JSON.stringify(items), reason]),
+    );
+    return { id: rows[0].id };
+  }
+
   @Post('purchase-invoices/:id/cancel')
   @HttpCode(200)
   async cancel(@Param('id') id: string, @RequestBody() rawBody: unknown) {

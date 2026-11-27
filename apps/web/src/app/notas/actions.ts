@@ -161,6 +161,37 @@ export async function changeItemFraction(_previous: ItemFormState, form: FormDat
   return { done: true, notice: "Fracionamento alterado. O estoque e o custo foram acertados." };
 }
 
+/** Devolução ao fornecedor: cada campo "q:<item>:<lote>" preenchido vira uma linha. */
+export async function returnToSupplier(_previous: ItemFormState, form: FormData): Promise<ItemFormState> {
+  const id = text(form, "id");
+  const items: { itemId: string; quantity: number; batchId: string | null }[] = [];
+  for (const [field, raw] of form.entries()) {
+    if (!field.startsWith("q:")) continue;
+    const value = String(raw).trim();
+    if (value === "") continue;
+    const quantity = Number(value.replace(",", "."));
+    const [, itemId, batchId] = field.split(":");
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      return {
+        error: { code: "FA005", message: "Informe as quantidades com números, maiores que zero.", action: "Exemplo: 2 ou 0,5.", traceId: null, retryable: false },
+      };
+    }
+    items.push({ itemId, quantity, batchId: batchId || null });
+  }
+  if (items.length === 0) {
+    return {
+      error: { code: "FA005", message: "Informe a quantidade de pelo menos um item.", action: "Preencha a coluna Devolver agora.", traceId: null, retryable: false },
+    };
+  }
+  const result = await apiFetch<{ id: string }>(`/admin/purchase-invoices/${encodeURIComponent(id)}/returns`, {
+    method: "POST",
+    body: { items, reason: text(form, "reason") },
+  });
+  if (!result.ok) return failure(result.error, `/notas/${id}`);
+  refresh();
+  return { done: true, notice: "Devolução registrada. O estoque e o custo foram acertados." };
+}
+
 /** Lotes digitados: cada linha do formulário vira um lote; linha toda vazia é ignorada. */
 export async function saveItemBatches(_previous: ItemFormState, form: FormData): Promise<ItemFormState> {
   const itemId = text(form, "itemId");

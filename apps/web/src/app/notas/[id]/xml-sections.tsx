@@ -442,6 +442,8 @@ export function auditText(entry: AuditEntry): string {
       return `Nota cancelada${d.reason ? `: ${text(d.reason)}` : ""}`;
     case "fraction_changed":
       return `${item}: fracionamento de ${quantityText(text(d.from))} para ${quantityText(text(d.to))} (estoque de ${quantityText(text(d.stock_from))} para ${quantityText(text(d.stock_to))})${d.reason ? `: ${text(d.reason)}` : ""}`;
+    case "returned":
+      return `${text(d.number)}ª devolução ao fornecedor: ${text(d.items)} ${d.items === 1 ? "item" : "itens"}, ${moneyText(text(d.total))}${d.reason ? ` (${text(d.reason)})` : ""}`;
     case "discarded":
       return `Nota descartada${d.reason ? `: ${text(d.reason)}` : ""}`;
     default:

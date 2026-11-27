@@ -173,6 +173,32 @@ describe('notas de compra contra o banco real', () => {
     expect(codeOf(await call('post', `/admin/purchase-invoices/${randomUUID()}/cancel`).send({ reason: 'x' }).expect(404))).toBe('FA006');
   });
 
+  it('devolve ao fornecedor como espelho da nota; depois a nota não se estorna', async () => {
+    const nfe = buildNfe({ destCnpj: CENTRO_CNPJ, items: [{ code: `P-${randomInt(1e9)}`, ean: testGtin(), quantity: '4.0000', value: '40.00', description: 'ITEM PARA DEVOLVER' }] });
+    const id = ((await send(nfe.xml).expect(201)).body as Json).id as string;
+    const [item] = ((await call('get', `/admin/purchase-invoices/${id}`).expect(200)).body as Json).items as Json[];
+    await call('post', `/admin/purchase-invoice-items/${item.id}/duplicate`).send({ sourceProductId: DIPIRONA }).expect(201);
+    await call('post', `/admin/purchase-invoices/${id}/post`).expect(200);
+
+    const before = (await call('get', `/admin/purchase-invoices/${id}`).expect(200)).body as Json;
+    expect(before.returns).toMatchObject({ can_return: true, returns: [] });
+    expect(before.returns.items[0]).toMatchObject({ item_id: item.id, entered: 4, returned: 0, available: 4 });
+
+    const path = `/admin/purchase-invoices/${id}/returns`;
+    expect(codeOf(await call('post', path).send({ items: 'x', reason: 'Avaria' }).expect(422))).toBe('FA005');
+    expect(codeOf(await call('post', path).send({ items: [{ itemId: item.id, quantity: '1' }], reason: 'Avaria' }).expect(422))).toBe('FA005');
+    expect(codeOf(await call('post', path, OPERATOR).send({ items: [{ itemId: item.id, quantity: 1 }], reason: 'Avaria' }).expect(403))).toBe('FA002');
+    expect(codeOf(await call('post', path).send({ items: [{ itemId: item.id, quantity: 9 }], reason: 'Avaria' }).expect(409))).toBe('FA768');
+    const created = (await call('post', path).send({ items: [{ itemId: item.id, quantity: 1 }], reason: 'Avaria na entrega' }).expect(201)).body as Json;
+    expect(created.id).toEqual(expect.any(String));
+
+    const after = (await call('get', `/admin/purchase-invoices/${id}`).expect(200)).body as Json;
+    expect(after.returns.items[0]).toMatchObject({ returned: 1, available: 3 });
+    expect(after.returns.returns[0]).toMatchObject({ number: 1, reason: 'Avaria na entrega', total_value: 10, user_name: expect.any(String) });
+    expect(after.audit[0]).toMatchObject({ kind: 'returned' });
+    expect(codeOf(await call('post', `/admin/purchase-invoices/${id}/reverse`).send({ reason: 'Errada' }).expect(409))).toBe('FA767');
+  });
+
   it('identificadores e filtros inválidos', async () => {
     await call('get', '/admin/purchase-invoices?status=x').expect(422);
     await call('get', '/admin/purchase-invoices?status=posted').expect(200);

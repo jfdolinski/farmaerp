@@ -856,6 +856,30 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Escolha uma unidade da lista.',
     retryable: false,
   ),
+  'FA767': ErrorCatalogEntry(
+    code: 'FA767',
+    message: 'Esta nota tem devolução ao fornecedor e não pode mais ser estornada, cancelada nem ter o fracionamento alterado.',
+    action: 'Para corrigir a entrada, fale com o suporte.',
+    retryable: false,
+  ),
+  'FA768': ErrorCatalogEntry(
+    code: 'FA768',
+    message: 'A quantidade passa do que ainda pode ser devolvido deste item.',
+    action: 'Confira o saldo do item (e do lote) na tela da nota.',
+    retryable: false,
+  ),
+  'FA769': ErrorCatalogEntry(
+    code: 'FA769',
+    message: 'Esta unidade só aceita quantidade inteira.',
+    action: 'Informe a quantidade sem casas decimais.',
+    retryable: false,
+  ),
+  'FA770': ErrorCatalogEntry(
+    code: 'FA770',
+    message: 'Escolha um lote que entrou por este item da nota.',
+    action: 'Escolha o lote na lista do item.',
+    retryable: false,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',
