@@ -11,6 +11,8 @@ dependencies:
   ffi: 2.2.0
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   flutter_lite_camera: 0.2.4
   flutter_onnxruntime: 1.9.1
   flutter_secure_storage: ^11.2.0

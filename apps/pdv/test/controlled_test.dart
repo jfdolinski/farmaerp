@@ -583,6 +583,41 @@ void main() {
       expect(controller.paying, isTrue);
     });
 
+    testWidgets('janela da receita: Enter passa de campo em campo, na ordem da tela', (tester) async {
+      await tester.runAsync(ready);
+      controller.scan('7890000000055');
+      await pump(tester);
+      controller.startPayment();
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('controlled-open')));
+      await tester.pumpAndSettle();
+      bool hasFocus(Finder finder) => tester
+          .widget<EditableText>(find.descendant(of: finder, matching: find.byType(EditableText), matchRoot: true))
+          .focusNode
+          .hasFocus;
+      await tester.tap(find.byKey(const Key('rx-number')));
+      await tester.pump();
+      for (final next in [
+        find.byKey(const Key('rx-date')),
+        find.byKey(const Key('rx-prescriber-search')),
+        find.byKey(const Key('rx-prescriberName')),
+      ]) {
+        await tester.testTextInput.receiveAction(TextInputAction.next);
+        await tester.pump();
+        expect(hasFocus(next), isTrue, reason: 'deveria ir para $next');
+      }
+      // A data digitada só com números já entra formatada.
+      await tester.enterText(find.byKey(const Key('rx-date')), '20112026');
+      expect(tester.widget<EditableText>(find.descendant(of: find.byKey(const Key('rx-date')), matching: find.byType(EditableText))).controller.text,
+          '20/11/2026');
+      // O comprador: do nome vai para o tipo de documento (lista de escolha).
+      await tester.tap(find.byKey(const Key('rx-buyerName')));
+      await tester.pump();
+      await tester.testTextInput.receiveAction(TextInputAction.next);
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus!.context!.findAncestorWidgetOfExactType<DropdownButton<String>>(), isNotNull);
+    });
+
     testWidgets('segundo controlado: o botão traz a receita do primeiro', (tester) async {
       await tester.runAsync(ready);
       controller.scan('7890000000055');
@@ -597,7 +632,10 @@ void main() {
       await tester.tap(find.byKey(const Key('rx-reuse-0')));
       await tester.pumpAndSettle();
       expect(findTextContaining('A notificação vale para um só medicamento'), findsOneWidget);
-      String text(String name) => tester.widget<TextField>(find.byKey(Key('rx-$name'))).controller!.text;
+      String text(String name) => tester
+          .widget<EditableText>(find.descendant(of: find.byKey(Key('rx-$name')), matching: find.byType(EditableText), matchRoot: true))
+          .controller
+          .text;
       expect([text('prescriberName'), text('prescriberNumber'), text('buyerDocument'), text('number'), text('date')],
           ['Dra. Fictícia', '123456', '123456789', '', '']);
     });
@@ -613,7 +651,10 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('rx-prescriber-0')));
       await tester.pumpAndSettle();
-      String text(String name) => tester.widget<TextField>(find.byKey(Key('rx-$name'))).controller!.text;
+      String text(String name) => tester
+          .widget<EditableText>(find.descendant(of: find.byKey(Key('rx-$name')), matching: find.byType(EditableText), matchRoot: true))
+          .controller
+          .text;
       expect([text('prescriberName'), text('prescriberNumber'), text('prescriberState')], ['Dra. Fictícia Antônia', '012345', 'SP']);
       // Já cadastrado: sem o botão de cadastrar.
       expect(find.byKey(const Key('rx-prescriber-save')), findsNothing);

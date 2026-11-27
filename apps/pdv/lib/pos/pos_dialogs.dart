@@ -10,6 +10,8 @@ import '../face/face_widgets.dart';
 import '../local/local_database.dart';
 import '../terminal/terminal_api.dart';
 import '../ui/caps.dart';
+import '../ui/keys_hint.dart';
+import '../ui/date_field.dart';
 import 'cart.dart';
 import 'discount.dart';
 import 'focus_kit.dart';
@@ -116,6 +118,8 @@ class _DiscountDialogState extends State<_DiscountDialog> {
         width: 380,
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          // Folga entre os campos: o rótulo de cima não encosta no texto.
+          spacing: 10,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('Valor do item: ${formatCents(line.grossCents)}'),
@@ -174,6 +178,7 @@ class _DiscountDialogState extends State<_DiscountDialog> {
         ),
       ),
       actions: [
+        const KeysHint(),
         if (line.manualDiscountCents > 0)
           TextButton(
             onPressed: () {
@@ -546,12 +551,21 @@ class _CustomerDialogState extends State<_CustomerDialog> {
     );
     return Column(
       mainAxisSize: MainAxisSize.min,
+      // Folga entre os campos: o rótulo de cima não encosta no texto.
+      spacing: 10,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         field('name', 'Nome completo', _newName),
         field('document', 'CPF', _newDocument, keyboard: TextInputType.number),
         field('phone', 'Telefone com DDD (opcional)', _newPhone, keyboard: TextInputType.phone),
-        field('birth', 'Nascimento (opcional)', _newBirth, keyboard: TextInputType.datetime, hint: 'dd/mm/aaaa'),
+        DateField(
+          key: const Key('customer-new-birth'),
+          controller: _newBirth,
+          label: 'Nascimento (opcional)',
+          errorText: errors['birth'],
+          lastDate: DateTime.now(),
+          onChanged: (_) => _tried ? setState(() {}) : null,
+        ),
         CheckboxListTile(
           key: const Key('customer-new-cashback'),
           contentPadding: EdgeInsets.zero,
@@ -643,6 +657,8 @@ class _CustomerDialogState extends State<_CustomerDialog> {
         width: 480,
         child: _creating ? SingleChildScrollView(child: _createForm()) : Column(
           mainAxisSize: MainAxisSize.min,
+          // Folga entre os campos: o rótulo de cima não encosta no texto.
+          spacing: 10,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SuggestionKeys(
@@ -695,6 +711,7 @@ class _CustomerDialogState extends State<_CustomerDialog> {
         ),
       ),
       actions: [
+        const KeysHint(),
         if (_creating) ...[
           TextButton(key: const Key('customer-new-back'), onPressed: () => setState(() => _creating = false), child: const Text('Voltar à busca')),
           FilledButton(
@@ -774,6 +791,8 @@ class _CancelSaleDialogState extends State<_CancelSaleDialog> {
         width: 420,
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          // Folga entre os campos: o rótulo de cima não encosta no texto.
+          spacing: 10,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('A NFC-e é cancelada na Sefaz e a venda é desfeita (estoque, pagamentos, cashback e crediário). '
@@ -810,6 +829,7 @@ class _CancelSaleDialogState extends State<_CancelSaleDialog> {
         ),
       ),
       actions: [
+        const KeysHint(),
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Voltar')),
         FilledButton(
           key: const Key('cancel-confirm'),
@@ -888,6 +908,8 @@ class _ReleaseDialogState extends State<ReleaseDialog> {
         width: 420,
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          // Folga entre os campos: o rótulo de cima não encosta no texto.
+          spacing: 10,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(widget.message, key: const Key('release-message')),
@@ -919,6 +941,7 @@ class _ReleaseDialogState extends State<ReleaseDialog> {
         ),
       ),
       actions: [
+        const KeysHint(),
         TextButton(key: const Key('release-back'), onPressed: () => Navigator.pop(context, false), child: const Text('Voltar')),
         FilledButton(
           key: const Key('release-confirm'),

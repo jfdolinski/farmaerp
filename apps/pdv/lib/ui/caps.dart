@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart' as material;
 import 'package:flutter/services.dart';
 
+import 'enter_form.dart';
+
 /// O PDV escreve só em caixa alta. As telas importam o Material escondendo `Text`,
 /// `InputDecoration` e `TextField` e usam estas versões, que convertem na hora de mostrar:
 /// o texto guardado no código continua normal (e o log e o banco não mudam por isso).
@@ -112,4 +114,18 @@ class TextField extends material.TextField {
   @override
   List<TextInputFormatter>? get inputFormatters =>
       obscureText ? super.inputFormatters : [...?super.inputFormatters, const UpperCaseFormatter()];
+
+  /// Campo de uma linha sem ação própria no Enter: o Enter vai para o próximo campo da janela (ou
+  /// aciona a ação principal no último, ver [EnterForm]).
+  bool get _advances =>
+      super.onSubmitted == null && super.onEditingComplete == null && maxLines == 1 && !readOnly;
+
+  @override
+  ValueChanged<String>? get onSubmitted => super.onSubmitted ?? (_advances ? enterAdvance : null);
+
+  @override
+  VoidCallback? get onEditingComplete => _advances ? keepFocus : super.onEditingComplete;
+
+  @override
+  TextInputAction? get textInputAction => super.textInputAction ?? (_advances ? TextInputAction.next : null);
 }

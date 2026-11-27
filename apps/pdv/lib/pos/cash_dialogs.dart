@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../face/face_widgets.dart';
 import '../ui/caps.dart';
+import '../ui/keys_hint.dart';
 import 'cash.dart';
 import 'focus_kit.dart';
 import 'money.dart';
@@ -156,6 +157,8 @@ class _CashMovementDialogState extends State<_CashMovementDialog> {
           width: 420,
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            // Folga entre os campos: o rótulo de cima não encosta no texto.
+            spacing: 10,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _dialogNotice(context, controller),
@@ -266,6 +269,7 @@ class _CashMovementDialogState extends State<_CashMovementDialog> {
           ),
         ),
         actions: [
+          const KeysHint(),
           TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
           FilledButton(
             key: const Key('cash-confirm'),
@@ -296,6 +300,7 @@ class _CloseShiftDialog extends StatefulWidget {
 class _CloseShiftDialogState extends State<_CloseShiftDialog> {
   final _fields = {for (final method in countedMethods.keys) method: TextEditingController()};
   final _note = TextEditingController();
+  final _submitFocus = FocusNode();
   bool _confirming = false;
 
   @override
@@ -303,7 +308,16 @@ class _CloseShiftDialogState extends State<_CloseShiftDialog> {
     for (final field in [..._fields.values, _note]) {
       field.dispose();
     }
+    _submitFocus.dispose();
     super.dispose();
+  }
+
+  /// Na conferência os campos travam: o foco vai para "Fechar o caixa", e o Enter fecha.
+  void _review() {
+    setState(() => _confirming = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _submitFocus.requestFocus();
+    });
   }
 
   Map<String, int?> get _counted => {for (final entry in _fields.entries) entry.key: parseCents(entry.value.text)};
@@ -330,6 +344,8 @@ class _CloseShiftDialogState extends State<_CloseShiftDialog> {
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                // Folga entre os campos: o rótulo de cima não encosta no texto.
+                spacing: 10,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _dialogNotice(context, controller),
@@ -367,15 +383,17 @@ class _CloseShiftDialogState extends State<_CloseShiftDialog> {
             ),
           ),
           actions: [
+            const KeysHint(),
             TextButton(
               onPressed: () => _confirming ? setState(() => _confirming = false) : Navigator.of(context).pop(),
               child: Text(_confirming ? 'Corrigir' : 'Cancelar'),
             ),
             FilledButton(
               key: const Key('close-shift-submit'),
+              focusNode: _submitFocus,
               onPressed: controller.busy || (!_confirming && missing)
                   ? null
-                  : () => _confirming ? _close() : setState(() => _confirming = true),
+                  : () => _confirming ? _close() : _review(),
               child: Text(_confirming ? 'Fechar o caixa' : 'Continuar'),
             ),
           ],

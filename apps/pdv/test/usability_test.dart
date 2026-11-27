@@ -9,6 +9,7 @@ import 'package:farmaerp_pdv/pos/pos_controller.dart';
 import 'package:farmaerp_pdv/pos/pos_screen.dart';
 import 'package:farmaerp_pdv/terminal/terminal_api.dart' show ApiException;
 import 'package:farmaerp_pdv/ui/caps.dart' show caps;
+import 'package:farmaerp_pdv/ui/date_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -354,6 +355,41 @@ void main() {
       expect(api.createdCustomers.single['consents'], {'cashback': false, 'marketing': true});
       expect(controller.cart.customer?.name, caps('Ana Fictícia'));
       expect(find.byKey(const Key('customer-new-save')), findsNothing);
+    });
+
+    testWidgets('cliente: cadastro só pelo teclado, com a data digitada só com números', (tester) async {
+      await tester.runAsync(() => controller.login('3', '2468'));
+      controller.openShift(0);
+      await tester.runAsync(() => controller.identifySeller('3'));
+      await tester.binding.setSurfaceSize(const Size(1500, 1000));
+      await tester.pumpWidget(MaterialApp(home: PosScreen(controller: controller)));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.f4);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('customer-new')));
+      await tester.pumpAndSettle();
+      bool hasFocus(String key) => tester
+          .widget<EditableText>(find.descendant(of: find.byKey(Key('customer-new-$key')), matching: find.byType(EditableText)))
+          .focusNode
+          .hasFocus;
+      await tester.tap(find.byKey(const Key('customer-new-name')));
+      await tester.enterText(find.byKey(const Key('customer-new-name')), 'Bia Fictícia');
+      for (final (next, value) in [('document', '111.444.777-35'), ('phone', '11987654321'), ('birth', '03021985')]) {
+        await tester.testTextInput.receiveAction(TextInputAction.next);
+        await tester.pump();
+        expect(hasFocus(next), isTrue, reason: 'Enter deveria ir para $next');
+        await tester.enterText(find.byKey(Key('customer-new-$next')), value);
+      }
+      // Nascimento não pode ser no futuro: o calendário vai só até hoje.
+      final birth = tester.widget<DateField>(find.byKey(const Key('customer-new-birth')));
+      expect(birth.lastDate, isNotNull);
+      expect(birth.lastDate!.isAfter(DateTime.now()), isFalse);
+      // A caixa de marcação fica fora: o Enter na data já cadastra.
+      await tester.testTextInput.receiveAction(TextInputAction.next);
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pumpAndSettle();
+      expect(api.createdCustomers.single, containsPair('birthDate', '1985-02-03'));
+      expect(controller.cart.customer?.name, caps('Bia Fictícia'));
     });
 
     testWidgets('cliente: sem a permissão, o cadastro pede a liberação e vai em nome de quem liberou', (tester) async {

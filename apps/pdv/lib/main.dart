@@ -4,6 +4,7 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'core/app_environment.dart';
@@ -259,6 +260,10 @@ class FarmaErpPdvApp extends StatelessWidget {
       title: 'FarmaERP PDV',
       debugShowCheckedModeBanner: false,
       theme: settings?.theme(),
+      // Calendário, dicas e textos prontos do Material em português.
+      locale: const Locale('pt', 'BR'),
+      supportedLocales: const [Locale('pt', 'BR')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       builder: (context, child) {
         final banner = EnvironmentBanner(environment: appEnvironment, child: child ?? const SizedBox.shrink());
         return settings == null ? banner : settings.apply(context, banner);

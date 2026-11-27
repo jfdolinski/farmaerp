@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 
 import '../face/face_widgets.dart';
 import '../ui/caps.dart';
+import '../ui/keys_hint.dart';
+import '../ui/date_field.dart';
 import 'controlled.dart';
 import 'focus_kit.dart';
 import '../local/local_database.dart' show LocalProfessional;
@@ -406,8 +408,18 @@ class _ControlledDialogState extends State<_ControlledDialog> {
                         ),
                       ),
                       _text('number', _form.type.isNotification ? 'Número da notificação' : 'Número da receita', errors: errors),
-                      _text('date', 'Data da receita', errors: errors, width: 160, hint: 'dd/mm/aaaa', keyboard: TextInputType.datetime,
-                          formatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d/]')), LengthLimitingTextInputFormatter(10)]),
+                      SizedBox(
+                        width: 200,
+                        child: DateField(
+                          key: const Key('rx-date'),
+                          controller: _field('date'),
+                          focusNode: _node('date'),
+                          label: 'Data da receita',
+                          errorText: _tried ? errors['date'] : null,
+                          lastDate: DateTime.now(),
+                          onChanged: (_) => setState(_collect),
+                        ),
+                      ),
                     ]),
                     const SizedBox(height: 12),
                     Text('Prescritor', style: Theme.of(context).textTheme.titleSmall),
@@ -543,6 +555,7 @@ class _ControlledDialogState extends State<_ControlledDialog> {
             ),
           ),
           actions: [
+            const KeysHint(),
             TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Voltar')),
             FilledButton(
               key: const Key('rx-release'),
