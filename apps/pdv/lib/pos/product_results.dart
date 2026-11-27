@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 
 import '../ui/caps.dart';
+import '../ui/pdv_motion.dart';
 import '../local/local_database.dart' show SaleProduct;
 import 'money.dart';
 
@@ -66,7 +67,11 @@ class _ProductResultsState extends State<ProductResults> {
   @override
   Widget build(BuildContext context) {
     final rows = widget.results.length < widget.visibleRows ? widget.results.length : widget.visibleRows;
-    return Card(
+    // A lista desce de leve ao abrir.
+    return PdvAppear(
+      offset: const Offset(0, -6),
+      duration: PdvMotion.fast,
+      child: Card(
       key: const Key('product-results'),
       clipBehavior: Clip.antiAlias,
       child: SizedBox(
@@ -77,10 +82,18 @@ class _ProductResultsState extends State<ProductResults> {
           itemCount: widget.results.length,
           itemBuilder: (context, index) {
             final product = widget.results[index];
-            return ListTile(
+            final chosen = index == widget.highlight;
+            // A cor da linha escolhida passa suave de uma linha para a outra.
+            return AnimatedContainer(
+              duration: PdvMotion.of(context, PdvMotion.fast),
+              curve: PdvMotion.curve,
+              color: chosen ? Theme.of(context).colorScheme.secondaryContainer : Colors.transparent,
+              child: Material(
+              type: MaterialType.transparency,
+              child: ListTile(
               key: Key('result-${product.code}'),
-              selected: index == widget.highlight,
-              selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
+              selected: chosen,
+              selectedTileColor: Colors.transparent,
               visualDensity: VisualDensity.compact,
               title: Text(product.name, maxLines: 1, overflow: TextOverflow.ellipsis),
               subtitle: Text(
@@ -112,10 +125,13 @@ class _ProductResultsState extends State<ProductResults> {
                 ],
               ),
               onTap: () => widget.onPick(product),
+            ),
+            ),
             );
           },
         ),
       ),
+    ),
     );
   }
 }

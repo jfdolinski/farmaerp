@@ -7,6 +7,7 @@ import '../core/error_display.dart';
 import '../face/face_service.dart';
 import '../face/face_widgets.dart';
 import '../ui/caps.dart';
+import '../ui/pdv_motion.dart';
 import '../ui/pdv_window.dart';
 import 'cart.dart';
 import 'cash_dialogs.dart';
@@ -167,7 +168,10 @@ class _Notice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Container(
+    return PdvAppear(
+      key: ValueKey('${notice.reference}|${notice.message}'),
+      offset: const Offset(0, -8),
+      child: Container(
       key: const Key('pos-notice'),
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -190,6 +194,7 @@ class _Notice extends StatelessWidget {
           Text(notice.reference, style: Theme.of(context).textTheme.bodySmall),
         ],
       ),
+    )
     );
   }
 }
@@ -688,11 +693,16 @@ class _SaleViewState extends State<_SaleView> {
                 onClose: _closeSuggestions,
                 dialog: _dialog,
               );
-              final side = controller.quoteMode
+              final panel = controller.quoteMode
                   ? QuotePanel(controller: controller, dialog: _dialog)
                   : controller.paying
                   ? _PaymentPanel(controller: controller, amountFocus: _paymentFocus, dialog: _dialog)
                   : _TotalsPanel(controller: controller, cart: cart, dialog: _dialog, online: widget.online);
+              final side = PdvAppear(
+                key: ValueKey('side-${controller.quoteMode}-${controller.paying}'),
+                offset: const Offset(16, 0),
+                child: panel,
+              );
               if (wide) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -832,7 +842,10 @@ class _ItemsPanel extends StatelessWidget {
                   separatorBuilder: (_, _) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final line = cart.lines[index];
-                    return ListTile(
+                    return PdvAppear(
+                      key: ObjectKey(line),
+                      offset: const Offset(-12, 0),
+                      child: ListTile(
                       key: Key('line-$index'),
                       leading: Text('${index + 1}'),
                       title: Text(line.product.name),
@@ -914,6 +927,7 @@ class _ItemsPanel extends StatelessWidget {
                           ),
                         ],
                       ),
+                    )
                     );
                   },
                 ),
@@ -992,11 +1006,16 @@ class _TotalsPanel extends StatelessWidget {
               Text('Descontos: ${formatCents(cart.discountCents)}'),
             const SizedBox(height: 8),
             Text('Total', style: Theme.of(context).textTheme.titleMedium),
-            Text(
+            PdvAppear(
+              key: ValueKey(cart.totalCents),
+              offset: const Offset(0, 6),
+              duration: PdvMotion.fast,
+              child: Text(
               formatCents(cart.totalCents),
               key: const Key('total'),
               style: Theme.of(context).textTheme.displaySmall
                   ?.copyWith(fontWeight: FontWeight.bold),
+            ),
             ),
             const SizedBox(height: 16),
             if (cart.isEmpty && controller.findQuote != null)

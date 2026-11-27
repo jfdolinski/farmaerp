@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../face/face_widgets.dart';
 import '../ui/caps.dart';
+import '../ui/pdv_motion.dart';
 import '../ui/pdv_window.dart';
 import '../ui/pdv_theme.dart';
 import 'focus_kit.dart';
@@ -59,7 +60,10 @@ class _SellerPanelState extends State<SellerPanel> {
     if (seller != null) {
       // Faixa no tom do terminal: quem está atendendo fica visível de longe.
       final scheme = Theme.of(context).colorScheme;
-      return Container(
+      return PdvAppear(
+        key: ValueKey(seller.id),
+        offset: const Offset(0, -6),
+        child: Container(
         key: const Key('seller-band'),
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
@@ -95,6 +99,7 @@ class _SellerPanelState extends State<SellerPanel> {
               ),
           ],
         ),
+      )
       );
     }
     final pinRequired = controller.database.sellerPinRequired;
@@ -250,10 +255,15 @@ class _QuotePanelState extends State<QuotePanel> {
             Text('${cart.lines.length} ${cart.lines.length == 1 ? 'item' : 'itens'}'),
             if (cart.discountCents > 0) Text('Descontos: ${formatCents(cart.discountCents)}'),
             Text('Total', style: Theme.of(context).textTheme.titleMedium),
-            Text(
+            PdvAppear(
+              key: ValueKey(cart.totalCents),
+              offset: const Offset(0, 6),
+              duration: PdvMotion.fast,
+              child: Text(
               formatCents(cart.totalCents),
               key: const Key('total'),
               style: Theme.of(context).textTheme.displaySmall?.copyWith(fontWeight: FontWeight.bold),
+            ),
             ),
             const SizedBox(height: 12),
             NumberField(

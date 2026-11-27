@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 
 import '../ui/caps.dart';
+import '../ui/pdv_motion.dart';
 import '../ui/pdv_theme.dart';
 import 'money.dart';
 import 'pos_controller.dart';
@@ -25,7 +26,9 @@ class SellerLockScreen extends StatelessWidget {
         final change = sale?.changeCents ?? 0;
         final notice = controller.notice;
         final cashKeys = !controller.quoteMode && controller.operator != null && controller.session != null;
-        return Material(
+        return PdvAppear(
+          offset: Offset.zero,
+          child: Material(
           key: const Key('seller-lock'),
           color: Colors.black,
           child: SafeArea(
@@ -48,11 +51,16 @@ class SellerLockScreen extends StatelessWidget {
                       if (change > 0) ...[
                         const SizedBox(height: 24),
                         const Text('Troco', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 22)),
-                        Text(
+                        PdvAppear(
+                          offset: Offset.zero,
+                          scale: 0.9,
+                          delay: PdvMotion.fast,
+                          child: Text(
                           formatCents(change),
                           key: const Key('seller-lock-change'),
                           textAlign: TextAlign.center,
                           style: moneyStyle(context, size: 88, color: Colors.white),
+                        ),
                         ),
                       ],
                       if (notice != null) ...[
@@ -92,6 +100,7 @@ class SellerLockScreen extends StatelessWidget {
               ),
             ),
           ),
+        )
         );
       },
     );
