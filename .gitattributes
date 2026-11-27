@@ -1,3 +1,6 @@
 # O script roda dentro do contêiner Linux: precisa de LF mesmo no Windows.
 *.sh text eol=lf
 *.sql text eol=lf
+
+# Motor fiscal gerado pelo dart2js: comparado byte a byte na CI.
+packages/fiscal-js/dist/fiscal.js -text

@@ -7,6 +7,7 @@ COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY db/package.json db/
 COPY packages/error-catalog/package.json packages/error-catalog/
+COPY packages/fiscal-js/package.json packages/fiscal-js/
 RUN npm ci --no-audit --no-fund
 COPY apps/web apps/web
 COPY packages/error-catalog packages/error-catalog
