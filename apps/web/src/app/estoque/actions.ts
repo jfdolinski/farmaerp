@@ -151,3 +151,26 @@ export async function setBatchTracking(
   refresh();
   return { done: true };
 }
+
+export interface TransferNfeState {
+  error?: ApiError;
+  notice?: string;
+}
+
+const NFE_RESULT: Record<string, string> = {
+  authorized: "NF-e autorizada pela Sefaz.",
+  pending: "A Sefaz não respondeu. A NF-e ficou pendente: tente transmitir de novo em alguns minutos.",
+  rejected: "A Sefaz recusou a NF-e. Veja o motivo, corrija e emita de novo.",
+};
+
+/** Emite a NF-e da transferência entre filiais (ou transmite de novo a pendente). */
+export async function emitTransferNfe(_previous: TransferNfeState, form: FormData): Promise<TransferNfeState> {
+  const transferId = text(form, "transferId");
+  const result = await apiFetch<{ id: string; status: string }>(
+    `/admin/stock-transfers/${encodeURIComponent(transferId)}/nfe`,
+    { method: "POST", timeoutMs: 90_000 },
+  );
+  if (!result.ok) return handleFailure(result.error, "/estoque?aba=movimentacoes");
+  refresh();
+  return { notice: NFE_RESULT[result.data.status] ?? "NF-e processada." };
+}

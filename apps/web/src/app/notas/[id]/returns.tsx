@@ -103,8 +103,7 @@ function ReturnNfeCell({
             {nfe.authorized_at && <small className={styles.hint}> em {dateTimeText(nfe.authorized_at)}</small>}
           </span>
           <span>
-            <a href={`/notas/nfe-devolucao/${nfe.id}/danfe`}>DANFE</a> ·{" "}
-            <a href={`/notas/nfe-devolucao/${nfe.id}/xml`}>XML</a>
+            <a href={`/nfe-central/${nfe.id}/danfe`}>DANFE</a> · <a href={`/nfe-central/${nfe.id}/xml`}>XML</a>
           </span>
         </>
       )}

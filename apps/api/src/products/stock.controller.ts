@@ -103,11 +103,29 @@ export class StockController {
   movements(@Query('branch') branch?: string) {
     const branchId = optionalBranch(branch);
     return this.database.withContext(async (client) => {
-      const { rows } = await client.query(
+      const { rows } = await client.query<{ id: string }>(
         'SELECT * FROM app.list_stock_movements(NULL, $1)',
         [branchId],
       );
-      return rows;
+      // Saídas de transferência feitas aqui (não importadas): a NF-e de transferência sai delas.
+      const transfers = await client.query<{ id: string; transfer_group: string; can_issue_nfe: boolean }>(
+        `SELECT m.id, m.transfer_group, app.has_permission('fiscal.nfe_issue', m.branch_id) AS can_issue_nfe
+           FROM v_stock_movement m
+          WHERE m.id = ANY($1::uuid[]) AND m.movement_type = 'transfer' AND m.quantity < 0
+            AND m.transfer_group IS NOT NULL AND m.imported_stock_item_id IS NULL AND m.reversal_of IS NULL`,
+        [rows.map((row) => row.id)],
+      );
+      const groups = transfers.rows.map((row) => row.transfer_group);
+      const nfes = groups.length
+        ? (await client.query<{ x: Record<string, unknown> }>('SELECT app.transfer_nfes($1::uuid[]) AS x', [groups])).rows[0].x
+        : {};
+      const byMovement = new Map(transfers.rows.map((row) => [row.id, row]));
+      return rows.map((row) => {
+        const transfer = byMovement.get(row.id);
+        return transfer
+          ? { ...row, transfer: { id: transfer.transfer_group, can_issue_nfe: transfer.can_issue_nfe, nfe: nfes[transfer.transfer_group] ?? null } }
+          : row;
+      });
     });
   }
 

@@ -33,7 +33,7 @@ const TABS: TabItem[] = [
   { id: "nfce", label: "NFC-e" },
   { id: "tributacao", label: "Tributação" },
   { id: "series", label: "Séries" },
-  { id: "devolucao", label: "NF-e de devolução" },
+  { id: "devolucao", label: "NF-e de devolução e transferência" },
 ];
 
 export default function FiscalPage({ searchParams }: { searchParams: SearchParams }) {
@@ -88,8 +88,9 @@ async function FiscalContent({ searchParams }: { searchParams: SearchParams }) {
         {returnTax && (
           <>
             <p className={styles.hint}>
-              CFOP e situação tributária usados na NF-e de devolução ao fornecedor, emitida pela central. A nota é um
-              espelho da compra: os valores de ICMS, ST e IPI vêm da nota original. Confira estes padrões com o contador
+              CFOP e situação tributária das NF-e emitidas pela central. A devolução ao fornecedor é um espelho da
+              compra (ICMS, ST e IPI vêm da nota original); a transferência entre filiais vai pelo custo médio da
+              origem, e o ICMS e o PIS/COFINS seguem os mesmos códigos abaixo. Confira estes padrões com o contador
               antes de usar em produção.
             </p>
             {!returnTax.ok && <ErrorNotice error={returnTax.error} />}

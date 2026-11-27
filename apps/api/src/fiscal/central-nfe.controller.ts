@@ -7,7 +7,7 @@ import { DatabaseService } from '../database.service.js';
 import { AppError } from '../observability/app-error.js';
 import { CentralNfeService } from './central-nfe.service.js';
 
-/** NF-e emitida pela central: devolução ao fornecedor. Regras e permissões no banco. */
+/** NF-e emitida pela central: devolução ao fornecedor e transferência entre filiais. Regras e permissões no banco. */
 @Controller('admin')
 @UseGuards(SessionGuard)
 export class CentralNfeController {
@@ -21,6 +21,13 @@ export class CentralNfeController {
   @HttpCode(200)
   emit(@Param('id') id: string) {
     return this.nfe.emitReturn(requireUuid(id));
+  }
+
+  /** Emite a NF-e da transferência entre filiais (ou transmite de novo a que ficou pendente). */
+  @Post('stock-transfers/:id/nfe')
+  @HttpCode(200)
+  emitTransfer(@Param('id') id: string) {
+    return this.nfe.emitTransfer(requireUuid(id));
   }
 
   private async file(id: string) {

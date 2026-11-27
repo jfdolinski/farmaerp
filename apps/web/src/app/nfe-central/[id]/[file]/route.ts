@@ -5,7 +5,7 @@ const FILES: Record<string, { path: string; type: string; fallback: string }> = 
   danfe: { path: "danfe", type: "application/pdf", fallback: "DANFE.pdf" },
 };
 
-/** XML ou DANFE da NF-e de devolução ao fornecedor, repassados da API com a sessão de quem pediu. */
+/** XML ou DANFE da NF-e emitida pela central (devolução ou transferência), repassados da API com a sessão de quem pediu. */
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string; file: string }> }) {
   const { id, file } = await params;
   const kind = FILES[file];

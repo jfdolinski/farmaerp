@@ -916,6 +916,30 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Confira o CFOP e os códigos de situação tributária escolhidos para a filial.',
     retryable: false,
   ),
+  'FA776': ErrorCatalogEntry(
+    code: 'FA776',
+    message: 'Esta transferência já tem NF-e emitida ou em transmissão.',
+    action: 'Confira a situação da NF-e na movimentação. Se estiver pendente, transmita de novo.',
+    retryable: false,
+  ),
+  'FA777': ErrorCatalogEntry(
+    code: 'FA777',
+    message: 'A transferência entre empresas diferentes não tem NF-e de transferência.',
+    action: 'Transferência fiscal é só entre filiais da mesma empresa (mesma raiz do CNPJ). Entre empresas, a saída é uma venda ou remessa.',
+    retryable: false,
+  ),
+  'FA778': ErrorCatalogEntry(
+    code: 'FA778',
+    message: 'O produto não tem custo médio na filial de origem.',
+    action: 'A NF-e de transferência usa o custo médio. Lance uma nota de compra do produto na filial de origem e tente de novo.',
+    retryable: false,
+  ),
+  'FA779': ErrorCatalogEntry(
+    code: 'FA779',
+    message: 'O produto da transferência está sem NCM.',
+    action: 'Vincule o produto ao Catálogo ou informe o NCM e tente de novo.',
+    retryable: false,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',
