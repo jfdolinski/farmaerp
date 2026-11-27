@@ -1,2 +1,5 @@
 dist/*.deps
 node_modules/
+# O JS gerado vai para o repositório (a API não compila Dart).
+!dist/
+!dist/fiscal.js
