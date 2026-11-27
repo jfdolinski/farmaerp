@@ -17,16 +17,23 @@ O uso do rosto é opcional. Você pode continuar entrando com o PIN e pode pedir
 
 Ao confirmar, você declara que leu este termo e concorda com o uso do seu rosto para essa finalidade.''';
 
-/// Rosto no PDV: carrega o motor e abre a câmera só enquanto uma tela precisa dela (a luz da câmera
-/// não fica acesa o dia todo). Sem câmera, sem modelo ou com falha, o PDV segue com o PIN e a
-/// liberação do gerente.
+/// Rosto no PDV: carrega o motor e abre a câmera na primeira leitura. Com [keepCameraOn] (o padrão,
+/// pedido da operação), a câmera fica ligada depois disso: a próxima leitura não espera a câmera
+/// ligar nem acertar a luz. Ela só desliga quando falha ou quando o PDV fecha. Sem câmera, sem
+/// modelo ou com falha, o PDV segue com o PIN e a liberação do gerente.
 class FaceService extends ChangeNotifier {
-  FaceService({required FaceCamera Function() camera, required Future<FaceEngine> Function() engine})
-    : _cameraFactory = camera,
-      _engineFactory = engine;
+  FaceService({
+    required FaceCamera Function() camera,
+    required Future<FaceEngine> Function() engine,
+    this.keepCameraOn = true,
+  }) : _cameraFactory = camera,
+       _engineFactory = engine;
 
   final FaceCamera Function() _cameraFactory;
   final Future<FaceEngine> Function() _engineFactory;
+
+  /// A câmera continua ligada quando a tela que a usava fecha.
+  final bool keepCameraOn;
 
   FaceCamera? camera;
   FaceEngine? engine;
@@ -59,11 +66,17 @@ class FaceService extends ChangeNotifier {
   /// A câmera falhou durante o uso: o PDV volta para o PIN e a liberação do gerente.
   Future<void> cameraLost() async {
     unavailable = true;
-    await closeCamera();
+    await _releaseCamera();
   }
 
-  /// A tela que usava a câmera fechou: apaga a câmera e mantém o motor carregado.
+  /// A tela que usava a câmera fechou. Com [keepCameraOn], a câmera continua ligada para a próxima
+  /// leitura; sem, apaga a câmera e mantém o motor carregado.
   Future<void> closeCamera() async {
+    if (keepCameraOn) return;
+    await _releaseCamera();
+  }
+
+  Future<void> _releaseCamera() async {
     final current = camera;
     camera = null;
     notifyListeners();

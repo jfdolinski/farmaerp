@@ -148,6 +148,9 @@ class FaceReader {
 
 /// Lê o rosto pela câmera até o leitor terminar (ou a tela cancelar). Os quadros ficam só na
 /// memória e são descartados a cada volta.
+///
+/// Logo depois de ligar, a câmera ainda não tem quadro (e pode falhar um ou outro no meio): só é
+/// problema da câmera quando ela fica [maxMissedFrames] vezes seguidas sem quadro (uns 3 segundos).
 Future<Float32List?> readFace({
   required FaceCamera camera,
   required FaceEngine engine,
@@ -155,13 +158,22 @@ Future<Float32List?> readFace({
   required void Function() onUpdate,
   required bool Function() cancelled,
   Duration pause = const Duration(milliseconds: 60),
+  Duration missPause = const Duration(milliseconds: 100),
+  int maxMissedFrames = 30,
 }) async {
+  var missed = 0;
   while (!reader.finished && !cancelled()) {
     final frame = await camera.capture();
     if (frame == null) {
-      reader.cameraFailed();
-      break;
+      missed += 1;
+      if (missed >= maxMissedFrames) {
+        reader.cameraFailed();
+        break;
+      }
+      await Future<void>.delayed(missPause);
+      continue;
     }
+    missed = 0;
     try {
       final faces = await engine.detect(frame);
       final face = faces.length == 1 ? faces.first : null;
