@@ -9,7 +9,7 @@
 -- conferir com o contador). A origem do produto vem do item do Catálogo.
 
 ALTER TABLE catalog_product
-  ADD COLUMN tax_origin smallint CONSTRAINT catalog_product_tax_origin_check CHECK (tax_origin BETWEEN 0 AND 8);
+  ADD COLUMN tax_origin smallint CONSTRAINT catalog_product_origin_check CHECK (tax_origin BETWEEN 0 AND 8);
 
 -- O item passa a trazer a origem (o resto como no 0086).
 CREATE OR REPLACE FUNCTION app.catalog_sync_apply(p_items jsonb) RETURNS jsonb

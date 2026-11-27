@@ -613,7 +613,7 @@
       "catalog_sync_run_removed_check",
       "catalog_sync_run_message_check",
       "catalog_sync_run_finished_check",
-      "catalog_product_tax_origin_check",
+      "catalog_product_origin_check",
       "catalog_tax_fetch_state_check",
       "catalog_tax_fetch_item_hash_check",
       "catalog_tax_fetch_status_check",
