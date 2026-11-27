@@ -98,6 +98,8 @@ void main() {
   });
   tearDown(() => database.close());
 
+  String? noticeCode() => controller.notice?.reference.replaceFirst('Código ', '');
+
   Future<void> ready({String login = '3'}) async {
     await controller.login(login, '2468');
     controller.openShift(0);
@@ -177,6 +179,35 @@ void main() {
       await controller.finish();
       final item = ((database.nextOutboxBatch().last.payload['items']) as List).single as Map;
       expect(item['zero_stock_release'], {'supervisor_id': managerId, 'minutes_offline': null, 'stock': line.product.stockMilli / 1000});
+    });
+
+    test('aumentar a quantidade além do estoque: sem a permissão, o item espera a liberação antes de pagar', () async {
+      await ready();
+      controller.scan('7890000000017');
+      final line = controller.cart.lines.single;
+      controller.setQuantity(line, 30000);
+      expect([line.quantityMilli, line.needsStockRelease, line.zeroStockRelease], [30000, true, null]);
+      expect(line.warnings.join(), contains('precisa de liberação'));
+      controller.startPayment();
+      expect([noticeCode(), controller.paying], ['FA760', false]);
+      expect(await controller.releasePendingStock('5', '2468'), isTrue);
+      expect([line.needsStockRelease, line.zeroStockRelease?.supervisorId], [false, managerId]);
+      // Diminuir não pede nada, nem quando ainda fica acima do estoque.
+      controller.setQuantity(line, 20000);
+      expect([line.needsStockRelease, line.zeroStockRelease?.supervisorId], [false, managerId]);
+      controller.setQuantity(line, 1000);
+      expect(line.needsStockRelease, isFalse);
+    });
+
+    test('quem tem a permissão aumenta a quantidade e o item fica liberado por ele; leituras seguidas somam no mesmo item', () async {
+      await ready(login: '5');
+      controller.scan('7890000000017');
+      final line = controller.cart.lines.single;
+      controller.setQuantity(line, 30000);
+      expect([line.needsStockRelease, line.zeroStockRelease?.supervisorId], [false, managerId]);
+      controller.scan('7890000000024');
+      controller.scan('7890000000024');
+      expect(controller.cart.lines.map((l) => [l.product.code, l.quantityMilli]).toList(), [[line.product.code, 30000], [2, 2000]]);
     });
 
     test('quem tem "Vender com estoque negativo" vende direto, sem painel', () async {

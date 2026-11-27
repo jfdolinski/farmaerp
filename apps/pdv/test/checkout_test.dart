@@ -403,6 +403,52 @@ void main() {
       expect((quote['items'] as List).single, containsPair('zero_stock_release', {'supervisor_id': supervisorId, 'stock': 0.0}));
     });
 
+    test('orçamento: quantidade além do estoque espera a liberação; sem ela, não conclui', () async {
+      database.close();
+      database = seeded(profile: 'quote');
+      controller = PosController(
+        database: database,
+        auth: PosAuth(database: database, clock: () => now),
+        printer: () => printer,
+        terminalNumber: () => 1,
+        clock: () => now,
+      );
+      await controller.identifySeller('6');
+      controller.scan('7890000000017');
+      controller.setQuantity(controller.cart.lines.single, 50000);
+      expect(await controller.finishQuote(printCoupon: false), isFalse);
+      expect(noticeCode(), 'FA760');
+      expect(await controller.releasePendingStock('2', '2468'), isTrue);
+      expect(await controller.finishQuote(printCoupon: false), isTrue);
+    });
+
+    testWidgets('tela do orçamento: o item sem estoque mostra o painel de liberação; o cliente tem o histórico', (tester) async {
+      database.close();
+      database = seeded(profile: 'quote');
+      api.customerData[customerId] = {'code': 7, 'person_type': 'individual', 'name': 'Cliente Demonstração', 'document': '11144477735'};
+      controller = PosController(
+        database: database,
+        auth: PosAuth(database: database, clock: () => now),
+        printer: () => printer,
+        terminalNumber: () => 1,
+        customers: CustomerService(api: api, database: database, accessToken: () async => 't'),
+        clock: () => now,
+      );
+      await tester.runAsync(() => controller.identifySeller('6'));
+      await tester.runAsync(() => controller.selectCustomer(customerId));
+      await tester.binding.setSurfaceSize(const Size(1400, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(MaterialApp(home: PosScreen(controller: controller)));
+      expect(find.byKey(const Key('customer-history-open')), findsOneWidget);
+      controller.scan('7890000000024');
+      await tester.pump();
+      expect(find.byKey(const Key('zero-stock-panel')), findsOneWidget);
+      await tester.runAsync(() => controller.approveZeroStock('2', '2468'));
+      await tester.pump();
+      expect(find.byKey(const Key('zero-stock-panel')), findsNothing);
+      expect(controller.cart.lines.single.zeroStockRelease?.supervisorId, supervisorId);
+    });
+
     testWidgets('tela: marca dois orçamentos e junta; o que espera liberação tem o botão', (tester) async {
       await tester.runAsync(ready);
       api.openQuoteList = [

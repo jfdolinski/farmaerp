@@ -406,6 +406,17 @@ class PosController extends ChangeNotifier {
       if (_stockShort(product, quantity)) {
         final user = actor;
         if (!stockReleaseAlwaysAsks && user != null && user.can('sales.zero_stock_release')) {
+          final same = cart.lines.where((line) =>
+              line.product.id == product.id && line.zeroStockRelease?.supervisorId == user.id && line.quoteId == null &&
+              line.manualDiscountCents == 0 && line.controlled == null && !line.needsStockRelease).firstOrNull;
+          if (same != null) {
+            same.quantityMilli += quantity;
+            reprice();
+            results = const [];
+            notice = null;
+            notifyListeners();
+            return;
+          }
           final line = cart.add(product, quantityMilli: quantityMilli, quote: quoteMode, merge: false);
           line.zeroStockRelease = (
             supervisorId: user.id,
@@ -1753,7 +1764,26 @@ class PosController extends ChangeNotifier {
       final others = cart.quantityOfBatch(batch.id) - line.quantityMilli;
       if (local == null || local.quantityMilli - others < quantityMilli) return _fail('FA988');
     }
+    final extra = quantityMilli - line.quantityMilli;
+    final short = extra > 0 && _stockShort(line.product, extra);
     line.quantityMilli = quantityMilli;
+    if (short) {
+      final user = actor;
+      if (!stockReleaseAlwaysAsks && user != null && user.can('sales.zero_stock_release')) {
+        line.needsStockRelease = false;
+        line.zeroStockRelease = (
+          supervisorId: user.id,
+          supervisorName: user.name,
+          minutesOffline: _offlineMinutes,
+          stockMilli: line.product.stockMilli,
+        );
+      } else {
+        // Sem a permissão: o item espera a liberação (botão "Liberar estoque negativo") antes de fechar.
+        line.zeroStockRelease = null;
+        line.needsStockRelease = true;
+        info = '${line.product.name}: o estoque fica negativo e precisa de liberação.';
+      }
+    }
     reprice();
     notifyListeners();
   }
@@ -1932,6 +1962,10 @@ class PosController extends ChangeNotifier {
   /// Conclui o orçamento: grava, põe na outbox e imprime o cupom (se pedido). A plaquinha é opcional,
   /// mas sem ela o cupom sai sempre.
   Future<bool> finishQuote({int? cardNumber, bool printCoupon = true}) async {
+    if (linesNeedingStockRelease.isNotEmpty) {
+      _fail('FA760');
+      return false;
+    }
     if (!quoteMode || busy) return false;
     busy = true;
     notice = null;

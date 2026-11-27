@@ -240,6 +240,15 @@ class _QuotePanelState extends State<QuotePanel> {
               onChanged: noCard ? null : (value) => setState(() => _print = value ?? true),
               title: Text(noCard ? 'Imprimir o cupom (sem plaquinha, o cupom sai sempre)' : 'Imprimir o cupom'),
             ),
+            if (controller.linesNeedingStockRelease.isNotEmpty)
+              OutlinedButton.icon(
+                key: const Key('stock-release-open'),
+                onPressed: controller.busy
+                    ? null
+                    : () => (widget.dialog ?? (open) => open())(() => showStockReleaseDialog(context, controller)),
+                icon: const Icon(Icons.inventory_2_outlined),
+                label: Text('Liberar estoque negativo (${controller.linesNeedingStockRelease.length})'),
+              ),
             FilledButton.icon(
               key: const Key('quote-finish'),
               onPressed: cart.isEmpty || controller.busy ? null : _finish,

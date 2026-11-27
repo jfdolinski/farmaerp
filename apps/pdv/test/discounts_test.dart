@@ -119,6 +119,33 @@ void main() {
     expect(line.autoApplied.map((a) => a.name), ['Fabricante M1 10%']);
   });
 
+  test('mesmos itens e mesmo cliente: o orçamento e o caixa chegam ao mesmo total', () async {
+    const customer = SaleCustomer(id: '019a0000-0000-7000-8000-0000000000c1', name: 'Cliente', code: 1, groupId: 'G1');
+    List<int> totals(PosController pos) => [pos.cart.subtotalCents, pos.cart.discountCents, pos.cart.totalCents];
+    controller.scan('7890000000017');
+    controller.scan('7890000000024');
+    controller.setQuantity(controller.cart.lines.first, 3000);
+    controller.cart.customer = customer;
+    controller.reprice();
+    final cashier = totals(controller);
+    final quoteDatabase = seeded(profile: 'quote');
+    addTearDown(quoteDatabase.close);
+    final quote = PosController(
+      database: quoteDatabase,
+      auth: PosAuth(database: quoteDatabase, clock: () => now),
+      printer: () => printer,
+      terminalNumber: () => 1,
+      clock: () => now,
+    );
+    quote.scan('7890000000017');
+    quote.scan('7890000000024');
+    quote.setQuantity(quote.cart.lines.first, 3000);
+    quote.cart.customer = customer;
+    quote.reprice();
+    expect(totals(quote), cashier);
+    expect(cashier[1], greaterThan(0));
+  });
+
   test('PIX: o valor sugerido já tem o desconto; com o PIX lançado, a venda fecha e leva as regras', () async {
     controller.scan('7890000000017');
     controller.setQuantity(controller.cart.lines.single, 2000);
