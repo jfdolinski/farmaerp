@@ -294,7 +294,9 @@
       "customer_abc_id_uuid_v7_check",
       "customer_abc_event_id_uuid_v7_check",
       "purchase_invoice_installment_id_uuid_v7_check",
-      "purchase_invoice_audit_id_uuid_v7_check"
+      "purchase_invoice_audit_id_uuid_v7_check",
+      "purchase_return_id_uuid_v7_check",
+      "purchase_return_item_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -586,7 +588,8 @@
       "purchase_invoice_item_cost_release_reason_check",
       "purchase_invoice_event_reason_check",
       "supervisor_release_reason_check",
-      "purchase_invoice_cancel_reason_check"
+      "purchase_invoice_cancel_reason_check",
+      "purchase_return_reason_check"
     ]
   },
   "FA303": {
@@ -1704,7 +1707,32 @@
       "purchase_invoice_audit_kind_check",
       "purchase_invoice_audit_detail_check",
       "purchase_invoice_cancelled_by_check",
-      "purchase_invoice_item_posted_fraction_check"
+      "purchase_invoice_item_posted_fraction_check",
+      "purchase_return_number_check",
+      "purchase_return_products_value_check",
+      "purchase_return_discount_value_check",
+      "purchase_return_freight_value_check",
+      "purchase_return_insurance_value_check",
+      "purchase_return_other_value_check",
+      "purchase_return_ipi_value_check",
+      "purchase_return_st_value_check",
+      "purchase_return_fcp_st_value_check",
+      "purchase_return_total_value_check",
+      "purchase_return_item_quantity_check",
+      "purchase_return_item_invoice_quantity_check",
+      "purchase_return_item_unit_price_check",
+      "purchase_return_item_products_value_check",
+      "purchase_return_item_discount_value_check",
+      "purchase_return_item_freight_value_check",
+      "purchase_return_item_insurance_value_check",
+      "purchase_return_item_other_value_check",
+      "purchase_return_item_ipi_value_check",
+      "purchase_return_item_st_value_check",
+      "purchase_return_item_fcp_st_value_check",
+      "purchase_return_item_total_value_check",
+      "purchase_return_item_unit_cost_check",
+      "stock_movement_purchase_return_check",
+      "purchase_return_number_key"
     ]
   },
   "FA932": {
@@ -3748,5 +3776,37 @@
     "dbConstraints": [
       "product_unit_check"
     ]
+  },
+  "FA767": {
+    "message": "Esta nota tem devolução ao fornecedor e não pode mais ser estornada, cancelada nem ter o fracionamento alterado.",
+    "action": "Para corrigir a entrada, fale com o suporte.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA768": {
+    "message": "A quantidade passa do que ainda pode ser devolvido deste item.",
+    "action": "Confira o saldo do item (e do lote) na tela da nota.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA769": {
+    "message": "Esta unidade só aceita quantidade inteira.",
+    "action": "Informe a quantidade sem casas decimais.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA770": {
+    "message": "Escolha um lote que entrou por este item da nota.",
+    "action": "Escolha o lote na lista do item.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
   }
 }
