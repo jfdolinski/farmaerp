@@ -289,7 +289,10 @@
       "fiscal_number_void_id_uuid_v7_check",
       "pdv_cart_discard_id_uuid_v7_check",
       "import_pending_issuer_id_uuid_v7_check",
-      "import_waiting_note_id_uuid_v7_check"
+      "import_waiting_note_id_uuid_v7_check",
+      "abc_curve_setting_id_uuid_v7_check",
+      "customer_abc_id_uuid_v7_check",
+      "customer_abc_event_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -3664,5 +3667,30 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": []
+  },
+  "FA761": {
+    "message": "Os parâmetros da curva ABC são inválidos.",
+    "action": "Use período de 7 a 730 dias, recálculo de 1 a 365 dias e a quantidade da curva A maior que a da B.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "abc_curve_setting_period_check",
+      "abc_curve_setting_a_min_check",
+      "abc_curve_setting_b_min_check",
+      "abc_curve_setting_a_interval_check",
+      "abc_curve_setting_b_interval_check",
+      "abc_curve_setting_c_interval_check",
+      "abc_curve_setting_order_check",
+      "abc_curve_setting_branch_key",
+      "customer_abc_curve_check",
+      "customer_abc_sales_count_check",
+      "customer_abc_branch_customer_key",
+      "customer_abc_event_from_check",
+      "customer_abc_event_to_check",
+      "customer_abc_event_sales_count_check",
+      "customer_abc_event_period_check",
+      "customer_abc_event_change_check"
+    ]
   }
 }
