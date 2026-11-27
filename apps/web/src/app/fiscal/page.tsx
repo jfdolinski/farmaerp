@@ -6,6 +6,7 @@ import { apiFetch, can, redirectIfNeeded, requireUser } from "@/lib/api";
 import { AppHeader } from "../app-header";
 import { ErrorNotice } from "../error-notice";
 import styles from "../terminais/page.module.css";
+import { activeTab, TabItem, Tabs } from "../shell/tabs";
 import {
   CertificateForm,
   CopyCertificateForm,
@@ -22,17 +23,28 @@ import {
 
 export const metadata: Metadata = { title: "Fiscal · FarmaERP" };
 
-export default function FiscalPage() {
+type SearchParams = Promise<{ aba?: string | string[] }>;
+
+const TABS: TabItem[] = [
+  { id: "empresa", label: "Regime e inscrição" },
+  { id: "certificado", label: "Certificado" },
+  { id: "download", label: "Download de notas" },
+  { id: "nfce", label: "NFC-e" },
+  { id: "tributacao", label: "Tributação" },
+  { id: "series", label: "Séries" },
+];
+
+export default function FiscalPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <main className={styles.page}>
       <Suspense fallback={<p className={styles.hint}>Carregando configuração fiscal...</p>}>
-        <FiscalContent />
+        <FiscalContent searchParams={searchParams} />
       </Suspense>
     </main>
   );
 }
 
-async function FiscalContent() {
+async function FiscalContent({ searchParams }: { searchParams: SearchParams }) {
   const user = await requireUser("/fiscal");
 
   if (!["fiscal.view", "fiscal.manage", "fiscal.certificate"].some((code) => can(user, code))) {
@@ -50,11 +62,12 @@ async function FiscalContent() {
   const result = await apiFetch<FiscalRow[]>("/admin/fiscal");
   if (!result.ok) redirectIfNeeded(result.error, "/fiscal");
   const rows = result.ok ? result.data : [];
+  const tab = activeTab(TABS, (await searchParams).aba);
   const [series, coverage, dfe, nfce] = await Promise.all([
-    apiFetch<SeriesRow[]>("/admin/fiscal/series"),
-    apiFetch<CoverageRow[]>("/admin/fiscal/tax-coverage"),
-    apiFetch<DfeRow[]>("/admin/dfe/status"),
-    apiFetch<NfceRow[]>("/admin/fiscal/nfce"),
+    tab === "series" ? apiFetch<SeriesRow[]>("/admin/fiscal/series") : null,
+    tab === "tributacao" ? apiFetch<CoverageRow[]>("/admin/fiscal/tax-coverage") : null,
+    tab === "download" ? apiFetch<DfeRow[]>("/admin/dfe/status") : null,
+    tab === "nfce" ? apiFetch<NfceRow[]>("/admin/fiscal/nfce") : null,
   ]);
   const companies = [...new Set(rows.map((row) => row.company_id))];
 
@@ -62,73 +75,90 @@ async function FiscalContent() {
     <>
       <AppHeader user={user} />
       <h1>Fiscal</h1>
-      {!result.ok && <ErrorNotice error={result.error} />}
-      {result.ok && rows.length === 0 && (
-        <section className={styles.card}>
-          <p className={styles.hint}>Nenhuma filial disponível para você.</p>
-        </section>
-      )}
-      {companies.map((companyId) => {
-        const branches = rows.filter((row) => row.company_id === companyId);
-        return (
-          <div key={companyId} className={styles.stack}>
-            <section className={styles.card}>
-              <h2>{branches[0].company_name}</h2>
-              <RegimeForm row={branches[0]} />
-            </section>
-            {branches.map((row) => (
-              <section key={row.branch_id} className={styles.card}>
-                <h2>{row.branch_name}</h2>
-                <p className={styles.hint}>CNPJ {row.branch_cnpj}</p>
-                <StateRegistrationForm row={row} />
-                <h3>Certificado digital</h3>
-                <CertificateForm row={row} />
-                <CopyCertificateForm
-                  row={row}
-                  targets={branches.filter(
-                    (target) =>
-                      target.branch_id !== row.branch_id &&
-                      target.can_certificate &&
-                      target.branch_cnpj.slice(0, 8) === row.certificate_cnpj?.slice(0, 8),
+      <Tabs base="/fiscal" items={TABS} active={tab}>
+        {!result.ok && <ErrorNotice error={result.error} />}
+        {result.ok && rows.length === 0 && (
+          <section className={styles.card}>
+            <p className={styles.hint}>Nenhuma filial disponível para você.</p>
+          </section>
+        )}
+        {companies.map((companyId) => {
+          const branches = rows.filter((row) => row.company_id === companyId);
+          return (
+            <div key={companyId} className={styles.stack}>
+              {tab === "empresa" && (
+                <section className={styles.card}>
+                  <h2>{branches[0].company_name}</h2>
+                  <RegimeForm row={branches[0]} />
+                </section>
+              )}
+              {branches.map((row) => (
+                <section key={row.branch_id} className={styles.card}>
+                  <h2>{row.branch_name}</h2>
+                  <p className={styles.hint}>CNPJ {row.branch_cnpj}</p>
+                  {tab === "empresa" && <StateRegistrationForm row={row} />}
+                  {tab === "certificado" && (
+                    <>
+                      <CertificateForm row={row} />
+                      <CopyCertificateForm
+                        row={row}
+                        targets={branches.filter(
+                          (target) =>
+                            target.branch_id !== row.branch_id &&
+                            target.can_certificate &&
+                            target.branch_cnpj.slice(0, 8) === row.certificate_cnpj?.slice(0, 8),
+                        )}
+                      />
+                    </>
                   )}
-                />
-                <h3>Download automático das notas de compra</h3>
-                {dfe.ok ? (
-                  <DfeStatus row={dfe.data.find((item) => item.branch_id === row.branch_id)} branchId={row.branch_id} />
-                ) : (
-                  <ErrorNotice error={dfe.error} />
-                )}
-                <h3>CSC da NFC-e</h3>
-                <CscForm row={row} />
-                <h3>Emitir NFC-e</h3>
-                {nfce.ok ? (
-                  (() => {
-                    const item = nfce.data.find((entry) => entry.branch_id === row.branch_id);
-                    return item ? <NfceForm row={item} /> : null;
-                  })()
-                ) : (
-                  <ErrorNotice error={nfce.error} />
-                )}
-                <h3>Tributação</h3>
-                {coverage.ok ? (
-                  <TaxCoverage row={row} coverage={coverage.data.find((item) => item.branch_id === row.branch_id)} />
-                ) : (
-                  <ErrorNotice error={coverage.error} />
-                )}
-                <h3>Séries</h3>
-                {series.ok ? (
-                  <BranchSeries rows={series.data.filter((item) => item.branch_id === row.branch_id)} />
-                ) : (
-                  <ErrorNotice error={series.error} />
-                )}
-              </section>
-            ))}
-          </div>
-        );
-      })}
-      <p className={styles.hint}>
-        O arquivo, a senha e o código CSC ficam criptografados no servidor e não voltam para a tela.
-      </p>
+                  {dfe &&
+                    (dfe.ok ? (
+                      <DfeStatus
+                        row={dfe.data.find((item) => item.branch_id === row.branch_id)}
+                        branchId={row.branch_id}
+                      />
+                    ) : (
+                      <ErrorNotice error={dfe.error} />
+                    ))}
+                  {nfce && (
+                    <>
+                      <h3>CSC da NFC-e</h3>
+                      <CscForm row={row} />
+                      <h3>Emitir NFC-e</h3>
+                      {nfce.ok ? (
+                        (() => {
+                          const item = nfce.data.find((entry) => entry.branch_id === row.branch_id);
+                          return item ? <NfceForm row={item} /> : null;
+                        })()
+                      ) : (
+                        <ErrorNotice error={nfce.error} />
+                      )}
+                    </>
+                  )}
+                  {coverage &&
+                    (coverage.ok ? (
+                      <TaxCoverage
+                        row={row}
+                        coverage={coverage.data.find((item) => item.branch_id === row.branch_id)}
+                      />
+                    ) : (
+                      <ErrorNotice error={coverage.error} />
+                    ))}
+                  {series &&
+                    (series.ok ? (
+                      <BranchSeries rows={series.data.filter((item) => item.branch_id === row.branch_id)} />
+                    ) : (
+                      <ErrorNotice error={series.error} />
+                    ))}
+                </section>
+              ))}
+            </div>
+          );
+        })}
+        <p className={styles.hint}>
+          O arquivo, a senha e o código CSC ficam criptografados no servidor e não voltam para a tela.
+        </p>
+      </Tabs>
     </>
   );
 }
@@ -168,10 +198,10 @@ function DfeStatus({ row, branchId }: { row?: DfeRow; branchId: string }) {
   return (
     <>
       <p className={styles.hint}>
-        A cada hora, a filial busca na Sefaz as notas emitidas para o CNPJ dela. As notas chegam primeiro como resumo, em
-        Notas, esperando a ciência; depois da ciência, o XML completo chega sozinho. Em produção, uma nota só é lançada
-        depois de confirmada pela Sefaz. As notas de serviço (NFS-e) chegam completas do Ambiente Nacional, em Notas de
-        serviço.
+        A cada hora, a filial busca na Sefaz as notas emitidas para o CNPJ dela. As notas chegam primeiro como resumo,
+        em Notas, esperando a ciência; depois da ciência, o XML completo chega sozinho. Em produção, uma nota só é
+        lançada depois de confirmada pela Sefaz. As notas de serviço (NFS-e) chegam completas do Ambiente Nacional, em
+        Notas de serviço.
       </p>
       {!row.has_certificate && (
         <p className={styles.warning}>Sem certificado digital válido: o download não funciona até enviar um.</p>
@@ -179,7 +209,9 @@ function DfeStatus({ row, branchId }: { row?: DfeRow; branchId: string }) {
       {row.enabled ? (
         <p>
           <strong>Ligado.</strong>{" "}
-          {row.last_run_at ? `Última busca em ${dateTimeText(row.last_run_at)}.` : "A primeira busca começa em até um minuto."}{" "}
+          {row.last_run_at
+            ? `Última busca em ${dateTimeText(row.last_run_at)}.`
+            : "A primeira busca começa em até um minuto."}{" "}
           {row.last_run_at && row.next_run_at && `Próxima a partir de ${dateTimeText(row.next_run_at)}.`}
         </p>
       ) : (
@@ -189,7 +221,8 @@ function DfeStatus({ row, branchId }: { row?: DfeRow; branchId: string }) {
       )}
       {row.enabled && row.last_error && (
         <p className={styles.warning}>
-          {getError(row.last_error).message} {row.last_message ? `Sefaz: ${row.last_message}` : getError(row.last_error).action}
+          {getError(row.last_error).message}{" "}
+          {row.last_message ? `Sefaz: ${row.last_message}` : getError(row.last_error).action}
         </p>
       )}
       {row.enabled && !row.last_error && row.last_message && (
@@ -207,7 +240,9 @@ function DfeStatus({ row, branchId }: { row?: DfeRow; branchId: string }) {
       {waiting > 0 && (
         <p>
           <Link href="/notas">
-            {waiting === 1 ? "1 nota aguardando ciência" : `${waiting.toLocaleString("pt-BR")} notas aguardando ciência`}
+            {waiting === 1
+              ? "1 nota aguardando ciência"
+              : `${waiting.toLocaleString("pt-BR")} notas aguardando ciência`}
           </Link>
         </p>
       )}
@@ -232,7 +267,8 @@ function TaxCoverage({ row, coverage }: { row: FiscalRow; coverage?: CoverageRow
       )}
       {!row.state && (
         <p className={styles.warning}>
-          Informe o estado da filial em <Link href="/empresas">Empresas e filiais</Link>: sem ele, nenhum produto tem tributação.
+          Informe o estado da filial em <Link href="/empresas">Empresas e filiais</Link>: sem ele, nenhum produto tem
+          tributação.
         </p>
       )}
       {total === 0 && <p className={styles.hint}>Nenhum produto ativo nesta filial.</p>}
@@ -245,7 +281,8 @@ function TaxCoverage({ row, coverage }: { row: FiscalRow; coverage?: CoverageRow
       )}
       {missing > 0 && (
         <p className={styles.warning}>
-          Produtos ativos sem tributação: {missing.toLocaleString("pt-BR")} de {total.toLocaleString("pt-BR")}. Eles dependem do vínculo com o Catálogo e de uma regra para o regime e o estado desta filial.
+          Produtos ativos sem tributação: {missing.toLocaleString("pt-BR")} de {total.toLocaleString("pt-BR")}. Eles
+          dependem do vínculo com o Catálogo e de uma regra para o regime e o estado desta filial.
         </p>
       )}
     </>
@@ -256,7 +293,8 @@ function BranchSeries({ rows }: { rows: SeriesRow[] }) {
   if (rows.length === 0) {
     return (
       <p className={styles.hint}>
-        Nenhum terminal emissor nesta filial. As séries são criadas quando um terminal de caixa ou autoatendimento é aprovado.
+        Nenhum terminal emissor nesta filial. As séries são criadas quando um terminal de caixa ou autoatendimento é
+        aprovado.
       </p>
     );
   }
@@ -266,7 +304,8 @@ function BranchSeries({ rows }: { rows: SeriesRow[] }) {
         <SeriesForm key={row.id} row={row} />
       ))}
       <p className={styles.hint}>
-        Se a filial veio de outro sistema, informe o próximo número da série antiga. Depois da primeira nota, a série não muda mais.
+        Se a filial veio de outro sistema, informe o próximo número da série antiga. Depois da primeira nota, a série
+        não muda mais.
       </p>
     </>
   );

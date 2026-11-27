@@ -1,35 +1,78 @@
+/*
+ * Tokens da retaguarda. Verde de farmácia sóbrio, papel levemente esverdeado e âmbar para avisos.
+ * Fonte do sistema (Segoe UI no Windows), sem download.
+ */
 :root {
   color-scheme: light dark;
-  --background: #f5f6f8;
+  --background: #f2f5f4;
   --surface: #ffffff;
-  --subtle: #eef0f3;
-  --foreground: #171a1f;
-  --muted: #5b6470;
-  --border: #d9dde3;
-  --link: #1557b0;
+  --subtle: #e9efed;
+  --foreground: #17211f;
+  --muted: #56645f;
+  --border: #d3dbd8;
+  --brand: #0e6b5b;
+  --brand-strong: #0a5246;
+  --brand-soft: #e1efeb;
+  --on-brand: #ffffff;
+  --link: #0e6b5b;
   --success: #17663a;
   --success-bg: #e3f4ea;
-  --warning: #8a5300;
-  --warning-bg: #fdf1dc;
+  --warning: #a35f00;
+  --warning-bg: #fcf0dc;
   --danger: #b3261e;
   --danger-bg: #fbe9e7;
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 16px;
+  --shadow-1: 0 1px 2px rgb(23 33 31 / 6%);
+  --shadow-2: 0 2px 6px rgb(23 33 31 / 6%), 0 12px 32px rgb(23 33 31 / 10%);
+
+  --sidebar-width: 248px;
+  --topbar-height: 56px;
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --fast: 150ms;
+  --normal: 220ms;
+
+  --font: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #101317;
-    --surface: #181c21;
-    --subtle: #22272e;
-    --foreground: #eceef1;
-    --muted: #a3acb8;
-    --border: #333a43;
-    --link: #8ab4f8;
+    --background: #0f1513;
+    --surface: #161e1b;
+    --subtle: #1f2925;
+    --foreground: #e7eeeb;
+    --muted: #9db0a9;
+    --border: #2d3a35;
+    --brand: #4fbfa6;
+    --brand-strong: #7fd6c2;
+    --brand-soft: #18322c;
+    --on-brand: #0b1f1a;
+    --link: #6fd0b9;
     --success: #7fd6a2;
     --success-bg: #173324;
     --warning: #f2bf6c;
     --warning-bg: #3a2c12;
     --danger: #f28b82;
     --danger-bg: #3d1e1b;
+    --shadow-1: 0 1px 2px rgb(0 0 0 / 30%);
+    --shadow-2: 0 2px 6px rgb(0 0 0 / 30%), 0 12px 32px rgb(0 0 0 / 40%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --fast: 0ms;
+    --normal: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0ms !important;
+    transition-duration: 0ms !important;
   }
 }
 
@@ -47,8 +90,35 @@ body {
 body {
   color: var(--foreground);
   background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-  line-height: 1.4;
+  font-family: var(--font);
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1 {
+  font-size: 1.375rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+
+h3 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+a {
+  color: var(--link);
+  text-underline-offset: 2px;
+}
+
+table {
+  font-variant-numeric: tabular-nums;
 }
 
 label {
@@ -60,19 +130,71 @@ label {
 
 input,
 select,
+textarea,
 button {
   min-height: 36px;
   padding: 6px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: inherit;
   background: var(--surface);
   font: inherit;
+  transition:
+    border-color var(--fast) var(--ease),
+    background-color var(--fast) var(--ease),
+    box-shadow var(--fast) var(--ease);
+}
+
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: color-mix(in srgb, var(--brand) 40%, var(--border));
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 18%, transparent);
+  outline: none;
 }
 
 button {
   cursor: pointer;
+  font-weight: 500;
   background: var(--subtle);
+}
+
+button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--border));
+  background: var(--brand-soft);
+}
+
+button[type="submit"] {
+  border-color: var(--brand);
+  color: var(--on-brand);
+  background: var(--brand);
+}
+
+button[type="submit"]:hover:not(:disabled) {
+  border-color: var(--brand-strong);
+  background: var(--brand-strong);
+}
+
+/* Com dois botões de enviar lado a lado, só o primeiro fica cheio. */
+button[type="submit"] ~ button[type="submit"] {
+  border-color: var(--brand);
+  color: var(--brand-strong);
+  background: var(--surface);
+}
+
+button[type="submit"] ~ button[type="submit"]:hover:not(:disabled) {
+  color: var(--brand-strong);
+  background: var(--brand-soft);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 button:disabled {
@@ -81,6 +203,11 @@ button:disabled {
 }
 
 :focus-visible {
-  outline: 2px solid var(--link);
-  outline-offset: 1px;
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* A faixa de homologação fica presa no alto; o menu lateral começa abaixo dela. */
+body:has([data-env-banner]) {
+  --banner-height: 32px;
 }

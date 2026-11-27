@@ -16,27 +16,16 @@ import {
   StatusEvent,
   StatusForm,
 } from "../commercial-ui";
-import {
-  AddBarcodeForm,
-  BarcodeCard,
-  BarcodeRow,
-  EditProductForm,
-  ProductStructure,
-  ProductValues,
-} from "../ui";
+import { AddBarcodeForm, BarcodeCard, BarcodeRow, EditProductForm, ProductStructure, ProductValues } from "../ui";
 import { BatchTrackingRow, TrackingRow } from "../../estoque/ui";
 import { BalanceRow, dayText, quantityText } from "../../estoque/format";
 import { ProductTax, TaxRow } from "../tax";
-import {
-  AddProductSupplierForm,
-  ProductSupplierForm,
-  ProductSupplierRow,
-  SupplierOption,
-} from "../../fornecedores/ui";
+import { AddProductSupplierForm, ProductSupplierForm, ProductSupplierRow, SupplierOption } from "../../fornecedores/ui";
 import { cnpjText } from "../../fornecedores/format";
 import { costText, dateTimeText } from "../../notas/format";
 import styles from "../../terminais/page.module.css";
 import { ProductGallery, ProductImage } from "../images";
+import { activeTab, TabItem, Tabs } from "../../shell/tabs";
 
 interface AverageCostRow {
   branch_id: string;
@@ -75,15 +64,13 @@ const dateText = (value: string) =>
   });
 
 type Params = Promise<{ id: string }>;
-type SearchParams = Promise<{ catalogo?: string | string[]; vincular?: string | string[] }>;
+type SearchParams = Promise<{
+  catalogo?: string | string[];
+  vincular?: string | string[];
+  aba?: string | string[];
+}>;
 
-export default function ProductPage({
-  params,
-  searchParams,
-}: {
-  params: Params;
-  searchParams: SearchParams;
-}) {
+export default function ProductPage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   return (
     <main className={styles.page}>
       <Suspense fallback={<p className={styles.hint}>Carregando produto...</p>}>
@@ -100,13 +87,7 @@ const EMPTY_STRUCTURE: ProductStructure = {
   units: [{ code: "UN", name: "Unidade", fractional: false }],
 };
 
-async function ProductContent({
-  params,
-  searchParams,
-}: {
-  params: Params;
-  searchParams: SearchParams;
-}) {
+async function ProductContent({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   const { id } = await params;
   const path = `/produtos/${id}`;
   const user = await requireUser(path);
@@ -127,10 +108,24 @@ async function ProductContent({
     );
   }
 
+  const { catalogo, vincular, aba } = await searchParams;
+  const canSeeSuppliers = can(user, "purchases.view") || can(user, "purchases.manage");
+  const canManageSuppliers = can(user, "purchases.manage");
+  const tabs: TabItem[] = [
+    { id: "cadastro", label: "Cadastro" },
+    { id: "tributacao", label: "Tributação" },
+    { id: "precos", label: "Preços e PMC" },
+    ...(canSeeStock || canSeeSuppliers ? [{ id: "estoque", label: "Estoque e custo" }] : []),
+    ...(canSeeSuppliers ? [{ id: "fornecedores", label: "Fornecedores" }] : []),
+    { id: "codigos", label: "Códigos de barras" },
+  ];
+  const tab = activeTab(tabs, aba);
+  const needsStructure = tab === "cadastro" || tab === "codigos";
+
   const [productResult, structureResult, taxResult] = await Promise.all([
     apiFetch<ProductDetail>(`/admin/products/${encodeURIComponent(id)}`),
-    apiFetch<ProductStructure>("/admin/product-structure"),
-    apiFetch<TaxRow[]>(`/admin/products/${encodeURIComponent(id)}/tax`),
+    needsStructure ? apiFetch<ProductStructure>("/admin/product-structure") : null,
+    tab === "tributacao" ? apiFetch<TaxRow[]>(`/admin/products/${encodeURIComponent(id)}/tax`) : null,
   ]);
   if (!productResult.ok) {
     redirectIfNeeded(productResult.error, path);
@@ -144,33 +139,36 @@ async function ProductContent({
     );
   }
   const product = productResult.data;
-  const structure = structureResult.ok ? structureResult.data : EMPTY_STRUCTURE;
+  const structure = structureResult?.ok ? structureResult.data : EMPTY_STRUCTURE;
+  const productPath = encodeURIComponent(id);
 
-  const canSeeSuppliers = can(user, "purchases.view") || can(user, "purchases.manage");
-  const canManageSuppliers = can(user, "purchases.manage");
-  const [productSuppliers, supplierOptions, averageCosts] = canSeeSuppliers
-    ? await Promise.all([
-        apiFetch<ProductSupplierRow[]>(`/admin/products/${encodeURIComponent(id)}/suppliers`),
-        canManageSuppliers ? apiFetch<SupplierOption[]>("/admin/suppliers?limit=200") : null,
-        apiFetch<AverageCostRow[]>(`/admin/products/${encodeURIComponent(id)}/average-costs`),
-      ])
-    : [null, null, null];
+  const [productSuppliers, supplierOptions, averageCosts, stock] = await Promise.all([
+    tab === "fornecedores" && canSeeSuppliers
+      ? apiFetch<ProductSupplierRow[]>(`/admin/products/${productPath}/suppliers`)
+      : null,
+    tab === "fornecedores" && canManageSuppliers ? apiFetch<SupplierOption[]>("/admin/suppliers?limit=200") : null,
+    tab === "estoque" && canSeeSuppliers
+      ? apiFetch<AverageCostRow[]>(`/admin/products/${productPath}/average-costs`)
+      : null,
+    tab === "estoque" && canSeeStock
+      ? apiFetch<{ balances: BalanceRow[]; tracking: TrackingRow[] }>(`/admin/products/${productPath}/stock`)
+      : null,
+  ]);
 
-  const stock = canSeeStock
-    ? await apiFetch<{ balances: BalanceRow[]; tracking: TrackingRow[] }>(
-        `/admin/products/${encodeURIComponent(id)}/stock`,
-      )
-    : null;
-
-  const { catalogo, vincular } = await searchParams;
   const query = typeof catalogo === "string" ? catalogo.trim() : "";
   const linkingId = typeof vincular === "string" ? vincular : "";
   const catalog =
-    !product.catalog_product_id && canManage && query
+    tab === "cadastro" && !product.catalog_product_id && canManage && query
       ? await apiFetch<CatalogRow[]>(`/admin/catalog?q=${encodeURIComponent(query)}`)
       : null;
   const items = catalog?.ok ? catalog.data : [];
   const linking = items.find((item) => item.id === linkingId && !item.product_id);
+
+  for (const item of tabs) {
+    if (item.id === "cadastro") item.attention = !product.catalog_product_id;
+    if (item.id === "precos") item.attention = product.grid.some((row) => row.above_pmc);
+    if (item.id === "codigos") item.count = product.barcodes.length;
+  }
 
   return (
     <>
@@ -182,338 +180,364 @@ async function ProductContent({
         <Link href="/produtos">Voltar para produtos</Link>
       </div>
 
-      <section className={styles.card}>
-        <h2>Dados do Catálogo</h2>
-        {product.catalog_product_id ? (
+      <Tabs base={path} items={tabs} active={tab}>
+        {tab === "cadastro" && (
           <>
-            <ProductGallery images={product.images ?? []} name={product.catalog_name ?? product.display_name} />
-            <p>
-              <strong>{product.catalog_name}</strong>
-            </p>
-            <p className={styles.hint}>
-              {[
-                product.active_ingredient,
-                product.catalog_manufacturer,
-                product.ms_registration && `MS ${product.ms_registration}`,
-                product.ncm && `NCM ${product.ncm}`,
-                product.cest && `CEST ${product.cest}`,
-                product.controlled_class && controlledLabel(product.controlled_class),
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
-            <p className={styles.hint}>Estes dados vêm do Catálogo e não são editados pela loja.</p>
-          </>
-        ) : (
-          <>
-            <p className={styles.warning}>
-              Sem Catálogo: fica sem tributação e sem poder ser vendido até ser vinculado.
-            </p>
-            {canManage && (
-              <form action={path} className={styles.inline}>
-                <label>
-                  Consultar o Catálogo para vincular
-                  <input name="catalogo" type="search" size={40} maxLength={200} defaultValue={query} required />
-                </label>
-                <button type="submit">Consultar</button>
-              </form>
-            )}
-            {catalog && !catalog.ok && <ErrorNotice error={catalog.error} />}
-            {catalog?.ok && items.length === 0 && (
-              <p className={styles.hint}>Nenhum item encontrado no Catálogo.</p>
-            )}
-            {items.length > 0 && (
-              <CatalogResults
-                items={items}
-                actionLabel="Vincular"
-                hrefFor={(item) =>
-                  `${path}?catalogo=${encodeURIComponent(query)}&vincular=${item.id}`
-                }
+            <section className={styles.card}>
+              <h2>Dados do Catálogo</h2>
+              {product.catalog_product_id ? (
+                <>
+                  <ProductGallery images={product.images ?? []} name={product.catalog_name ?? product.display_name} />
+                  <p>
+                    <strong>{product.catalog_name}</strong>
+                  </p>
+                  <p className={styles.hint}>
+                    {[
+                      product.active_ingredient,
+                      product.catalog_manufacturer,
+                      product.ms_registration && `MS ${product.ms_registration}`,
+                      product.ncm && `NCM ${product.ncm}`,
+                      product.cest && `CEST ${product.cest}`,
+                      product.controlled_class && controlledLabel(product.controlled_class),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                  <p className={styles.hint}>Estes dados vêm do Catálogo e não são editados pela loja.</p>
+                </>
+              ) : (
+                <>
+                  <p className={styles.warning}>
+                    Sem Catálogo: fica sem tributação e sem poder ser vendido até ser vinculado.
+                  </p>
+                  {canManage && (
+                    <form action={path} className={styles.inline}>
+                      <label>
+                        Consultar o Catálogo para vincular
+                        <input name="catalogo" type="search" size={40} maxLength={200} defaultValue={query} required />
+                      </label>
+                      <button type="submit">Consultar</button>
+                    </form>
+                  )}
+                  {catalog && !catalog.ok && <ErrorNotice error={catalog.error} />}
+                  {catalog?.ok && items.length === 0 && (
+                    <p className={styles.hint}>Nenhum item encontrado no Catálogo.</p>
+                  )}
+                  {items.length > 0 && (
+                    <CatalogResults
+                      items={items}
+                      actionLabel="Vincular"
+                      hrefFor={(item) => `${path}?catalogo=${encodeURIComponent(query)}&vincular=${item.id}`}
+                    />
+                  )}
+                  {linking && (
+                    <p role="status">
+                      Será vinculado a <strong>{linking.name}</strong>. Confira e confirme abaixo.
+                    </p>
+                  )}
+                </>
+              )}
+            </section>
+
+            <section className={styles.card}>
+              <h2>Cadastro</h2>
+              <EditProductForm
+                key={linking?.id ?? "cadastro"}
+                values={product}
+                structure={structure}
+                canManage={canManage}
+                linkingTo={linking?.id}
               />
+            </section>
+          </>
+        )}
+
+        {tab === "tributacao" && taxResult && (
+          <section className={styles.card}>
+            <h2>Tributação</h2>
+            {taxResult.ok ? <ProductTax rows={taxResult.data} /> : <ErrorNotice error={taxResult.error} />}
+            <p className={styles.hint}>A tributação vem do Catálogo e não é editada pela loja.</p>
+          </section>
+        )}
+
+        {tab === "precos" && (
+          <>
+            <section className={styles.card}>
+              <h2>Preços e status por filial</h2>
+              {product.grid.some((row) => row.above_pmc) && (
+                <p className={styles.warning} role="status">
+                  Há filial com preço acima do PMC. Revise os preços abaixo.
+                </p>
+              )}
+              {product.uses_pmc && product.grid.some((row) => !row.state) && (
+                <p className={styles.warning} role="status">
+                  Há filial sem estado informado. Sem ele, o preço não pode ser salvo neste produto.{" "}
+                  <Link href="/produtos/estrutura">Informar em Estrutura</Link>.
+                </p>
+              )}
+              {can(user, "products.status") ? (
+                <StatusForm productId={product.id} grid={product.grid} />
+              ) : (
+                <div className={styles.tableWrap}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Filial</th>
+                        <th>Status</th>
+                        <th>Preço em vigor</th>
+                        <th>PMC</th>
+                        <th>Na venda</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {product.grid.map((row) => (
+                        <tr key={row.branch_id}>
+                          <td>{row.branch_name}</td>
+                          <td>{statusLabel(row.status)}</td>
+                          <td>
+                            {moneyText(row.effective_price)}
+                            {row.above_pmc && <small className={styles.warning}>Acima do PMC</small>}
+                          </td>
+                          <td>{moneyText(row.pmc)}</td>
+                          <td>
+                            {row.sellable ? "Vende" : "Não vende"}
+                            {row.notice && <small className={styles.warning}>{noticeText(row.notice)}</small>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {can(user, "products.reactivate") && product.grid.some((row) => row.status === "inactive") && (
+                <ReactivateForm productId={product.id} grid={product.grid} />
+              )}
+              {canPrice && <PriceForms productId={product.id} grid={product.grid} />}
+              <details className={styles.reason}>
+                <summary>Histórico de preços</summary>
+                <div className={styles.tableWrap}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Quando</th>
+                        <th>Onde</th>
+                        <th>Preço</th>
+                        <th>Motivo</th>
+                        <th>Quem</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {product.prices.map((event, index) => (
+                        <tr key={index}>
+                          <td>{dateText(event.created_at)}</td>
+                          <td>{event.branch_id ? event.branch_name : "Rede"}</td>
+                          <td>{event.price === null ? "Exceção encerrada" : moneyText(event.price)}</td>
+                          <td>{event.reason}</td>
+                          <td>{event.author}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+              <details className={styles.reason}>
+                <summary>Histórico de status</summary>
+                <div className={styles.tableWrap}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Quando</th>
+                        <th>Filial</th>
+                        <th>Mudança</th>
+                        <th>Motivo</th>
+                        <th>Quem</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {product.status_events.map((event, index) => (
+                        <tr key={index}>
+                          <td>{dateText(event.created_at)}</td>
+                          <td>{event.branch_name}</td>
+                          <td>
+                            {statusLabel(event.old_status)} → {statusLabel(event.new_status)}
+                          </td>
+                          <td>{event.reason}</td>
+                          <td>{event.author}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            </section>
+
+            <section className={styles.card}>
+              <h2>PMC</h2>
+              {product.pmc.length === 0 && <p className={styles.hint}>Nenhum PMC informado.</p>}
+              {product.pmc.length > 0 && (
+                <div className={styles.tableWrap}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Estado</th>
+                        <th>Região</th>
+                        <th>Valor</th>
+                        <th>Origem</th>
+                        <th>Quando</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {product.pmc.map((row, index) => (
+                        <tr key={index}>
+                          <td>{row.state}</td>
+                          <td>{regionLabel(row.pmc_region)}</td>
+                          <td>{moneyText(row.value)}</td>
+                          <td>
+                            {row.source === "catalog"
+                              ? "Catálogo"
+                              : row.source === "invoice"
+                                ? "Nota"
+                                : row.author
+                                  ? `Digitado por ${row.author}`
+                                  : "Digitado"}
+                          </td>
+                          <td>{dateText(row.created_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {canPrice && <AddPmcForm productId={product.id} />}
+            </section>
+          </>
+        )}
+
+        {tab === "estoque" && (
+          <>
+            {stock && !stock.ok && <ErrorNotice error={stock.error} />}
+            {stock?.ok && (
+              <section className={styles.card}>
+                <div className={styles.header}>
+                  <h2>Estoque</h2>
+                  <Link href={`/estoque?q=${encodeURIComponent(product.code)}`}>Ver no estoque</Link>
+                </div>
+                {stock.data.balances.length === 0 && <p className={styles.hint}>Sem saldo neste produto.</p>}
+                {stock.data.balances.length > 0 && (
+                  <div className={styles.tableWrap}>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Filial</th>
+                          <th>Lote</th>
+                          <th>Validade</th>
+                          <th>Saldo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stock.data.balances.map((row) => (
+                          <tr key={row.balance_id}>
+                            <td>{row.branch_name}</td>
+                            <td>{row.batch_number ?? "Sem lote"}</td>
+                            <td>
+                              {dayText(row.expires_on)}
+                              {row.is_expired && <small className={styles.warning}>Vencido</small>}
+                            </td>
+                            <td>{quantityText(row.quantity)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <h3>Controle de lote</h3>
+                {stock.data.tracking.map((row) => (
+                  <BatchTrackingRow key={row.branch_id} productId={product.id} row={row} canManage={canTrack} />
+                ))}
+              </section>
             )}
-            {linking && (
-              <p role="status">
-                Será vinculado a <strong>{linking.name}</strong>. Confira e confirme abaixo.
-              </p>
+
+            {averageCosts && (
+              <section className={styles.card}>
+                <h2>Custo médio por filial</h2>
+                {!averageCosts.ok && <ErrorNotice error={averageCosts.error} />}
+                {averageCosts.ok && averageCosts.data.length === 0 && (
+                  <p className={styles.hint}>Ainda não houve entrada por nota de compra nas filiais que você vê.</p>
+                )}
+                {averageCosts.ok && averageCosts.data.length > 0 && (
+                  <div className={styles.tableWrap}>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Filial</th>
+                          <th>Custo médio</th>
+                          <th>Saldo</th>
+                          <th>Atualizado em</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {averageCosts.data.map((row) => (
+                          <tr key={row.branch_id}>
+                            <td>{row.branch_name}</td>
+                            <td>{row.average_cost === null ? "Sem custo" : costText(row.average_cost)}</td>
+                            <td>{quantityText(row.stock_quantity)}</td>
+                            <td>{dateTimeText(row.updated_at)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <p className={styles.hint}>
+                  Média móvel das entradas por nota de compra, sem descontar créditos de imposto.
+                </p>
+              </section>
             )}
           </>
         )}
-      </section>
 
-      <section className={styles.card}>
-        <h2>Tributação</h2>
-        {taxResult.ok ? <ProductTax rows={taxResult.data} /> : <ErrorNotice error={taxResult.error} />}
-        <p className={styles.hint}>A tributação vem do Catálogo e não é editada pela loja.</p>
-      </section>
-
-      <section className={styles.card}>
-        <h2>Cadastro</h2>
-        <EditProductForm
-          key={linking?.id ?? "cadastro"}
-          values={product}
-          structure={structure}
-          canManage={canManage}
-          linkingTo={linking?.id}
-        />
-      </section>
-
-      <section className={styles.card}>
-        <h2>Preços e status por filial</h2>
-        {product.grid.some((row) => row.above_pmc) && (
-          <p className={styles.warning} role="status">
-            Há filial com preço acima do PMC. Revise os preços abaixo.
-          </p>
+        {tab === "fornecedores" && productSuppliers && (
+          <section className={styles.card}>
+            <h2>Fornecedores</h2>
+            {!productSuppliers.ok && <ErrorNotice error={productSuppliers.error} />}
+            {productSuppliers.ok && productSuppliers.data.length === 0 && (
+              <p className={styles.hint}>Nenhum código de fornecedor ligado a este produto.</p>
+            )}
+            {productSuppliers.ok &&
+              productSuppliers.data.map((row) => (
+                <ProductSupplierForm
+                  key={row.id}
+                  row={row}
+                  canManage={canManageSuppliers}
+                  next={path}
+                  title={
+                    <Link href={`/fornecedores/${row.supplier_id}`}>
+                      {row.supplier_name} · {cnpjText(row.supplier_cnpj)}
+                    </Link>
+                  }
+                />
+              ))}
+            {supplierOptions && !supplierOptions.ok && <ErrorNotice error={supplierOptions.error} />}
+            {supplierOptions?.ok && <AddProductSupplierForm productId={product.id} suppliers={supplierOptions.data} />}
+          </section>
         )}
-        {product.uses_pmc && product.grid.some((row) => !row.state) && (
-          <p className={styles.warning} role="status">
-            Há filial sem estado informado. Sem ele, o preço não pode ser salvo neste produto.{" "}
-            <Link href="/produtos/estrutura">Informar em Estrutura</Link>.
-          </p>
-        )}
-        {can(user, "products.status") ? (
-          <StatusForm productId={product.id} grid={product.grid} />
-        ) : (
-          <div className={styles.tableWrap}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Filial</th>
-                  <th>Status</th>
-                  <th>Preço em vigor</th>
-                  <th>PMC</th>
-                  <th>Na venda</th>
-                </tr>
-              </thead>
-              <tbody>
-                {product.grid.map((row) => (
-                  <tr key={row.branch_id}>
-                    <td>{row.branch_name}</td>
-                    <td>{statusLabel(row.status)}</td>
-                    <td>
-                      {moneyText(row.effective_price)}
-                      {row.above_pmc && <small className={styles.warning}>Acima do PMC</small>}
-                    </td>
-                    <td>{moneyText(row.pmc)}</td>
-                    <td>
-                      {row.sellable ? "Vende" : "Não vende"}
-                      {row.notice && <small className={styles.warning}>{noticeText(row.notice)}</small>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {can(user, "products.reactivate") && product.grid.some((row) => row.status === "inactive") && (
-          <ReactivateForm productId={product.id} grid={product.grid} />
-        )}
-        {canPrice && <PriceForms productId={product.id} grid={product.grid} />}
-        <details className={styles.reason}>
-          <summary>Histórico de preços</summary>
-          <div className={styles.tableWrap}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Quando</th>
-                  <th>Onde</th>
-                  <th>Preço</th>
-                  <th>Motivo</th>
-                  <th>Quem</th>
-                </tr>
-              </thead>
-              <tbody>
-                {product.prices.map((event, index) => (
-                  <tr key={index}>
-                    <td>{dateText(event.created_at)}</td>
-                    <td>{event.branch_id ? event.branch_name : "Rede"}</td>
-                    <td>{event.price === null ? "Exceção encerrada" : moneyText(event.price)}</td>
-                    <td>{event.reason}</td>
-                    <td>{event.author}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
-        <details className={styles.reason}>
-          <summary>Histórico de status</summary>
-          <div className={styles.tableWrap}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Quando</th>
-                  <th>Filial</th>
-                  <th>Mudança</th>
-                  <th>Motivo</th>
-                  <th>Quem</th>
-                </tr>
-              </thead>
-              <tbody>
-                {product.status_events.map((event, index) => (
-                  <tr key={index}>
-                    <td>{dateText(event.created_at)}</td>
-                    <td>{event.branch_name}</td>
-                    <td>
-                      {statusLabel(event.old_status)} → {statusLabel(event.new_status)}
-                    </td>
-                    <td>{event.reason}</td>
-                    <td>{event.author}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
-      </section>
 
-      {stock && !stock.ok && <ErrorNotice error={stock.error} />}
-      {stock?.ok && (
-        <section className={styles.card}>
-          <div className={styles.header}>
-            <h2>Estoque</h2>
-            <Link href={`/estoque?q=${encodeURIComponent(product.code)}`}>Ver no estoque</Link>
-          </div>
-          {stock.data.balances.length === 0 && <p className={styles.hint}>Sem saldo neste produto.</p>}
-          {stock.data.balances.length > 0 && (
-            <div className={styles.tableWrap}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Filial</th>
-                    <th>Lote</th>
-                    <th>Validade</th>
-                    <th>Saldo</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stock.data.balances.map((row) => (
-                    <tr key={row.balance_id}>
-                      <td>{row.branch_name}</td>
-                      <td>{row.batch_number ?? "Sem lote"}</td>
-                      <td>
-                        {dayText(row.expires_on)}
-                        {row.is_expired && <small className={styles.warning}>Vencido</small>}
-                      </td>
-                      <td>{quantityText(row.quantity)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <h3>Controle de lote</h3>
-          {stock.data.tracking.map((row) => (
-            <BatchTrackingRow key={row.branch_id} productId={product.id} row={row} canManage={canTrack} />
-          ))}
-        </section>
-      )}
-
-      <section className={styles.card}>
-        <h2>PMC</h2>
-        {product.pmc.length === 0 && <p className={styles.hint}>Nenhum PMC informado.</p>}
-        {product.pmc.length > 0 && (
-          <div className={styles.tableWrap}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Estado</th>
-                  <th>Região</th>
-                  <th>Valor</th>
-                  <th>Origem</th>
-                  <th>Quando</th>
-                </tr>
-              </thead>
-              <tbody>
-                {product.pmc.map((row, index) => (
-                  <tr key={index}>
-                    <td>{row.state}</td>
-                    <td>{regionLabel(row.pmc_region)}</td>
-                    <td>{moneyText(row.value)}</td>
-                    <td>{row.source === "catalog" ? "Catálogo" : row.source === "invoice" ? "Nota" : row.author ? `Digitado por ${row.author}` : "Digitado"}</td>
-                    <td>{dateText(row.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {canPrice && <AddPmcForm productId={product.id} />}
-      </section>
-
-      {averageCosts && (
-        <section className={styles.card}>
-          <h2>Custo médio por filial</h2>
-          {!averageCosts.ok && <ErrorNotice error={averageCosts.error} />}
-          {averageCosts.ok && averageCosts.data.length === 0 && (
-            <p className={styles.hint}>Ainda não houve entrada por nota de compra nas filiais que você vê.</p>
-          )}
-          {averageCosts.ok && averageCosts.data.length > 0 && (
-            <div className={styles.tableWrap}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Filial</th>
-                    <th>Custo médio</th>
-                    <th>Saldo</th>
-                    <th>Atualizado em</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {averageCosts.data.map((row) => (
-                    <tr key={row.branch_id}>
-                      <td>{row.branch_name}</td>
-                      <td>{row.average_cost === null ? "Sem custo" : costText(row.average_cost)}</td>
-                      <td>{quantityText(row.stock_quantity)}</td>
-                      <td>{dateTimeText(row.updated_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <p className={styles.hint}>Média móvel das entradas por nota de compra, sem descontar créditos de imposto.</p>
-        </section>
-      )}
-
-      {productSuppliers && (
-        <section className={styles.card}>
-          <h2>Fornecedores</h2>
-          {!productSuppliers.ok && <ErrorNotice error={productSuppliers.error} />}
-          {productSuppliers.ok && productSuppliers.data.length === 0 && (
-            <p className={styles.hint}>Nenhum código de fornecedor ligado a este produto.</p>
-          )}
-          {productSuppliers.ok &&
-            productSuppliers.data.map((row) => (
-              <ProductSupplierForm
-                key={row.id}
-                row={row}
-                canManage={canManageSuppliers}
-                next={path}
-                title={
-                  <Link href={`/fornecedores/${row.supplier_id}`}>
-                    {row.supplier_name} · {cnpjText(row.supplier_cnpj)}
-                  </Link>
-                }
+        {tab === "codigos" && (
+          <section className={styles.card}>
+            <h2>Códigos de barras</h2>
+            {product.barcodes.map((barcode) => (
+              <BarcodeCard
+                key={barcode.id}
+                productId={product.id}
+                barcode={barcode}
+                channels={structure.channels}
+                canManage={canManage}
               />
             ))}
-          {supplierOptions && !supplierOptions.ok && <ErrorNotice error={supplierOptions.error} />}
-          {supplierOptions?.ok && <AddProductSupplierForm productId={product.id} suppliers={supplierOptions.data} />}
-        </section>
-      )}
-
-      <section className={styles.card}>
-        <h2>Códigos de barras</h2>
-        {product.barcodes.map((barcode) => (
-          <BarcodeCard
-            key={barcode.id}
-            productId={product.id}
-            barcode={barcode}
-            channels={structure.channels}
-            canManage={canManage}
-          />
-        ))}
-        {canManage && <AddBarcodeForm productId={product.id} channels={structure.channels} />}
-      </section>
+            {canManage && <AddBarcodeForm productId={product.id} channels={structure.channels} />}
+          </section>
+        )}
+      </Tabs>
     </>
   );
 }
