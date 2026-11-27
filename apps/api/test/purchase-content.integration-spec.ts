@@ -93,10 +93,9 @@ describe('dados completos da nota de compra contra o banco real', () => {
     expect(before.content).toBeNull();
     expect(before.installments).toEqual([]);
 
+    // Outras notas do banco de testes podem estar na fila: confere só as duas desta nota.
     const service = app.get(PurchaseContentService);
-    const round = await service.tick();
-    expect(round?.read).toBeGreaterThanOrEqual(1);
-    expect(round?.failed).toBeGreaterThanOrEqual(1);
+    expect(await service.tick()).not.toBeNull();
 
     const read = await detailOf(old);
     expect(read.content).toMatchObject({ infAdic: { infCpl: 'PEDIDO 991' } });
@@ -105,7 +104,9 @@ describe('dados completos da nota de compra contra o banco real', () => {
     expect(failed.content).toBeNull();
     expect(failed.content_error).toMatch(/^XML não lido: /);
 
-    // Na rodada seguinte, nenhuma das duas volta.
-    expect(await service.tick()).toEqual({ read: 0, failed: 0 });
+    // Na rodada seguinte, nenhuma das duas muda (nem volta para a fila).
+    await service.tick();
+    expect(await detailOf(old)).toMatchObject({ content_read_at: read.content_read_at, installments: read.installments });
+    expect((await detailOf(unreadable)).content_error).toBe(failed.content_error);
   });
 });

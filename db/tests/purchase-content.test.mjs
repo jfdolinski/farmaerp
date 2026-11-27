@@ -507,6 +507,15 @@ describe('auditoria da nota', () => {
       ]);
       const added = rows.find((r) => r.kind === 'batch_added');
       expect(added).toMatchObject({ user_id: a.admin.id, detail: { item_number: 1, description: 'ITEM DE TESTE', quantity: 2, expires_on: '2029-02-01' } });
+      // Mesma transação, mesmo horário: a tela mostra na ordem inversa da gravação, sempre igual.
+      const { rows: [{ order }] } = await client.query(
+        'SELECT array_agg(kind ORDER BY occurred_at DESC, id DESC) AS order FROM purchase_invoice_audit WHERE invoice_id = $1', [id],
+      );
+      const { rows: [{ moments }] } = await client.query(
+        'SELECT count(DISTINCT occurred_at)::int AS moments FROM purchase_invoice_audit WHERE invoice_id = $1', [id],
+      );
+      expect(moments).toBe(1);
+      expect((await extra(client, id)).audit.map((row) => row.kind)).toEqual(order);
     });
   });
 

@@ -298,13 +298,14 @@ AS $$
     'audit', COALESCE((
       SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
                'kind', a.kind, 'detail', a.detail, 'user_name', u.name, 'occurred_at', a.occurred_at)
-             ORDER BY a.occurred_at DESC)
+             ORDER BY a.occurred_at DESC, a.id DESC)
         FROM (
-          SELECT e.kind, CASE WHEN e.reason IS NULL THEN '{}'::jsonb ELSE pg_catalog.jsonb_build_object('reason', e.reason) END AS detail,
+          -- Na mesma transação o horário empata; o id (UUID v7) segue a ordem em que foi gravado.
+          SELECT e.id, e.kind, CASE WHEN e.reason IS NULL THEN '{}'::jsonb ELSE pg_catalog.jsonb_build_object('reason', e.reason) END AS detail,
                  e.user_id, e.created_at AS occurred_at
             FROM public.purchase_invoice_event e WHERE e.invoice_id = i.id AND e.deleted_at IS NULL
           UNION ALL
-          SELECT a.kind, a.detail, a.user_id, a.occurred_at
+          SELECT a.id, a.kind, a.detail, a.user_id, a.occurred_at
             FROM public.purchase_invoice_audit a WHERE a.invoice_id = i.id AND a.deleted_at IS NULL
         ) a
         LEFT JOIN public.user_account u ON u.id = a.user_id

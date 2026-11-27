@@ -79,8 +79,8 @@ export class PurchaseContentService implements OnApplicationBootstrap, OnModuleD
   }
 
   /**
-   * Grava o conteúdo da nota; XML que não se lê ou conteúdo recusado pelo banco marca a falha (senão a
-   * nota voltaria em toda rodada). Falha passageira ou sem código do catálogo interrompe a rodada.
+   * Grava o conteúdo da nota. Só a falha passageira (conexão, fila, tempo) interrompe a rodada; qualquer
+   * outra marca a nota, senão ela voltaria no começo da fila em toda rodada e travaria as outras.
    */
   private async readNote(note: PendingNote): Promise<boolean> {
     let reason: string;
@@ -96,9 +96,10 @@ export class PurchaseContentService implements OnApplicationBootstrap, OnModuleD
       return true;
     } catch (error) {
       const code = error instanceof InvalidNfeError ? null : codeFromDbError(error);
+      if (code && TRANSIENT.has(code)) throw error;
       if (error instanceof InvalidNfeError) reason = `XML não lido: ${error.reason}`;
-      else if (code && !TRANSIENT.has(code)) reason = `Conteúdo recusado pelo banco (${code}).`;
-      else throw error;
+      else if (code) reason = `Conteúdo recusado pelo banco (${code}).`;
+      else reason = 'Falha inesperada na leitura do XML.';
       this.logger.pino.warn({ context: 'PurchaseContent', invoiceId: note.id, err: error }, 'nota de compra sem leitura');
     }
     await this.database.withContext((client) => client.query('SELECT app.purchase_content_failed($1, $2)', [note.id, reason]), {

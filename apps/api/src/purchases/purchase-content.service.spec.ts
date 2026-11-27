@@ -57,12 +57,29 @@ describe('rotina que lê as notas de compra guardadas', () => {
   it.each([
     ['conexão', Object.assign(new Error('x'), { code: 'ECONNREFUSED' })],
     ['tempo esgotado', Object.assign(new Error('x'), { code: '57014' })],
-    ['sem código', new Error('inesperado')],
   ])('falha passageira (%s) não marca a nota e interrompe a rodada', async (_name, error) => {
     const { database, queries } = fakeDatabase([{ id: 'a', xml: buildNfe().xml }, { id: 'b', xml: buildNfe().xml }], error);
     expect(await new PurchaseContentService(database, silent).tick()).toBeNull();
     expect(failures(queries)).toEqual([]);
     expect(stores(queries)).toHaveLength(1);
+  });
+
+  it('falha inesperada marca a nota e segue: não trava a fila', async () => {
+    const good = buildNfe().xml;
+    const { database, queries } = fakeDatabase([{ id: 'a', xml: good }, { id: 'b', xml: good }]);
+    let calls = 0;
+    const original = database.withContext.bind(database);
+    (database as unknown as { withContext: unknown }).withContext = async (fn: (c: unknown) => unknown, options?: unknown) =>
+      original(async (client: { query: (sql: string, params?: unknown[]) => unknown }) =>
+        fn({
+          query: async (sql: string, params?: unknown[]) => {
+            if (sql.includes('store_purchase_content') && calls++ === 0) throw new TypeError('inesperado');
+            return client.query(sql, params);
+          },
+        }), options as never);
+    expect(await new PurchaseContentService(database, silent).tick()).toEqual({ read: 1, failed: 1 });
+    expect(failures(queries)).toEqual([['a', 'Falha inesperada na leitura do XML.']]);
+    expect(stores(queries).map((q) => q.params[0])).toEqual(['b']);
   });
 
   it('a fila cheia busca de novo dentro do tempo; a vazia para', async () => {
