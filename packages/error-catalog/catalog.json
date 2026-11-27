@@ -3703,5 +3703,13 @@
       "customer_abc_event_period_check",
       "customer_abc_event_change_check"
     ]
+  },
+  "FA762": {
+    "message": "Esta pessoa não pode ser o vendedor padrão deste terminal.",
+    "action": "Escolha alguém ativo que venda ou faça orçamentos na filial do terminal.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
   }
 }

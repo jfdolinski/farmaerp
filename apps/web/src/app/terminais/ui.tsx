@@ -10,6 +10,7 @@ import {
   setOfflineMinutes,
   setSaleSettings,
   setReturnDays,
+  setFixedSeller,
   setTerminalProfile,
   setUpdateRing,
   claimPairing,
@@ -267,6 +268,58 @@ export function OfflineMinutesForm({
             Usar o tempo da filial
           </button>
         )}
+        <ErrorNotice error={state.error} />
+        {state.done && <p role="status">Salvo. Chega ao PDV na próxima sincronização.</p>}
+      </form>
+    </details>
+  );
+}
+
+export interface SellerOption {
+  branch_id: string;
+  user_id: string;
+  code: number;
+  name: string;
+}
+
+/**
+ * Vendedor padrão do terminal: a venda e o orçamento começam com ele, e o PDV não para pedindo o
+ * vendedor. Sem padrão, o PDV pede o vendedor a cada venda.
+ */
+export function FixedSellerForm({
+  id,
+  current,
+  currentName,
+  options,
+}: {
+  id: string;
+  current: string | null;
+  currentName: string | null;
+  options: SellerOption[];
+}) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(setFixedSeller, {});
+  // O padrão atual pode ter perdido a permissão: continua na lista para não sumir sem aviso.
+  const missing = current !== null && !options.some((option) => option.user_id === current);
+  return (
+    <details className={styles.reason}>
+      <summary>Vendedor padrão: {current ? (currentName ?? "definido") : "nenhum"}</summary>
+      <form action={action} className={styles.rowForm}>
+        <input type="hidden" name="id" value={id} />
+        <label>
+          Vendedor padrão
+          <select name="userId" defaultValue={current ?? ""}>
+            <option value="">Nenhum (pede a cada venda)</option>
+            {missing && <option value={current!}>{currentName ?? "Atual"} (sem permissão de venda)</option>}
+            {options.map((option) => (
+              <option key={option.user_id} value={option.user_id}>
+                {option.code} · {option.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="submit" disabled={pending}>
+          Salvar
+        </button>
         <ErrorNotice error={state.error} />
         {state.done && <p role="status">Salvo. Chega ao PDV na próxima sincronização.</p>}
       </form>

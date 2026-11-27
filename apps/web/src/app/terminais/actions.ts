@@ -83,6 +83,14 @@ export async function setOfflineMinutes(
   return post(`/admin/${scope}/${text(form, "id")}/offline-minutes`, { minutes });
 }
 
+export async function setFixedSeller(
+  _previous: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const userId = text(form, "userId");
+  return post(`/admin/terminals/${text(form, "id")}/fixed-seller`, { userId: userId === "" ? null : userId });
+}
+
 export async function setTerminalProfile(
   _previous: ActionState,
   form: FormData,

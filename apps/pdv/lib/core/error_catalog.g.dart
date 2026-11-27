@@ -826,6 +826,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Use período de 7 a 730 dias, recálculo de 1 a 365 dias e a quantidade da curva A maior que a da B.',
     retryable: false,
   ),
+  'FA762': ErrorCatalogEntry(
+    code: 'FA762',
+    message: 'Esta pessoa não pode ser o vendedor padrão deste terminal.',
+    action: 'Escolha alguém ativo que venda ou faça orçamentos na filial do terminal.',
+    retryable: false,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',
