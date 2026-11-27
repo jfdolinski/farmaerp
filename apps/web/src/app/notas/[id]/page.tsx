@@ -20,6 +20,17 @@ import {
   CONFIRMATION_LABELS,
 } from "../format";
 import { BatchForm, DiscardForm, ItemActions, PostForm, ReleaseCostForm, ReverseForm } from "../ui";
+import {
+  AuditEntry,
+  AuditSection,
+  BatchesSection,
+  ContentNotice,
+  Installment,
+  InstallmentsSection,
+  ItemTaxes,
+  itemContent,
+  NoteDataSection,
+} from "./xml-sections";
 
 export const metadata: Metadata = { title: "Nota de compra · FarmaERP" };
 
@@ -109,6 +120,11 @@ interface InvoiceDetail {
   cancelled_at: string | null;
   items: InvoiceItem[];
   events: InvoiceEvent[];
+  content: Record<string, unknown> | null;
+  content_read_at: string | null;
+  content_error: string | null;
+  installments: Installment[];
+  audit: AuditEntry[];
 }
 
 type Params = Promise<{ id: string }>;
@@ -234,6 +250,7 @@ async function InvoiceContent({ params }: { params: Params }) {
         {invoice.not_postable_reason && (
           <p className={styles.warning}>{REASON_LABELS[invoice.not_postable_reason] ?? invoice.not_postable_reason}</p>
         )}
+        <ContentNotice content={invoice.content} error={invoice.content_error} />
         <div className={styles.tableWrap}>
           <table>
             <tbody>
@@ -255,6 +272,8 @@ async function InvoiceContent({ params }: { params: Params }) {
           </table>
         </div>
       </section>
+
+      {invoice.content && <NoteDataSection content={invoice.content} />}
 
       <section className={styles.card}>
         <h2>Itens</h2>
@@ -310,6 +329,7 @@ async function InvoiceContent({ params }: { params: Params }) {
                 O PMC da nota ({moneyText(item.pmc)}) é menor que o preço de venda ({moneyText(item.sale_price)}).
               </p>
             )}
+            <ItemTaxes det={itemContent(invoice.content, item.item_number)} />
             {item.posting && <CostLine posting={item.posting} />}
             {item.posting && <BatchLine item={item} />}
             {reviewing && item.posting?.batch_required && (
@@ -328,6 +348,21 @@ async function InvoiceContent({ params }: { params: Params }) {
           </div>
         ))}
       </section>
+
+      <InstallmentsSection installments={invoice.installments} read={invoice.content !== null} />
+
+      <BatchesSection
+        rows={invoice.items.flatMap((item) =>
+          item.batches.map((batch) => ({
+            itemNumber: item.item_number,
+            description: item.description,
+            unit: item.unit,
+            ...batch,
+          })),
+        )}
+      />
+
+      <AuditSection audit={invoice.audit} />
 
       {invoice.status === "review" && invoice.can_post && (
         <section className={styles.card}>
