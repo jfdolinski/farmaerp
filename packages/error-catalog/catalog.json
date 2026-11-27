@@ -3893,5 +3893,13 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": []
+  },
+  "FA775": {
+    "message": "Este padrão fiscal da devolução não é aceito.",
+    "action": "Confira o CFOP e os códigos de situação tributária escolhidos para a filial.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
   }
 }

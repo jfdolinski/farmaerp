@@ -1,8 +1,8 @@
-import { Controller, Get, HttpCode, Inject, Param, Post, Res, UseGuards } from '@nestjs/common';
+import { Body as RequestBody, Controller, Get, HttpCode, Inject, Param, Patch, Post, Res, UseGuards } from '@nestjs/common';
 import { buildDanfe } from '@farmaerp/fiscal-js';
 import type { Response } from 'express';
 import { SessionGuard } from '../auth/session.guard.js';
-import { requireUuid } from '../common/parse.js';
+import { asBody, requireUuid } from '../common/parse.js';
 import { DatabaseService } from '../database.service.js';
 import { AppError } from '../observability/app-error.js';
 import { CentralNfeService } from './central-nfe.service.js';
@@ -36,6 +36,34 @@ export class CentralNfeController {
   async xml(@Param('id') id: string, @Res() response: Response) {
     const file = await this.file(id);
     response.status(200).type('application/xml; charset=utf-8').attachment(`NFe-${file.access_key}.xml`).send(file.xml);
+  }
+
+  /** Padrões fiscais da NF-e de devolução de cada filial que a pessoa vê no fiscal. */
+  @Get('fiscal/return-tax')
+  returnTax() {
+    return this.database.withContext(async (client) => (await client.query('SELECT * FROM app.return_tax_settings()')).rows);
+  }
+
+  /** Altera os padrões da filial (só os campos enviados); o banco confere permissão e valores. */
+  @Patch('fiscal/return-tax/:branchId')
+  setReturnTax(@Param('branchId') branchId: string, @RequestBody() rawBody: unknown) {
+    const branch = requireUuid(branchId);
+    const body = asBody(rawBody);
+    return this.database.withContext(async (client) => {
+      const { rows } = await client.query<{ v: unknown }>('SELECT app.set_return_tax_setting($1, $2::jsonb) AS v', [branch, JSON.stringify(body)]);
+      return rows[0].v;
+    });
+  }
+
+  /** Volta a filial aos padrões de fábrica. */
+  @Post('fiscal/return-tax/:branchId/reset')
+  @HttpCode(200)
+  resetReturnTax(@Param('branchId') branchId: string) {
+    const branch = requireUuid(branchId);
+    return this.database.withContext(async (client) => {
+      const { rows } = await client.query<{ v: unknown }>('SELECT app.reset_return_tax_setting($1) AS v', [branch]);
+      return rows[0].v;
+    });
   }
 
   @Get('central-nfe/:id/danfe')

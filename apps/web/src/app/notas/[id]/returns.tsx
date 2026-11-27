@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import { ErrorNotice } from "../../error-notice";
 import { keepValues } from "../../produtos/ui";
 import styles from "../../terminais/page.module.css";
-import { ItemFormState, returnToSupplier } from "../actions";
+import { emitReturnNfe, ItemFormState, returnToSupplier } from "../actions";
 import { dateTimeText, dayText, moneyText, quantityText } from "../format";
 
 export interface ReturnBatch {
@@ -63,6 +63,80 @@ export interface Returns {
   returns: DoneReturn[];
 }
 
+/** NF-e de devolução emitida pela central (a mais recente de cada devolução é a que vale). */
+export interface ReturnNfe {
+  id: string;
+  return_id: string;
+  series: number;
+  number: number;
+  access_key: string;
+  status: "pending" | "authorized" | "rejected";
+  protocol: string | null;
+  status_code: string | null;
+  reason: string | null;
+  total_value: number;
+  emitted_at: string;
+  authorized_at: string | null;
+}
+
+/** Situação da NF-e da devolução, os arquivos e o botão de emitir ou transmitir de novo. */
+function ReturnNfeCell({
+  invoiceId,
+  returnId,
+  nfe,
+  canIssue,
+}: {
+  invoiceId: string;
+  returnId: string;
+  nfe?: ReturnNfe;
+  canIssue: boolean;
+}) {
+  const [state, action, pending] = useActionState<ItemFormState, FormData>(emitReturnNfe, {});
+  const label = !nfe ? "Emitir NF-e" : nfe.status === "pending" ? "Transmitir de novo" : "Emitir de novo";
+  return (
+    <div className={styles.stack}>
+      {!nfe && <span className={styles.hint}>Sem NF-e</span>}
+      {nfe?.status === "authorized" && (
+        <>
+          <span className={styles.success}>
+            Autorizada · nº {nfe.number} série {nfe.series}
+            {nfe.authorized_at && <small className={styles.hint}> em {dateTimeText(nfe.authorized_at)}</small>}
+          </span>
+          <span>
+            <a href={`/notas/nfe-devolucao/${nfe.id}/danfe`}>DANFE</a> ·{" "}
+            <a href={`/notas/nfe-devolucao/${nfe.id}/xml`}>XML</a>
+          </span>
+        </>
+      )}
+      {nfe?.status === "pending" && (
+        <span className={styles.warning}>
+          Pendente: a Sefaz ainda não respondeu (nº {nfe.number} série {nfe.series}).
+        </span>
+      )}
+      {nfe?.status === "rejected" && (
+        <span className={styles.warning}>
+          Recusada pela Sefaz{nfe.status_code && ` (${nfe.status_code})`}: {nfe.reason ?? "sem motivo informado"}
+        </span>
+      )}
+      {canIssue && nfe?.status !== "authorized" && (
+        <form action={action}>
+          <input type="hidden" name="returnId" value={returnId} />
+          <input type="hidden" name="invoiceId" value={invoiceId} />
+          <button type="submit" disabled={pending}>
+            {pending ? "Transmitindo..." : label}
+          </button>
+        </form>
+      )}
+      <ErrorNotice error={state.error} />
+      {state.notice && (
+        <small className={state.error ? styles.warning : styles.hint} role="status">
+          {state.notice}
+        </small>
+      )}
+    </div>
+  );
+}
+
 /** Valor dos produtos do item na nota, para a prévia (o banco faz a conta certa). */
 export type ItemValues = Record<string, { products: number; entered: number }>;
 
@@ -72,7 +146,21 @@ const parse = (value: string) => {
 };
 
 /** Devolução ao fornecedor: saldo por item e lote, formulário e as devoluções feitas. */
-export function ReturnsSection({ invoiceId, data, values }: { invoiceId: string; data: Returns; values: ItemValues }) {
+export function ReturnsSection({
+  invoiceId,
+  data,
+  values,
+  nfes = [],
+  canIssueNfe = false,
+}: {
+  invoiceId: string;
+  data: Returns;
+  values: ItemValues;
+  nfes?: ReturnNfe[];
+  canIssueNfe?: boolean;
+}) {
+  // A lista vem da mais antiga para a mais nova: fica a última de cada devolução.
+  const nfeOf = new Map(nfes.map((nfe) => [nfe.return_id, nfe]));
   const [state, action, pending] = useActionState<ItemFormState, FormData>(returnToSupplier, {});
   const [typed, setTyped] = useState<Record<string, string>>({});
   const open = data.items.filter((item) => item.available > 0);
@@ -95,6 +183,7 @@ export function ReturnsSection({ invoiceId, data, values }: { invoiceId: string;
                 <th>Itens</th>
                 <th>Motivo</th>
                 <th>Total</th>
+                <th>NF-e de devolução</th>
               </tr>
             </thead>
             <tbody>
@@ -120,6 +209,14 @@ export function ReturnsSection({ invoiceId, data, values }: { invoiceId: string;
                   <td>{done.reason}</td>
                   <td>
                     <strong>{moneyText(done.total_value)}</strong>
+                  </td>
+                  <td>
+                    <ReturnNfeCell
+                      invoiceId={invoiceId}
+                      returnId={done.id}
+                      nfe={nfeOf.get(done.id)}
+                      canIssue={canIssueNfe}
+                    />
                   </td>
                 </tr>
               ))}

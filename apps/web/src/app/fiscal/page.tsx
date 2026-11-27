@@ -7,6 +7,7 @@ import { AppHeader } from "../app-header";
 import { ErrorNotice } from "../error-notice";
 import styles from "../terminais/page.module.css";
 import { activeTab, TabItem, Tabs } from "../shell/tabs";
+import { ReturnTaxForm, type ReturnTaxRow } from "./return-tax";
 import {
   CertificateForm,
   CopyCertificateForm,
@@ -32,6 +33,7 @@ const TABS: TabItem[] = [
   { id: "nfce", label: "NFC-e" },
   { id: "tributacao", label: "Tributação" },
   { id: "series", label: "Séries" },
+  { id: "devolucao", label: "NF-e de devolução" },
 ];
 
 export default function FiscalPage({ searchParams }: { searchParams: SearchParams }) {
@@ -69,6 +71,7 @@ async function FiscalContent({ searchParams }: { searchParams: SearchParams }) {
     tab === "download" ? apiFetch<DfeRow[]>("/admin/dfe/status") : null,
     tab === "nfce" ? apiFetch<NfceRow[]>("/admin/fiscal/nfce") : null,
   ]);
+  const returnTax = tab === "devolucao" ? await apiFetch<ReturnTaxRow[]>("/admin/fiscal/return-tax") : null;
   const companies = [...new Set(rows.map((row) => row.company_id))];
 
   return (
@@ -82,82 +85,103 @@ async function FiscalContent({ searchParams }: { searchParams: SearchParams }) {
             <p className={styles.hint}>Nenhuma filial disponível para você.</p>
           </section>
         )}
-        {companies.map((companyId) => {
-          const branches = rows.filter((row) => row.company_id === companyId);
-          return (
-            <div key={companyId} className={styles.stack}>
-              {tab === "empresa" && (
-                <section className={styles.card}>
-                  <h2>{branches[0].company_name}</h2>
-                  <RegimeForm row={branches[0]} />
-                </section>
-              )}
-              {branches.map((row) => (
+        {returnTax && (
+          <>
+            <p className={styles.hint}>
+              CFOP e situação tributária usados na NF-e de devolução ao fornecedor, emitida pela central. A nota é um
+              espelho da compra: os valores de ICMS, ST e IPI vêm da nota original. Confira estes padrões com o contador
+              antes de usar em produção.
+            </p>
+            {!returnTax.ok && <ErrorNotice error={returnTax.error} />}
+            {returnTax.ok &&
+              returnTax.data.map((row) => (
                 <section key={row.branch_id} className={styles.card}>
                   <h2>{row.branch_name}</h2>
-                  <p className={styles.hint}>CNPJ {row.branch_cnpj}</p>
-                  {tab === "empresa" && <StateRegistrationForm row={row} />}
-                  {tab === "certificado" && (
-                    <>
-                      <CertificateForm row={row} />
-                      <CopyCertificateForm
-                        row={row}
-                        targets={branches.filter(
-                          (target) =>
-                            target.branch_id !== row.branch_id &&
-                            target.can_certificate &&
-                            target.branch_cnpj.slice(0, 8) === row.certificate_cnpj?.slice(0, 8),
-                        )}
-                      />
-                    </>
-                  )}
-                  {dfe &&
-                    (dfe.ok ? (
-                      <DfeStatus
-                        row={dfe.data.find((item) => item.branch_id === row.branch_id)}
-                        branchId={row.branch_id}
-                      />
-                    ) : (
-                      <ErrorNotice error={dfe.error} />
-                    ))}
-                  {nfce && (
-                    <>
-                      <h3>CSC da NFC-e</h3>
-                      <CscForm row={row} />
-                      <h3>Emitir NFC-e</h3>
-                      {nfce.ok ? (
-                        (() => {
-                          const item = nfce.data.find((entry) => entry.branch_id === row.branch_id);
-                          return item ? <NfceForm row={item} /> : null;
-                        })()
-                      ) : (
-                        <ErrorNotice error={nfce.error} />
-                      )}
-                    </>
-                  )}
-                  {coverage &&
-                    (coverage.ok ? (
-                      <TaxCoverage
-                        row={row}
-                        coverage={coverage.data.find((item) => item.branch_id === row.branch_id)}
-                      />
-                    ) : (
-                      <ErrorNotice error={coverage.error} />
-                    ))}
-                  {series &&
-                    (series.ok ? (
-                      <BranchSeries rows={series.data.filter((item) => item.branch_id === row.branch_id)} />
-                    ) : (
-                      <ErrorNotice error={series.error} />
-                    ))}
+                  {row.customized && <p className={styles.hint}>Padrões alterados para esta filial.</p>}
+                  <ReturnTaxForm row={row} />
                 </section>
               ))}
-            </div>
-          );
-        })}
-        <p className={styles.hint}>
-          O arquivo, a senha e o código CSC ficam criptografados no servidor e não voltam para a tela.
-        </p>
+          </>
+        )}
+        {tab !== "devolucao" &&
+          companies.map((companyId) => {
+            const branches = rows.filter((row) => row.company_id === companyId);
+            return (
+              <div key={companyId} className={styles.stack}>
+                {tab === "empresa" && (
+                  <section className={styles.card}>
+                    <h2>{branches[0].company_name}</h2>
+                    <RegimeForm row={branches[0]} />
+                  </section>
+                )}
+                {branches.map((row) => (
+                  <section key={row.branch_id} className={styles.card}>
+                    <h2>{row.branch_name}</h2>
+                    <p className={styles.hint}>CNPJ {row.branch_cnpj}</p>
+                    {tab === "empresa" && <StateRegistrationForm row={row} />}
+                    {tab === "certificado" && (
+                      <>
+                        <CertificateForm row={row} />
+                        <CopyCertificateForm
+                          row={row}
+                          targets={branches.filter(
+                            (target) =>
+                              target.branch_id !== row.branch_id &&
+                              target.can_certificate &&
+                              target.branch_cnpj.slice(0, 8) === row.certificate_cnpj?.slice(0, 8),
+                          )}
+                        />
+                      </>
+                    )}
+                    {dfe &&
+                      (dfe.ok ? (
+                        <DfeStatus
+                          row={dfe.data.find((item) => item.branch_id === row.branch_id)}
+                          branchId={row.branch_id}
+                        />
+                      ) : (
+                        <ErrorNotice error={dfe.error} />
+                      ))}
+                    {nfce && (
+                      <>
+                        <h3>CSC da NFC-e</h3>
+                        <CscForm row={row} />
+                        <h3>Emitir NFC-e</h3>
+                        {nfce.ok ? (
+                          (() => {
+                            const item = nfce.data.find((entry) => entry.branch_id === row.branch_id);
+                            return item ? <NfceForm row={item} /> : null;
+                          })()
+                        ) : (
+                          <ErrorNotice error={nfce.error} />
+                        )}
+                      </>
+                    )}
+                    {coverage &&
+                      (coverage.ok ? (
+                        <TaxCoverage
+                          row={row}
+                          coverage={coverage.data.find((item) => item.branch_id === row.branch_id)}
+                        />
+                      ) : (
+                        <ErrorNotice error={coverage.error} />
+                      ))}
+                    {series &&
+                      (series.ok ? (
+                        <BranchSeries rows={series.data.filter((item) => item.branch_id === row.branch_id)} />
+                      ) : (
+                        <ErrorNotice error={series.error} />
+                      ))}
+                  </section>
+                ))}
+              </div>
+            );
+          })}
+        {tab !== "devolucao" && (
+          <p className={styles.hint}>
+            O arquivo, a senha e o código CSC ficam criptografados no servidor e não voltam para a tela.
+          </p>
+        )}
       </Tabs>
     </>
   );
