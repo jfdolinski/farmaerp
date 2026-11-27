@@ -318,3 +318,5 @@ A importação das notas do sistema anterior (.zip de até 1 GB) guarda o arquiv
 2. Implante a API, confira e implante a retaguarda.
 
 Não precisa de variável: a API encontra o volume em `/data/imports` (`IMPORTS_DIR` só para outro caminho). Sem a pasta, a importação responde FA740 e o resto da API funciona normalmente. `IMPORTS_WORKER=off` desliga o processamento (só para testes).
+
+A rotina que lê os dados completos do XML das notas de compra já recebidas (e das baixadas da Sefaz) roda de minuto em minuto, sem variável. `PURCHASE_CONTENT_WORKER=off` desliga (só para testes).

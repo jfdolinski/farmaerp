@@ -14,6 +14,7 @@ import { CustomersController } from './customers/customers.controller.js';
 import { DatabaseService } from './database.service.js';
 import { FiscalController } from './fiscal/fiscal.controller.js';
 import { HealthController } from './health.controller.js';
+import { PurchaseContentService } from './purchases/purchase-content.service.js';
 import { PurchaseInvoicesController } from './purchases/purchase-invoices.controller.js';
 import { ServiceInvoicesController } from './purchases/service-invoices.controller.js';
 import { DfeController } from './sefaz/dfe.controller.js';
@@ -124,6 +125,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     DfeService,
     SngpcService,
     AbcService,
+    PurchaseContentService,
     ImportsService,
     NfceActionsService,
     SessionGuard,

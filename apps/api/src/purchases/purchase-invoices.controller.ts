@@ -16,6 +16,7 @@ import { asBody, Body, optionalText, requireText, requireUuid } from '../common/
 import { appEnvironment } from '../config/environment.js';
 import { DatabaseService } from '../database.service.js';
 import { AppError } from '../observability/app-error.js';
+import { AppLogger } from '../observability/app-logger.js';
 import { readAuthorizedNfe, sha256 } from './nfe-xml.js';
 
 const STATUSES = new Set(['review', 'not_postable', 'posted', 'cancelled']);
@@ -66,6 +67,7 @@ function optionalBoolean(body: Body, field: string): boolean | null {
 export class PurchaseInvoicesController {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(AppLogger) private readonly logger: AppLogger,
   ) {}
 
   @Get('purchase-invoices')
@@ -90,14 +92,26 @@ export class PurchaseInvoicesController {
     if (typeof raw !== 'string' || raw.trim() === '') {
       throw new AppError('FA930');
     }
-    const data = readAuthorizedNfe(raw);
+    const { detail, ...data } = readAuthorizedNfe(raw);
     const acceptsTest = appEnvironment() !== 'production';
     return this.database.withContext(async (client) => {
       const { rows } = await client.query<{ id: string }>(
         'SELECT app.import_purchase_invoice($1::jsonb, $2, $3, $4) AS id',
         [JSON.stringify(data), raw, sha256(raw), acceptsTest],
       );
-      return { id: rows[0].id };
+      const id = rows[0].id;
+      // Os dados completos e as duplicatas: se falhar, a nota fica importada e a rotina tenta depois.
+      await client.query('SAVEPOINT content');
+      try {
+        await client.query('SELECT app.store_purchase_content($1, $2::jsonb, $3::jsonb)', [
+          id, JSON.stringify(detail.content), JSON.stringify(detail.installments),
+        ]);
+        await client.query('RELEASE SAVEPOINT content');
+      } catch (error) {
+        await client.query('ROLLBACK TO SAVEPOINT content');
+        this.logger.pino.warn({ context: 'PurchaseInvoices', invoiceId: id, err: error }, 'conteúdo da nota não gravado na importação');
+      }
+      return { id };
     });
   }
 
@@ -136,10 +150,17 @@ export class PurchaseInvoicesController {
           ORDER BY e.created_at, e.id`,
         [invoiceId],
       );
+      // Conteúdo completo do XML, duplicatas e auditoria (lançada, estornada e as alterações).
+      const extra = await client.query<{ x: Record<string, unknown> | null }>('SELECT app.purchase_invoice_extra($1) AS x', [invoiceId]);
       return {
         ...rows[0],
         items: items.rows.map((item) => ({ ...item, posting: byItem.get(item.id) ?? null })),
         events: events.rows,
+        content: extra.rows[0]?.x?.content ?? null,
+        content_read_at: extra.rows[0]?.x?.content_read_at ?? null,
+        content_error: extra.rows[0]?.x?.content_error ?? null,
+        installments: extra.rows[0]?.x?.installments ?? [],
+        audit: extra.rows[0]?.x?.audit ?? [],
       };
     });
   }

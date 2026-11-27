@@ -205,7 +205,8 @@ export class DfeService implements OnApplicationBootstrap, OnModuleDestroy {
       if (!summary) throw new AppError('FA931', { cause: new Error('resumo inválido') });
       await this.worker((client) => client.query('SELECT app.dfe_record_summary($1, $2::jsonb)', [branchId, JSON.stringify(summary)]));
     } else if (document.schema.startsWith('procNFe')) {
-      const data = readAuthorizedNfe(document.xml);
+      // Os dados completos e as duplicatas ficam para a rotina que lê as notas guardadas.
+      const { detail: _detail, ...data } = readAuthorizedNfe(document.xml);
       if (data.environment !== sefazEnvironment()) throw new AppError('FA928');
       await this.worker((client) =>
         client.query('SELECT app.dfe_import_invoice($1, $2::jsonb, $3, $4, $5)', [
