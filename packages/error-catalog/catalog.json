@@ -3900,6 +3900,45 @@
     "httpStatus": 422,
     "severity": "warning",
     "retryable": false,
+    "dbConstraints": [
+      "purchase_return_tax_transfer_cfop_internal_check",
+      "purchase_return_tax_transfer_cfop_interstate_check",
+      "purchase_return_tax_transfer_cfop_st_internal_check",
+      "purchase_return_tax_transfer_cfop_st_interstate_check"
+    ]
+  },
+  "FA776": {
+    "message": "Esta transferência já tem NF-e emitida ou em transmissão.",
+    "action": "Confira a situação da NF-e na movimentação. Se estiver pendente, transmita de novo.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "central_nfe_transfer_live_key"
+    ]
+  },
+  "FA777": {
+    "message": "A transferência entre empresas diferentes não tem NF-e de transferência.",
+    "action": "Transferência fiscal é só entre filiais da mesma empresa (mesma raiz do CNPJ). Entre empresas, a saída é uma venda ou remessa.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA778": {
+    "message": "O produto não tem custo médio na filial de origem.",
+    "action": "A NF-e de transferência usa o custo médio. Lance uma nota de compra do produto na filial de origem e tente de novo.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA779": {
+    "message": "O produto da transferência está sem NCM.",
+    "action": "Vincule o produto ao Catálogo ou informe o NCM e tente de novo.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
     "dbConstraints": []
   }
 }

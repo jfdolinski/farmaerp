@@ -12,7 +12,6 @@ import { signingMaterial } from './certificate.js';
 import { open } from './secret-box.js';
 
 interface Prepared {
-  returnId: string;
   state: string | null;
   series: number;
   number: number;
@@ -28,8 +27,33 @@ interface Sealed {
 
 export type CentralNfeStatus = 'pending' | 'authorized' | 'rejected';
 
+/** De onde vem a nota: as funções do banco de cada tipo (o resto do caminho é o mesmo). */
+interface Source {
+  label: string;
+  pending: string;
+  prepare: string;
+  certificate: string;
+  store: string;
+}
+
+const RETURN: Source = {
+  label: 'devolução',
+  pending: 'app.return_nfe_pending',
+  prepare: 'app.return_nfe_prepare',
+  certificate: 'app.return_nfe_certificate',
+  store: 'app.return_nfe_store',
+};
+
+const TRANSFER: Source = {
+  label: 'transferência',
+  pending: 'app.transfer_nfe_pending',
+  prepare: 'app.transfer_nfe_prepare',
+  certificate: 'app.transfer_nfe_certificate',
+  store: 'app.transfer_nfe_store',
+};
+
 /**
- * NF-e modelo 55 emitida pela central (começando pela devolução ao fornecedor). Monta e assina com o
+ * NF-e modelo 55 emitida pela central: devolução ao fornecedor e transferência entre filiais. Monta e assina com o
  * mesmo motor do PDV, guarda a nota pendente com o número reservado e transmite à Sefaz da UF. Sem
  * resposta, a nota fica pendente e pode ser transmitida de novo com o mesmo XML.
  */
@@ -47,18 +71,27 @@ export class CentralNfeService {
   }
 
   /** Emite a NF-e da devolução (ou transmite de novo a que ficou pendente). */
-  async emitReturn(returnId: string): Promise<{ id: string; status: CentralNfeStatus }> {
+  emitReturn(returnId: string): Promise<{ id: string; status: CentralNfeStatus }> {
+    return this.emit(RETURN, returnId);
+  }
+
+  /** Emite a NF-e da transferência entre filiais (ou transmite de novo a que ficou pendente). */
+  emitTransfer(transferId: string): Promise<{ id: string; status: CentralNfeStatus }> {
+    return this.emit(TRANSFER, transferId);
+  }
+
+  private async emit(source: Source, sourceId: string): Promise<{ id: string; status: CentralNfeStatus }> {
     const environment = sefazEnvironment();
     // Já existe pendente: só transmite de novo.
     const pending = await this.database.withContext(async (client) =>
-      (await client.query<{ id: string; xml: string; state: string; environment: number }>('SELECT * FROM app.return_nfe_pending($1)', [returnId])).rows[0],
+      (await client.query<{ id: string; xml: string; state: string; environment: number }>(`SELECT * FROM ${source.pending}($1)`, [sourceId])).rows[0],
     );
-    if (pending) return { id: pending.id, status: await this.transmit(returnId, pending.id, pending.xml, pending.state, pending.environment) };
+    if (pending) return { id: pending.id, status: await this.transmit(source, sourceId, pending.id, pending.xml, pending.state, pending.environment) };
 
     // Monta, assina e guarda na mesma transação que reserva o número: se algo falhar, o número volta.
     const created = await this.database.withContext(async (client) => {
-      const prepared = (await client.query<{ x: Prepared }>('SELECT app.return_nfe_prepare($1) AS x', [returnId])).rows[0].x;
-      const sealed = (await client.query<Sealed>('SELECT * FROM app.return_nfe_certificate($1)', [returnId])).rows[0];
+      const prepared = (await client.query<{ x: Prepared }>(`SELECT ${source.prepare}($1) AS x`, [sourceId])).rows[0].x;
+      const sealed = (await client.query<Sealed>(`SELECT * FROM ${source.certificate}($1)`, [sourceId])).rows[0];
       const certificate = this.certificate(sealed);
       // Chave em PKCS#8, como o motor (o mesmo do caixa) espera.
       const pem = signingMaterial(certificate.pfx, certificate.passphrase);
@@ -70,25 +103,25 @@ export class CentralNfeService {
       );
       if (nfe.error) {
         // O código vai para a tela; o detalhe técnico só para o log.
-        this.logger.pino.warn({ context: 'CentralNfeService', returnId, code: nfe.error.code, detail: nfe.error.detail }, 'NF-e da devolução não montou');
+        this.logger.pino.warn({ context: 'CentralNfeService', source: source.label, sourceId, code: nfe.error.code, detail: nfe.error.detail }, 'NF-e da central não montou');
         throw new AppError(nfe.error.code);
       }
       const id = (
-        await client.query<{ id: string }>('SELECT app.return_nfe_store($1, $2, $3, $4, $5, $6, $7, $8) AS id', [
-          returnId, prepared.series, prepared.number, nfe.accessKey, environment, nfe.xml, emittedAt, nfe.totalCents / 100,
+        await client.query<{ id: string }>(`SELECT ${source.store}($1, $2, $3, $4, $5, $6, $7, $8) AS id`, [
+          sourceId, prepared.series, prepared.number, nfe.accessKey, environment, nfe.xml, emittedAt, nfe.totalCents / 100,
         ])
       ).rows[0].id;
       return { id, xml: nfe.xml, state: prepared.state };
     });
-    return { id: created.id, status: await this.transmit(returnId, created.id, created.xml, created.state, environment) };
+    return { id: created.id, status: await this.transmit(source, sourceId, created.id, created.xml, created.state, environment) };
   }
 
-  private async transmit(returnId: string, id: string, xml: string, state: string | null, environment: number): Promise<CentralNfeStatus> {
+  private async transmit(source: Source, sourceId: string, id: string, xml: string, state: string | null, environment: number): Promise<CentralNfeStatus> {
     if (environment !== sefazEnvironment()) throw new AppError('FA753', { cause: new Error('ambiente da nota diferente do da central') });
     const url = state ? nfeAuthorizationUrl(state, environment as 1 | 2) : null;
     if (!url) throw new AppError('FA754', { cause: new Error(`UF ${state ?? '?'} sem serviço da NF-e`) });
     const sealed = await this.database.withContext(async (client) =>
-      (await client.query<Sealed>('SELECT * FROM app.return_nfe_certificate($1)', [returnId])).rows[0],
+      (await client.query<Sealed>(`SELECT * FROM ${source.certificate}($1)`, [sourceId])).rows[0],
     );
     let outcome: Record<string, unknown>;
     try {

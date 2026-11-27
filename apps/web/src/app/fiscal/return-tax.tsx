@@ -98,7 +98,7 @@ function Cfop({
   );
 }
 
-/** Padrões da NF-e de devolução ao fornecedor de uma filial. */
+/** Padrões das NF-e da central (devolução ao fornecedor e transferência entre filiais) de uma filial. */
 export function ReturnTaxForm({ row }: { row: ReturnTaxRow }) {
   const [state, action, pending] = useActionState<FiscalFormState, FormData>(setReturnTax, {});
   const [resetState, reset, resetting] = useActionState<FiscalFormState, FormData>(resetReturnTax, {});
@@ -110,7 +110,7 @@ export function ReturnTaxForm({ row }: { row: ReturnTaxRow }) {
       <form key={JSON.stringify(values)} action={action} onSubmit={keepValues(action)} className={styles.stack}>
         <input type="hidden" name="branchId" value={row.branch_id} />
         <fieldset className={styles.fieldset}>
-          <legend>CFOP</legend>
+          <legend>CFOP da devolução ao fornecedor</legend>
           <div className={styles.inline}>
             <Cfop
               name="cfop_internal"
@@ -137,6 +137,39 @@ export function ReturnTaxForm({ row }: { row: ReturnTaxRow }) {
               name="cfop_st_interstate"
               label="Com ST, fora do estado"
               value={values.cfop_st_interstate}
+              first="6"
+              disabled={locked}
+            />
+          </div>
+        </fieldset>
+        <fieldset className={styles.fieldset}>
+          <legend>CFOP da transferência entre filiais</legend>
+          <div className={styles.inline}>
+            <Cfop
+              name="transfer_cfop_internal"
+              label="Dentro do estado"
+              value={values.transfer_cfop_internal}
+              first="5"
+              disabled={locked}
+            />
+            <Cfop
+              name="transfer_cfop_interstate"
+              label="Fora do estado"
+              value={values.transfer_cfop_interstate}
+              first="6"
+              disabled={locked}
+            />
+            <Cfop
+              name="transfer_cfop_st_internal"
+              label="Com ST, dentro do estado"
+              value={values.transfer_cfop_st_internal}
+              first="5"
+              disabled={locked}
+            />
+            <Cfop
+              name="transfer_cfop_st_interstate"
+              label="Com ST, fora do estado"
+              value={values.transfer_cfop_st_interstate}
               first="6"
               disabled={locked}
             />
@@ -186,7 +219,7 @@ export function ReturnTaxForm({ row }: { row: ReturnTaxRow }) {
         <ErrorNotice error={state.error} />
         {state.done && (
           <p className={styles.success} role="status">
-            Padrões salvos. Valem para as próximas NF-e de devolução desta filial.
+            Padrões salvos. Valem para as próximas NF-e de devolução e de transferência desta filial.
           </p>
         )}
       </form>

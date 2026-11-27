@@ -135,6 +135,10 @@ const RETURN_TAX_FIELDS = [
   "normal_cst_st",
   "pis_cst",
   "cofins_cst",
+  "transfer_cfop_internal",
+  "transfer_cfop_interstate",
+  "transfer_cfop_st_internal",
+  "transfer_cfop_st_interstate",
 ];
 
 /** Padrões fiscais da NF-e de devolução da filial. O banco confere a permissão e os valores. */

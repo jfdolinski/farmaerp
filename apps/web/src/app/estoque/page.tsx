@@ -6,6 +6,7 @@ import { AppHeader } from "../app-header";
 import { ErrorNotice } from "../error-notice";
 import { BalanceRow, dayText, MOVEMENT_LABELS, quantityText, REVERSIBLE } from "./format";
 import { BranchOption, EditBatchForm, MovementForm, ReverseForm } from "./ui";
+import { TransferInfo, TransferNfeCell } from "./transfer-nfe";
 import styles from "../terminais/page.module.css";
 import { activeTab, TabItem, Tabs } from "../shell/tabs";
 
@@ -35,6 +36,8 @@ interface MovementRow {
   fefo_override: boolean;
   occurred_at: string;
   author: string | null;
+  /** Saída de transferência: a NF-e que a acompanha. */
+  transfer?: TransferInfo;
 }
 
 const moment = (value: string) =>
@@ -104,6 +107,7 @@ async function StockContent({ searchParams }: { searchParams: SearchParams }) {
     tab === "saldo" && canTransfer ? apiFetch<BranchOption[]>("/admin/stock/destinations") : null,
   ]);
   const main = balances ?? movements ?? branches;
+  const hasTransfers = Boolean(movements?.ok && movements.data.some((row) => row.transfer));
   if (!main.ok) redirectIfNeeded(main.error, "/estoque");
   const branchList = branches.ok ? branches.data : [];
 
@@ -239,6 +243,7 @@ async function StockContent({ searchParams }: { searchParams: SearchParams }) {
                       <th>Tipo</th>
                       <th>Quantidade</th>
                       <th>Motivo</th>
+                      {hasTransfers && <th>NF-e de transferência</th>}
                       {canAdjust && <th>Ações</th>}
                     </tr>
                   </thead>
@@ -262,6 +267,9 @@ async function StockContent({ searchParams }: { searchParams: SearchParams }) {
                           {row.reason}
                           {row.author && <small>Por {row.author}</small>}
                         </td>
+                        {hasTransfers && (
+                          <td>{row.transfer && <TransferNfeCell transfer={row.transfer} reversed={row.reversed} />}</td>
+                        )}
                         {canAdjust && (
                           <td>
                             {REVERSIBLE.includes(row.movement_type) && !row.reversed && !row.reversal_of && (

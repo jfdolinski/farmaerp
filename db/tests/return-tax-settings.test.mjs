@@ -15,6 +15,8 @@ afterAll(closePools);
 const DEFAULTS = {
   cfop_internal: '5202', cfop_interstate: '6202', cfop_st_internal: '5411', cfop_st_interstate: '6411',
   simples_csosn: '102', simples_csosn_st: '500', normal_cst: '00', normal_cst_st: '60', pis_cst: '49', cofins_cst: '49',
+  transfer_cfop_internal: '5152', transfer_cfop_interstate: '6152',
+  transfer_cfop_st_internal: '5409', transfer_cfop_st_interstate: '6409',
 };
 
 const list = (client) => client.query('SELECT * FROM app.return_tax_settings()').then((r) => r.rows);

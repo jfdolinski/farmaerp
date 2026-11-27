@@ -172,6 +172,46 @@ describe('NF-e de devolução emitida pela central', () => {
     expect(keyOf(received.at(-1)!)).not.toBe(rejectedKey);
   });
 
+  it('transferência entre filiais: emite a NF-e da origem, aparece nas movimentações e não emite de novo', async () => {
+    const SUL = '019a0000-0000-7000-8000-000000000006';
+    // Destino com os dados fiscais (mesma empresa do seed).
+    const overview = (await admin('get', '/structure').expect(200)).body as Json;
+    const sul = (overview.branches as Json[]).find((row) => row.id === SUL)!;
+    await admin('patch', `/structure/branches/${SUL}`).send({
+      name: sul.name, cnpj: sul.cnpj, state: 'SP', postalCode: '01310100', street: 'Avenida Paulista', streetNumber: '900',
+      district: 'Bela Vista', city: 'São Paulo', cityCode: '3550308',
+    }).expect(200);
+    await admin('patch', `/fiscal/branches/${SUL}/state-registration`).send({ stateRegistration: '110042490114' }).expect(200);
+
+    // Produto do Catálogo (traz o NCM) com custo médio na origem: nota de compra lançada.
+    const [catalogItem] = (await admin('get', '/catalog?q=7890000000062').expect(200)).body as Json[];
+    const barcode = testGtin();
+    const productId = ((await admin('post', '/products').send({ displayName: 'Protetor transferência', barcode, catalogProductId: catalogItem.id }).expect(201)).body as Json).id as string;
+    const nfe = buildNfe({ destCnpj: CENTRO_CNPJ, items: [{ code: `T-${randomInt(1e9)}`, ean: testGtin(), quantity: '4.0000', value: '48.00', description: 'PROTETOR' }] });
+    const invoiceId = ((await admin('post', '/purchase-invoices').set('Content-Type', 'application/xml').send(nfe.xml).expect(201)).body as Json).id as string;
+    const [item] = ((await admin('get', `/purchase-invoices/${invoiceId}`).expect(200)).body as Json).items as Json[];
+    await admin('post', `/purchase-invoice-items/${item.id}/link`).send({ productId }).expect(200);
+    await admin('post', `/purchase-invoices/${invoiceId}/post`).expect(200);
+
+    const transferId = ((await admin('post', '/stock/transfers').send({
+      productLookup: barcode, fromBranchId: CENTRO, toBranchId: SUL, quantity: 2, reason: 'Reposição',
+    }).expect(201)).body as Json).id as string;
+    expect(codeOf(await admin('post', `/stock-transfers/${transferId}/nfe`, OPERATOR).expect(403))).toBe('FA002');
+    const emittedResponse = await admin('post', `/stock-transfers/${transferId}/nfe`);
+    expect(emittedResponse.body).toMatchObject({ status: 'authorized' });
+    const emitted = emittedResponse.body as Json;
+    expect(emitted.status).toBe('authorized');
+    const sent = received.at(-1)!;
+    expect(sent).toContain('<CFOP>5152</CFOP>');
+    expect(sent).toContain('TRANSFERENCIA DE MERCADORIA');
+
+    const movements = (await admin('get', `/stock/movements?branch=${CENTRO}`).expect(200)).body as Json[];
+    const out = movements.find((row) => row.transfer?.id === transferId);
+    expect(out).toMatchObject({ quantity: '-2.000', transfer: { can_issue_nfe: true, nfe: { id: emitted.id, status: 'authorized' } } });
+    await admin('get', `/central-nfe/${emitted.id as string}/xml`).expect(200);
+    expect(codeOf(await admin('post', `/stock-transfers/${transferId}/nfe`).expect(409))).toBe('FA776');
+  });
+
   it('padrões fiscais da devolução: lista, altera, recusa valor fora da lista e volta ao padrão', async () => {
     const SUL = '019a0000-0000-7000-8000-000000000006';
     const rows = (await admin('get', '/fiscal/return-tax').expect(200)).body as Json[];

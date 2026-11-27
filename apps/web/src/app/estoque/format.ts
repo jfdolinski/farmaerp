@@ -28,6 +28,8 @@ export const MOVEMENT_LABELS: Record<string, string> = {
   adjustment: "Ajuste",
   loss: "Perda",
   inventory: "Inventário",
+  import: "Nota importada",
+  supplier_return: "Devolução ao fornecedor",
 };
 
 /** Só estes tipos são estornados pela retaguarda. */
