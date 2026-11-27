@@ -574,6 +574,12 @@ const _migrations = <String>[
   '''
   ALTER TABLE product ADD COLUMN unit TEXT NOT NULL DEFAULT 'UN' CHECK (length(unit) BETWEEN 1 AND 6);
   ''',
+  // Inscrição estadual e indicador de IE do cliente (1, 2 ou 9), para a NF-e de venda. Quem já está
+  // guardado recebe na próxima descida do cliente.
+  '''
+  ALTER TABLE customer ADD COLUMN state_registration TEXT;
+  ALTER TABLE customer ADD COLUMN ie_indicator INTEGER CHECK (ie_indicator IN (1, 2, 9));
+  ''',
 ];
 
 /// NFC-e do caixa, para guardar, imprimir o DANFE e subir à central.
@@ -1527,7 +1533,7 @@ class LocalDatabase {
     const columns = [
       'code', 'person_type', 'name', 'trade_name', 'document', 'birth_date', 'phone', 'email', 'postal_code',
       'street', 'street_number', 'complement', 'district', 'city', 'city_code', 'state', 'agreements',
-      'customer_group_id', 'credit', 'abc_curve',
+      'customer_group_id', 'credit', 'abc_curve', 'state_registration', 'ie_indicator',
     ];
     final search = normalizeSearch('${data['name'] ?? ''} ${data['trade_name'] ?? ''}');
     _db.execute(

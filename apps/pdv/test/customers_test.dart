@@ -50,7 +50,7 @@ void main() {
     test('guarda o cliente escolhido e acha sem internet por nome, código ou documento', () {
       database.saveCustomer(PullItem(type: 'customer', id: joaoId, data: joao()));
       database.saveCustomer(PullItem(type: 'customer', id: mariaId, data: maria()));
-      expect(database.schemaVersion, 20);
+      expect(database.schemaVersion, 21);
       expect(database.customerById(joaoId), containsPair('document', '11144477735'));
       expect(database.customerById(joaoId)?.containsKey('search_text'), isFalse);
 
@@ -204,6 +204,22 @@ void main() {
       expect(sent.url.toString(), isNot(contains('111')));
       expect(jsonDecode(sent.body), containsPair('document', '11144477735'));
       expect([item.id, item.data?['code']], [joaoId, 7]);
+    });
+
+    test('a consulta do CNPJ vai por POST, com o CNPJ e o operador no corpo', () async {
+      late http.Request sent;
+      final client = HttpTerminalApi(
+        baseUrl: 'https://central.test',
+        client: MockClient((request) async {
+          sent = request;
+          return http.Response(jsonEncode({'legalName': 'Empresa Fictícia Ltda', 'cityCode': '3550308'}), 200);
+        }),
+      );
+      final data = await client.lookupCnpj(accessToken: 'abc', operatorId: 'op-1', cnpj: '11222333000181');
+      expect([sent.method, sent.url.path], ['POST', '/terminals/customers/cnpj']);
+      expect(sent.url.toString(), isNot(contains('112')));
+      expect(jsonDecode(sent.body), {'operatorId': 'op-1', 'cnpj': '11222333000181'});
+      expect(data['legalName'], 'Empresa Fictícia Ltda');
     });
 
     test('resposta em formato inesperado vira o erro genérico', () async {

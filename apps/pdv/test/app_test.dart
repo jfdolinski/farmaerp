@@ -276,14 +276,27 @@ class FakeApi implements TerminalApi {
   final createdCustomers = <Map<String, Object?>>[];
   Object? createFailure;
 
+  /// Consulta do CNPJ: o que a central devolve (ou a falha), e o que foi pedido.
+  Map<String, dynamic>? cnpjData;
+  ApiException? cnpjFailure;
+  final cnpjLookups = <Map<String, String>>[];
+
+  @override
+  Future<Map<String, dynamic>> lookupCnpj({required String accessToken, required String operatorId, required String cnpj}) async {
+    cnpjLookups.add({'operatorId': operatorId, 'cnpj': cnpj});
+    if (cnpjFailure != null) throw cnpjFailure!;
+    return cnpjData ?? (throw const ApiException('FA907'));
+  }
+
   @override
   Future<PullItem> createCustomer({required String accessToken, required Map<String, Object?> data}) async {
     if (createFailure != null) throw createFailure!;
     createdCustomers.add(data);
     const id = '019a0000-0000-7000-8000-0000000000c1';
     customerData[id] = {
-      'code': 90, 'person_type': 'individual', 'name': data['name'], 'trade_name': null, 'document': data['document'],
-      'phone': data['phone'], 'birth_date': data['birthDate'], 'city': null, 'state': null,
+      'code': 90, 'person_type': data['personType'] ?? 'individual', 'name': data['name'], 'trade_name': data['tradeName'],
+      'document': data['document'], 'phone': data['phone'], 'birth_date': data['birthDate'], 'city': data['city'], 'state': data['state'],
+      'state_registration': data['stateRegistration'], 'ie_indicator': data['ieIndicator'] == null ? null : int.parse(data['ieIndicator']! as String),
     };
     return PullItem(type: 'customer', id: id, data: customerData[id]);
   }

@@ -87,6 +87,7 @@ const customerData = (body: Body) => ({
   cityCode: optionalText(body, 'cityCode', 10),
   state: optionalText(body, 'state', 2),
   stateRegistration: optionalText(body, 'stateRegistration', 20),
+  ieIndicator: optionalText(body, 'ieIndicator', 1),
 });
 
 const dependentData = (body: Body) => ({
@@ -99,7 +100,7 @@ const dependentData = (body: Body) => ({
 // Datas como texto, para o dia não mudar conforme o fuso do servidor.
 const CUSTOMER_COLUMNS = `id, code, person_type, document, name, trade_name, birth_date::text AS birth_date,
   phone, email, postal_code, street, street_number, complement, district, city, city_code, state::text AS state,
-  state_registration, customer_group_id`;
+  state_registration, ie_indicator, customer_group_id`;
 
 /** Clientes. As regras e as permissões ficam no banco; o log nunca recebe os dados deles. */
 @Controller('admin/customers')

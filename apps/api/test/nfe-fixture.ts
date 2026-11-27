@@ -1,5 +1,6 @@
 // Só para testes: monta e assina uma NF-e autorizada, com certificado autoassinado e dados fictícios.
 import { generateKeyPairSync, randomInt } from 'node:crypto';
+import { buildNfe as engineNfe } from '@farmaerp/fiscal-js';
 import forge from 'node-forge';
 import { SignedXml } from 'xml-crypto';
 
@@ -137,4 +138,32 @@ export function buildNfe(options: TestNfeOptions = {}) {
   let xml = `<?xml version="1.0" encoding="UTF-8"?><nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">${signed}${protocol}</nfeProc>`;
   if (options.afterSign) xml = options.afterSign(xml);
   return { xml, key, emitterCnpj, destCnpj, number };
+}
+
+/**
+ * NF-e de venda completa, montada e assinada pelo mesmo motor fiscal do caixa (com o certificado de
+ * teste), já com o protocolo de autorização. Dados fictícios.
+ */
+export function saleNfe(options: { series: number; number: number; emitterCnpj?: string; destCnpj?: string }) {
+  const address = { street: 'RUA DE TESTE', number: '100', district: 'CENTRO', cityCode: '3550308', city: 'SAO PAULO', uf: 'SP', postalCode: '01001000' };
+  const result = engineNfe({
+    issuer: { ...address, cnpj: options.emitterCnpj ?? testCnpj(), stateRegistration: '110042490114', legalName: 'FARMACIA TESTE LTDA', taxRegime: 1 },
+    recipient: { ...address, cnpj: options.destCnpj ?? testCnpj(), name: 'EMPRESA CLIENTE TESTE LTDA', ieIndicator: 1, stateRegistration: '110042490114' },
+    items: [{
+      code: '1', description: 'DIPIRONA 500MG', ncm: '30049099', quantityMilli: 1000, unitPriceCents: 1290, grossCents: 1290,
+      tax: { cfop: '5102', origin: 0, icms_csosn: '102', pis_cst: '49', pis_rate: 0, cofins_cst: '49', cofins_rate: 0 },
+    }],
+    payments: [{ type: '01', cents: 1290 }],
+    series: options.series,
+    number: options.number,
+    emittedAt: new Date().toISOString(),
+    environment: 2,
+    numericCode: String(randomInt(10_000_000, 99_999_999)),
+    appVersion: 'TESTE',
+    operation: 'VENDA',
+  }, privateKey, CERTIFICATE);
+  if (result.error) throw new Error(`NF-e de teste: ${result.error.code} ${result.error.detail}`);
+  const protocol = `<protNFe versao="4.00"><infProt><tpAmb>2</tpAmb><verAplic>TESTE</verAplic><chNFe>${result.accessKey}</chNFe><dhRecbto>2026-11-27T10:00:05-03:00</dhRecbto><nProt>135260000000124</nProt><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe>`;
+  const signed = result.xml.replace(/^<\?xml[^>]*>/, '');
+  return { key: result.accessKey, xml: `<?xml version="1.0" encoding="UTF-8"?><nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00">${signed}${protocol}</nfeProc>` };
 }

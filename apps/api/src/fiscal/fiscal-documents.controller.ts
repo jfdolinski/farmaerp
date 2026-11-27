@@ -1,4 +1,5 @@
 import { Body as RequestBody, Controller, Get, HttpCode, Inject, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { buildDanfe } from '@farmaerp/fiscal-js';
 import type { Response } from 'express';
 import { SessionGuard } from '../auth/session.guard.js';
 import { asBody, requireText, requireUuid } from '../common/parse.js';
@@ -7,6 +8,8 @@ import { AppError } from '../observability/app-error.js';
 import { NfceActionsService } from './nfce-actions.service.js';
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
+type DocumentFiles = { access_key: string; status: string; model: string; xml: string; cancellation: { xml: string } | null };
+
 const STATUSES = new Set(['authorized', 'rejected', 'pending', 'contingency', 'canceled']);
 
 function optionalDay(value?: string): string | null {
@@ -22,7 +25,10 @@ function reasonOf(body: Record<string, unknown>): string {
   return reason;
 }
 
-/** Notas fiscais (NFC-e) da central: consulta, reenvio, cancelamento, inutilização e avisos. */
+/**
+ * Notas fiscais emitidas no caixa (NFC-e e NF-e de venda) na central: consulta, reenvio, cancelamento,
+ * inutilização e avisos. A NF-e 55 por enquanto só é listada e baixada (XML e DANFE A4).
+ */
 @Controller('admin/fiscal-documents')
 @UseGuards(SessionGuard)
 export class FiscalDocumentsController {
@@ -71,23 +77,36 @@ export class FiscalDocumentsController {
     return this.actions.void(branchId, series, first, last, reasonOf(body));
   }
 
-  /** XML da nota e, se houver, o do cancelamento (kind=cancel). */
-  @Get(':id/xml')
-  async xml(@Param('id') id: string, @Query('kind') kind: string | undefined, @Res() response: Response) {
+  private async files(id: string) {
     const documentId = requireUuid(id);
     const files = await this.database.withContext(async (client) => {
-      const { rows } = await client.query<{ f: { access_key: string; xml: string; cancellation: { xml: string } | null } | null }>(
-        'SELECT app.fiscal_document_files($1) AS f', [documentId],
-      );
+      const { rows } = await client.query<{ f: DocumentFiles | null }>('SELECT app.fiscal_document_files($1) AS f', [documentId]);
       return rows[0].f;
     });
     if (!files) throw new AppError('FA006');
+    return files;
+  }
+
+  /** XML da nota e, se houver, o do cancelamento (kind=cancel). */
+  @Get(':id/xml')
+  async xml(@Param('id') id: string, @Query('kind') kind: string | undefined, @Res() response: Response) {
+    const files = await this.files(id);
+    const label = files.model === '55' ? 'NFe' : 'NFCe';
     if (kind === 'cancel') {
       if (!files.cancellation) throw new AppError('FA006');
-      response.status(200).type('application/xml; charset=utf-8').attachment(`Cancelamento-NFCe-${files.access_key}.xml`).send(files.cancellation.xml);
+      response.status(200).type('application/xml; charset=utf-8').attachment(`Cancelamento-${label}-${files.access_key}.xml`).send(files.cancellation.xml);
       return;
     }
-    response.status(200).type('application/xml; charset=utf-8').attachment(`NFCe-${files.access_key}.xml`).send(files.xml);
+    response.status(200).type('application/xml; charset=utf-8').attachment(`${label}-${files.access_key}.xml`).send(files.xml);
+  }
+
+  /** DANFE A4 da NF-e de venda autorizada (a NFC-e tem o cupom, impresso no caixa). */
+  @Get(':id/danfe')
+  async danfe(@Param('id') id: string, @Res() response: Response) {
+    const files = await this.files(id);
+    if (files.model !== '55' || files.status !== 'authorized') throw new AppError('FA006');
+    const pdf = await buildDanfe(files.xml);
+    response.status(200).type('application/pdf').attachment(`DANFE-${files.access_key}.pdf`).send(pdf);
   }
 
   @Post(':id/consult')

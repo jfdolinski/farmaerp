@@ -74,6 +74,7 @@ const customerBody = (form: FormData) => ({
   cityCode: optional(form, "cityCode"),
   state: optional(form, "state"),
   stateRegistration: optional(form, "stateRegistration"),
+  ieIndicator: optional(form, "ieIndicator"),
 });
 
 export async function createCustomer(

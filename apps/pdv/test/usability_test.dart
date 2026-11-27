@@ -443,6 +443,74 @@ void main() {
       expect(find.byKey(const Key('customer-new-save')), findsNothing);
     });
 
+    testWidgets('cliente: pessoa jurídica pelo CNPJ da busca, com os dados da Receita, inscrição e endereço completo', (tester) async {
+      await tester.runAsync(() => controller.login('3', '2468'));
+      controller.openShift(0);
+      await tester.runAsync(() => controller.identifySeller('3'));
+      await tester.binding.setSurfaceSize(const Size(1500, 1200));
+      await tester.pumpWidget(MaterialApp(home: PosScreen(controller: controller)));
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.f4);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('customer-query')), '11.222.333/0001-81');
+      await tester.tap(find.byKey(const Key('customer-new')));
+      await tester.pumpAndSettle();
+      String text(String key) => tester.widget<TextField>(find.byKey(Key('customer-new-$key'))).controller!.text;
+      // O CNPJ digitado na busca abre o cadastro como pessoa jurídica.
+      expect(text('cnpj'), '11222333000181');
+      expect(find.byKey(const Key('customer-new-name')), findsNothing);
+
+      // Sem internet, a consulta avisa e os campos ficam para preencher à mão.
+      api.cnpjFailure = const ApiException('FA001');
+      await tester.tap(find.byKey(const Key('customer-new-lookup')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pumpAndSettle();
+      expect(tester.widget<Text>(find.byKey(const Key('customer-new-lookup-message'))).data, contains(caps('Preencha os campos à mão')));
+
+      api.cnpjFailure = null;
+      api.cnpjData = {
+        'legalName': 'Empresa Fictícia Ltda', 'tradeName': 'Fictícia', 'postalCode': '01001000', 'street': 'Praça da Sé', 'streetNumber': '100',
+        'district': 'Sé', 'city': 'São Paulo', 'cityCode': '3550308', 'state': 'SP', 'email': 'compras@exemplo.test', 'phone': '1133334444',
+      };
+      await tester.tap(find.byKey(const Key('customer-new-lookup')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pumpAndSettle();
+      expect(api.cnpjLookups.last, {'operatorId': controller.actor!.id, 'cnpj': '11222333000181'});
+      expect(text('legalName'), 'Empresa Fictícia Ltda');
+      expect(text('cityCode'), '3550308');
+      expect(text('uf'), 'SP');
+
+      // Contribuinte com ISENTO não fecha; endereço apagado também não: nada vai para a central.
+      await tester.enterText(find.byKey(const Key('customer-new-ie')), 'isento');
+      await tester.tap(find.byKey(const Key('customer-new-ie-indicator')));
+      await tester.pumpAndSettle();
+      await tester.tap(findText('Contribuinte').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('customer-new-streetNumber')), '');
+      await tester.tap(find.byKey(const Key('customer-new-save')));
+      await tester.pumpAndSettle();
+      expect(findText('Contribuinte precisa da inscrição com número'), findsOneWidget);
+      expect(findText('Informe o número (ou S/N)'), findsOneWidget);
+      expect(api.createdCustomers, isEmpty);
+
+      await tester.enterText(find.byKey(const Key('customer-new-ie')), '110.042.490.114');
+      await tester.enterText(find.byKey(const Key('customer-new-streetNumber')), '100');
+      await tester.tap(find.byKey(const Key('customer-new-save')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pumpAndSettle();
+      expect(api.createdCustomers.single, containsPair('personType', 'company'));
+      final sent = api.createdCustomers.single;
+      expect(sent['document'], '11222333000181');
+      expect(sent['name'], 'Empresa Fictícia Ltda');
+      expect(sent['stateRegistration'], '110042490114');
+      expect(sent['ieIndicator'], '1');
+      expect(sent['cityCode'], '3550308');
+      expect(sent['state'], 'SP');
+      expect(sent['postalCode'], '01001000');
+      expect(api.createdCustomers.single.containsKey('birthDate'), isFalse);
+      expect(controller.cart.customer?.name, 'Empresa Fictícia Ltda');
+    });
+
     testWidgets('cliente: cadastro só pelo teclado, com a data digitada só com números', (tester) async {
       await tester.runAsync(() => controller.login('3', '2468'));
       controller.openShift(0);

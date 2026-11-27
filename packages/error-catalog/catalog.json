@@ -2152,6 +2152,16 @@
       "sale_terminal_number_key"
     ]
   },
+  "FA964": {
+    "message": "O indicador de IE não confere com a inscrição estadual.",
+    "action": "Contribuinte precisa da inscrição com número; isento usa ISENTO ou fica sem inscrição.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "customer_ie_indicator_check"
+    ]
+  },
   "FA965": {
     "message": "O PIN precisa ter de 4 a 6 números, sem repetir o mesmo número e sem sequência.",
     "action": "Escolha outro PIN, como 2580 ou 7391.",
@@ -3419,6 +3429,7 @@
     "retryable": false,
     "dbConstraints": [
       "fiscal_document_model_check",
+      "fiscal_document_model_emission_check",
       "fiscal_document_series_check",
       "fiscal_document_number_check",
       "fiscal_document_access_key_check",
@@ -3936,6 +3947,14 @@
   "FA779": {
     "message": "O produto da transferência está sem NCM.",
     "action": "Vincule o produto ao Catálogo ou informe o NCM e tente de novo.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA780": {
+    "message": "Esta operação ainda não está disponível para a NF-e de venda.",
+    "action": "Cancelamento, reenvio e consulta da NF-e modelo 55 pela central chegam numa próxima versão. Até lá, use o portal da Sefaz.",
     "httpStatus": 422,
     "severity": "warning",
     "retryable": false,
