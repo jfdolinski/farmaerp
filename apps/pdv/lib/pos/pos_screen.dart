@@ -19,6 +19,7 @@ import 'display_settings.dart';
 import 'pos_dialogs.dart';
 import 'product_info.dart';
 import 'quote_panels.dart';
+import 'seller_lock.dart';
 import 'return_dialog.dart';
 import 'status_bar.dart';
 
@@ -485,6 +486,7 @@ class _SaleViewState extends State<_SaleView> {
   final _zeroStockFocus = FocusNode();
   final _controlledFocus = FocusNode();
   final _shell = FocusNode(skipTraversal: true);
+  final _lock = OverlayPortalController();
   Timer? _typing;
   int _highlight = -1;
   String? _target;
@@ -497,7 +499,17 @@ class _SaleViewState extends State<_SaleView> {
     controller.addListener(_onControllerChange);
     FocusManager.instance.addListener(_onFocusChange);
     _target = _currentTarget();
+    _syncLock();
     _focusTarget();
+  }
+
+  /// Tela preta pedindo o vendedor: aparece e some junto com o estado do controller.
+  void _syncLock() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || controller.sellerLock == _lock.isShowing) return;
+      controller.sellerLock ? _lock.show() : _lock.hide();
+      _focusTarget();
+    });
   }
 
   @override
@@ -541,6 +553,7 @@ class _SaleViewState extends State<_SaleView> {
   }
 
   void _onControllerChange() {
+    if (controller.sellerLock != _lock.isShowing) _syncLock();
     final target = _currentTarget();
     if (target != _target) {
       _target = target;
@@ -607,8 +620,21 @@ class _SaleViewState extends State<_SaleView> {
   Widget build(BuildContext context) {
     final controller = widget.controller;
     final cart = controller.cart;
+    final locked = controller.sellerLock;
+    final cashOpen = controller.operator != null && controller.session != null;
+    // Com a tela bloqueada, só as operações de caixa: sangria, suprimento e fechar caixa.
+    final lockedBindings = <ShortcutActivator, VoidCallback>{
+      if (cashOpen) ...{
+        const SingleActivator(LogicalKeyboardKey.f6): () =>
+            _dialog(() => showCashMovementDialog(context, controller, withdrawal: true)),
+        const SingleActivator(LogicalKeyboardKey.f7): () =>
+            _dialog(() => showCashMovementDialog(context, controller, withdrawal: false)),
+        const SingleActivator(LogicalKeyboardKey.f8): () =>
+            _dialog(() => showCloseShiftDialog(context, controller)),
+      },
+    };
     return CallbackShortcuts(
-      bindings: {
+      bindings: locked ? lockedBindings : {
         const SingleActivator(LogicalKeyboardKey.f10): controller.startPayment,
         const SingleActivator(LogicalKeyboardKey.escape): controller.paying
             ? controller.backToItems
@@ -632,7 +658,14 @@ class _SaleViewState extends State<_SaleView> {
           if (!controller.quoteMode) _dialog(() => showCreditReceiptDialog(context, controller));
         },
       },
-      child: Focus(
+      child: OverlayPortal(
+        controller: _lock,
+        overlayChildBuilder: (_) => SellerLockScreen(
+          controller: controller,
+          sellerFocus: _sellerFocus,
+          onIdentified: _focusTarget,
+        ),
+        child: Focus(
         focusNode: _shell,
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -677,6 +710,7 @@ class _SaleViewState extends State<_SaleView> {
               );
             },
           ),
+        ),
         ),
       ),
     );
@@ -728,7 +762,9 @@ class _ItemsPanel extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
-        SellerPanel(controller: controller, focusNode: sellerFocus, onIdentified: scanFocus.requestFocus),
+        // Com a tela preta, o vendedor é pedido nela.
+        if (!controller.sellerLock)
+          SellerPanel(controller: controller, focusNode: sellerFocus, onIdentified: scanFocus.requestFocus),
         if (controller.pendingControlled != null)
           ControlledPanel(controller: controller, pending: controller.pendingControlled!, focusNode: controlledFocus),
         if (controller.pendingZeroStock != null)

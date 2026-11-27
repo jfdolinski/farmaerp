@@ -268,7 +268,7 @@ void main() {
       await tester.tap(find.byKey(const Key('seller-confirm')));
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       await tester.pumpAndSettle();
-      expect(tester.widget<Text>(find.byKey(const Key('seller-name'))).data, caps('Vendedor: Balconista Ana'));
+      expect(tester.widget<Text>(find.byKey(const Key('seller-name'))).data, caps('Balconista Ana'));
       await tester.enterText(find.byKey(const Key('scan-field')), '7890000000017');
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
@@ -278,8 +278,16 @@ void main() {
       await tester.tap(find.byKey(const Key('quote-finish')));
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
       await tester.pumpAndSettle();
-      expect(findText('Orçamento O1-000004 concluído na plaquinha 15.'), findsOneWidget);
-      expect(find.byKey(const Key('seller-panel')), findsOneWidget);
+      // Tela preta: mostra o orçamento concluído e pede o vendedor do próximo.
+      expect(find.byKey(const Key('seller-lock')), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(const Key('seller-lock-info'))).data, caps('Orçamento O1-000004 concluído na plaquinha 15.'));
+      expect(find.descendant(of: find.byKey(const Key('seller-lock')), matching: find.byKey(const Key('seller-panel'))), findsOneWidget);
+      expect(find.byKey(const Key('seller-lock-change')), findsNothing);
+      await tester.enterText(find.byKey(const Key('seller-code')), '6');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('seller-lock')), findsNothing);
       expect(findTextContaining('Último orçamento: O1-000004'), findsOneWidget);
     });
   });
