@@ -87,6 +87,32 @@ function branchList(body: Body): string[] {
   return list;
 }
 
+/** Origem do vínculo com o Catálogo informada pela tela: busca automática pelo código de barras ou à mão. */
+function catalogSource(body: Body): 'manual' | 'barcode' | null {
+  const value = body.catalogSource;
+  if (value === undefined || value === null || value === '') return null;
+  if (value !== 'manual' && value !== 'barcode') throw new AppError('FA005');
+  return value;
+}
+
+function searchKind(value: unknown): 'search' | 'lookup' {
+  if (value !== 'search' && value !== 'lookup') throw new AppError('FA005');
+  return value;
+}
+
+/** A busca que levou ao item do Catálogo no cadastro novo; fica na auditoria do produto. */
+function catalogLookup(body: Body): { kind: 'search' | 'lookup'; query: string; resultCount: number } | null {
+  const value = body.catalogLookup;
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'object' || Array.isArray(value)) throw new AppError('FA005');
+  const lookup = value as Body;
+  const resultCount = lookup.resultCount;
+  if (typeof resultCount !== 'number' || !Number.isInteger(resultCount) || resultCount < 0 || resultCount > 1000) {
+    throw new AppError('FA005');
+  }
+  return { kind: searchKind(lookup.kind), query: requireText(lookup, 'query', 200), resultCount };
+}
+
 const productData = (body: Body) => ({
   catalogProductId: optionalUuid(body, 'catalogProductId'),
   displayName: requireText(body, 'displayName', 200),
@@ -100,6 +126,7 @@ const productData = (body: Body) => ({
   fractionQuantity: optionalFraction(body, 'fractionQuantity'),
   // Sigla da lista fixa (UN, CX, KG...); o banco confere. Vazia: UN no cadastro, a atual na alteração.
   unit: optionalText(body, 'unit', 10),
+  catalogSource: catalogSource(body),
 });
 
 const barcodeOptions = (body: Body) => ({
@@ -336,6 +363,7 @@ export class ProductsController {
       ...productData(body),
       barcode: requireText(body, 'barcode', 30),
       barcodeIsInternal: optionalBoolean(body, 'barcodeIsInternal'),
+      catalogLookup: catalogLookup(body),
     };
     return this.create('SELECT app.create_product($1::jsonb) AS id', [
       JSON.stringify(data),
@@ -389,18 +417,44 @@ export class ProductsController {
     return this.call('SELECT app.remove_barcode($1)', [requireUuid(id)]);
   }
 
-  /** Consulta ao Catálogo para preencher o cadastro. */
+  /**
+   * Consulta ao Catálogo para preencher o cadastro. Feita na tela de um produto (productId), fica na
+   * auditoria dele: `search` é a busca manual; `lookup`, a automática pelo código de barras.
+   */
   @Get('catalog')
-  catalog(@Query('q') query?: string) {
+  catalog(@Query('q') query?: string, @Query('productId') productId?: string, @Query('kind') kind?: string) {
     if (query !== undefined && (typeof query !== 'string' || query.length > 200)) {
       throw new AppError('FA005');
     }
+    const product = productId === undefined ? null : requireUuid(productId);
+    const searchType = product ? searchKind(kind ?? 'search') : null;
     return this.database.withContext(async (client) => {
-      const { rows } = await client.query(
+      const { rows } = await client.query<{ id: string; barcodes: string[] }>(
         'SELECT * FROM app.search_catalog($1)',
         [query ?? ''],
       );
+      if (product && searchType && query?.trim()) {
+        // Na automática, o item achado é o que tem exatamente este código.
+        const found = searchType === 'lookup' ? rows.filter((row) => row.barcodes.includes(query.trim())) : rows;
+        await client.query('SELECT app.record_catalog_search($1, $2, $3, $4, $5)', [
+          product,
+          searchType,
+          query,
+          found.length,
+          searchType === 'lookup' && found.length === 1 ? found[0].id : null,
+        ]);
+      }
       return withMainImage(client, rows, 'id');
+    });
+  }
+
+  /** Auditoria do Catálogo no produto: buscas e vínculos, do mais novo para o mais antigo. */
+  @Get('products/:id/catalog-history')
+  catalogHistory(@Param('id') id: string) {
+    const productId = requireUuid(id);
+    return this.database.withContext(async (client) => {
+      const { rows } = await client.query('SELECT * FROM app.product_catalog_history($1)', [productId]);
+      return rows;
     });
   }
 

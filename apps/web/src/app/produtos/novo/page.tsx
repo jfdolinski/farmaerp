@@ -5,13 +5,16 @@ import { apiFetch, can, redirectIfNeeded, requireUser } from "@/lib/api";
 import { AppHeader } from "../../app-header";
 import { ErrorNotice } from "../../error-notice";
 import { CatalogResults, CatalogRow, controlledLabel } from "../catalog-results";
-import { CreateProductForm, ProductStructure } from "../ui";
+import { BarcodeLookupField, CatalogSearchButton } from "../catalog-search";
+import { CatalogOrigin, CreateProductForm, ProductStructure } from "../ui";
 import styles from "../../terminais/page.module.css";
+import search from "../catalog-search.module.css";
 
 export const metadata: Metadata = { title: "Novo produto · FarmaERP" };
 
 type SearchParams = Promise<{
   q?: string | string[];
+  ean?: string | string[];
   item?: string | string[];
   semCatalogo?: string | string[];
 }>;
@@ -33,6 +36,8 @@ const EMPTY_STRUCTURE: ProductStructure = {
   units: [{ code: "UN", name: "Unidade", fractional: false }],
 };
 
+const param = (value: string | string[] | undefined) => (typeof value === "string" ? value.trim() : "");
+
 async function NewProductContent({ searchParams }: { searchParams: SearchParams }) {
   const user = await requireUser("/produtos/novo");
 
@@ -49,23 +54,36 @@ async function NewProductContent({ searchParams }: { searchParams: SearchParams 
   }
 
   const params = await searchParams;
-  const query = typeof params.q === "string" ? params.q.trim() : "";
-  const itemId = typeof params.item === "string" ? params.item : "";
+  const query = param(params.q);
+  const ean = /^\d{8,14}$/.test(param(params.ean)) ? param(params.ean) : "";
+  const itemId = param(params.item);
   const withoutCatalog = params.semCatalogo === "1";
+  // A busca automática pelo código de barras tem prioridade sobre a manual.
+  const text = ean || query;
 
   const [catalog, structureResult] = await Promise.all([
-    query
-      ? apiFetch<CatalogRow[]>(`/admin/catalog?q=${encodeURIComponent(query)}`)
-      : Promise.resolve(null),
+    text ? apiFetch<CatalogRow[]>(`/admin/catalog?q=${encodeURIComponent(text)}`) : Promise.resolve(null),
     apiFetch<ProductStructure>("/admin/product-structure"),
   ]);
   if (structureResult && !structureResult.ok) {
     redirectIfNeeded(structureResult.error, "/produtos/novo");
   }
   const structure = structureResult.ok ? structureResult.data : EMPTY_STRUCTURE;
-  const items = catalog?.ok ? catalog.data : [];
-  const chosen = items.find((item) => item.id === itemId);
+  const found = catalog?.ok ? catalog.data : [];
+  // Pelo código, só vale o item que tem exatamente este código.
+  const items = ean ? found.filter((item) => item.barcodes.includes(ean)) : found;
+  const automatic = ean && items.length === 1 && !items[0].product_id ? items[0] : undefined;
+  const chosen = items.find((item) => item.id === itemId && !item.product_id) ?? automatic;
+  const origin: CatalogOrigin | null = chosen
+    ? {
+        source: ean ? "barcode" : "manual",
+        kind: ean ? "lookup" : "search",
+        query: text,
+        resultCount: items.length,
+      }
+    : null;
   const showForm = withoutCatalog || Boolean(chosen);
+  const base = "/produtos/novo";
 
   return (
     <>
@@ -77,38 +95,56 @@ async function NewProductContent({ searchParams }: { searchParams: SearchParams 
 
       {!showForm && (
         <section className={styles.card}>
-          <h2>1. Consulte o Catálogo</h2>
-          <form action="/produtos/novo" className={styles.inline}>
-            <label>
-              Nome, código de barras, princípio ativo ou fabricante
-              <input name="q" type="search" size={50} maxLength={200} defaultValue={query} required />
-            </label>
-            <button type="submit">Consultar</button>
-          </form>
+          <h2>Consulte o Catálogo</h2>
+          <p className={styles.hint}>
+            Leia ou digite o código de barras: a consulta é feita sozinha. Sem o código, busque pelo nome.
+          </p>
+          <BarcodeLookupField key={ean} base={base} initial={ean} />
+          <CatalogSearchButton action={base} name="q" initial={query} label="Buscar no Catálogo pelo nome" />
+
           {catalog && !catalog.ok && <ErrorNotice error={catalog.error} />}
-          {catalog?.ok && items.length > 0 && (
+          {ean && catalog?.ok && items.length === 0 && (
+            <div className={search.found} role="status">
+              <strong>Nenhum item do Catálogo tem o código {ean}.</strong>
+              <span className={styles.hint}>
+                Busque pelo nome ou{" "}
+                <Link href={`${base}?semCatalogo=1&ean=${ean}`}>cadastre sem Catálogo com este código</Link>.
+              </span>
+            </div>
+          )}
+          {ean && items.length === 1 && items[0].product_id && (
+            <div className={search.found} role="status">
+              <strong>Este código já está cadastrado.</strong>
+              <Link href={`/produtos/${items[0].product_id}`}>Abrir o produto {items[0].name}</Link>
+            </div>
+          )}
+          {!ean && query && catalog?.ok && items.length === 0 && (
+            <p className={styles.hint}>Nenhum item encontrado no Catálogo para &quot;{query}&quot;.</p>
+          )}
+          {items.length > 0 && !(ean && items.length === 1) && (
             <CatalogResults
               items={items}
               actionLabel="Usar este item"
               hrefFor={(item) =>
-                `/produtos/novo?q=${encodeURIComponent(query)}&item=${item.id}`
+                ean ? `${base}?ean=${ean}&item=${item.id}` : `${base}?q=${encodeURIComponent(query)}&item=${item.id}`
               }
             />
           )}
-          {catalog?.ok && items.length === 0 && (
-            <p className={styles.hint}>Nenhum item encontrado no Catálogo.</p>
-          )}
           <p className={styles.hint}>
-            Não está no Catálogo?{" "}
-            <Link href="/produtos/novo?semCatalogo=1">Cadastrar sem Catálogo</Link>. O produto fica
-            sem tributação e sem poder ser vendido até ser vinculado.
+            Não está no Catálogo? <Link href={`${base}?semCatalogo=1`}>Cadastrar sem Catálogo</Link>. O produto fica sem
+            tributação e sem poder ser vendido até ser vinculado.
           </p>
         </section>
       )}
 
       {chosen && (
         <section className={styles.card}>
-          <h2>2. Confira os dados do Catálogo</h2>
+          <h2>Item do Catálogo</h2>
+          {chosen === automatic && (
+            <p className={styles.success} role="status">
+              Encontrado automaticamente pelo código de barras {ean}.
+            </p>
+          )}
           <p>
             <strong>{chosen.name}</strong>
           </p>
@@ -124,22 +160,24 @@ async function NewProductContent({ searchParams }: { searchParams: SearchParams 
               .filter(Boolean)
               .join(" · ")}
           </p>
-          <Link href={`/produtos/novo?q=${encodeURIComponent(query)}`}>Escolher outro item</Link>
+          <Link href={base}>Escolher outro item</Link>
         </section>
       )}
 
       {showForm && (
         <section className={styles.card}>
-          <h2>{chosen ? "3. Complete o cadastro" : "Cadastro sem Catálogo"}</h2>
-          {!chosen && <Link href="/produtos/novo">Voltar para a consulta ao Catálogo</Link>}
+          <h2>{chosen ? "Complete o cadastro" : "Cadastro sem Catálogo"}</h2>
+          {!chosen && <Link href={base}>Voltar para a consulta ao Catálogo</Link>}
           <CreateProductForm
             key={chosen?.id ?? "sem-catalogo"}
             values={{
               catalog_product_id: chosen?.id ?? null,
               display_name: chosen?.name ?? "",
             }}
-            catalogBarcodes={chosen?.barcodes ?? []}
+            catalogBarcodes={chosen ? [...chosen.barcodes].sort((x, y) => (x === ean ? -1 : y === ean ? 1 : 0)) : []}
             structure={structure}
+            origin={origin}
+            barcode={chosen ? "" : ean}
           />
         </section>
       )}

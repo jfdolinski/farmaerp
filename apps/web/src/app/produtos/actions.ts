@@ -42,7 +42,17 @@ const productBody = (form: FormData) => ({
   onlineSaleBlocked: checked(form, "onlineSaleBlocked"),
   fractionQuantity: fraction(form, "fractionQuantity"),
   unit: optional(form, "unit"),
+  // Se o item do Catálogo veio da busca automática pelo código de barras (auditoria do produto).
+  catalogSource: optional(form, "catalogSource"),
 });
+
+/** A busca que levou ao item do Catálogo no cadastro novo, para a auditoria do produto. */
+function catalogLookup(form: FormData) {
+  const query = text(form, "lookupQuery");
+  const count = Number(text(form, "lookupCount"));
+  if (!query || !Number.isInteger(count)) return null;
+  return { kind: text(form, "lookupKind") === "lookup" ? "lookup" : "search", query, resultCount: count };
+}
 
 export async function createProduct(
   _previous: ProductFormState,
@@ -54,6 +64,7 @@ export async function createProduct(
       ...productBody(form),
       barcode: text(form, "barcode"),
       barcodeIsInternal: checked(form, "barcodeIsInternal"),
+      catalogLookup: catalogLookup(form),
     },
   });
   if (!result.ok) return handleFailure(result.error, "/produtos/novo");

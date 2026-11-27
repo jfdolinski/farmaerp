@@ -249,6 +249,76 @@ describe('produtos contra o banco real', () => {
     });
   });
 
+  describe('auditoria do Catálogo', () => {
+    const PARACETAMOL_EAN = '7890000000031';
+    const history = async (id: string, email = ADMIN) =>
+      (await call('get', `/admin/products/${id}/catalog-history`, email).expect(200)).body as Json[];
+    const paracetamol = async () =>
+      ((await call('get', `/admin/catalog?q=${PARACETAMOL_EAN}`).expect(200)).body as Json[])[0];
+
+    it('busca automática, vínculo pelo código de barras e desvínculo ficam no histórico', async () => {
+      const { id } = await newProduct();
+      const item = await paracetamol();
+      const rows = (await call('get', `/admin/catalog?q=${PARACETAMOL_EAN}&productId=${id}&kind=lookup`).expect(200))
+        .body as Json[];
+      expect(rows.map((row) => row.id)).toEqual([item.id]);
+      await call('patch', `/admin/products/${id}`)
+        .send({ displayName: name(), catalogProductId: item.id, catalogSource: 'barcode' })
+        .expect(200);
+      await call('get', `/admin/catalog?q=paracetamol&productId=${id}`).expect(200);
+      await call('patch', `/admin/products/${id}`).send({ displayName: name() }).expect(200);
+
+      const events = await history(id);
+      expect(events.map((row) => [row.kind, row.source, row.query])).toEqual([
+        ['unlinked', 'manual', null],
+        ['search', null, 'paracetamol'],
+        ['linked', 'barcode', null],
+        ['lookup', null, PARACETAMOL_EAN],
+      ]);
+      expect(events[1].result_count).toBeGreaterThan(0);
+      expect(events[3].result_count).toBe(1);
+      expect(events[2]).toMatchObject({ catalog_name: item.name, user_name: expect.any(String) });
+      expect(events[0].previous_catalog_name).toBe(item.name);
+      // O Gerente também vê a auditoria.
+      expect(await history(id, MANAGER)).toHaveLength(4);
+    });
+
+    it('cadastro novo guarda a busca que levou ao item', async () => {
+      const item = await paracetamol();
+      const { id } = await newProduct({
+        catalogProductId: item.id,
+        catalogSource: 'barcode',
+        catalogLookup: { kind: 'lookup', query: PARACETAMOL_EAN, resultCount: 1 },
+      });
+      // Libera o item do Catálogo para os outros testes.
+      await call('patch', `/admin/products/${id}`).send({ displayName: name() }).expect(200);
+      expect((await history(id)).map((row) => [row.kind, row.source])).toEqual([
+        ['unlinked', 'manual'],
+        ['linked', 'barcode'],
+        ['lookup', null],
+      ]);
+    });
+
+    it('dados de auditoria inválidos são recusados com FA005', async () => {
+      const { id } = await newProduct();
+      for (const response of [
+        await call('patch', `/admin/products/${id}`).send({ displayName: name(), catalogSource: 'import' }),
+        await call('post', '/admin/products').send({ displayName: name(), barcode: gtin(), catalogLookup: { kind: 'x', query: 'a', resultCount: 1 } }),
+        await call('post', '/admin/products').send({ displayName: name(), barcode: gtin(), catalogLookup: { kind: 'search', query: 'a', resultCount: -1 } }),
+        await call('get', `/admin/catalog?q=a&productId=${id}&kind=outro`),
+      ]) {
+        expect(response.status).toBe(422);
+        expect(codeOf(response)).toBe('FA005');
+      }
+      expect(await history(id)).toEqual([]);
+    });
+
+    it('quem não cadastra produtos não registra busca na tela do produto', async () => {
+      const response = await call('get', `/admin/catalog?q=dipirona&productId=${SEED_PRODUCT}`, OPERATOR).expect(403);
+      expect(codeOf(response)).toBe('FA002');
+    });
+  });
+
   describe('estrutura', () => {
     it('cria os três níveis, renomeia e exclui', async () => {
       const create = async (parentId?: string) =>

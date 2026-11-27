@@ -26,6 +26,9 @@ import { costText, dateTimeText } from "../../notas/format";
 import styles from "../../terminais/page.module.css";
 import { ProductGallery, ProductImage } from "../images";
 import { activeTab, TabItem, Tabs } from "../../shell/tabs";
+import { CatalogSearchButton } from "../catalog-search";
+import search from "../catalog-search.module.css";
+import { CatalogAudit, CatalogEvent } from "../catalog-audit";
 
 interface AverageCostRow {
   branch_id: string;
@@ -67,6 +70,7 @@ type Params = Promise<{ id: string }>;
 type SearchParams = Promise<{
   catalogo?: string | string[];
   vincular?: string | string[];
+  origem?: string | string[];
   aba?: string | string[];
 }>;
 
@@ -108,7 +112,7 @@ async function ProductContent({ params, searchParams }: { params: Params; search
     );
   }
 
-  const { catalogo, vincular, aba } = await searchParams;
+  const { catalogo, vincular, origem, aba } = await searchParams;
   const canSeeSuppliers = can(user, "purchases.view") || can(user, "purchases.manage");
   const canManageSuppliers = can(user, "purchases.manage");
   const tabs: TabItem[] = [
@@ -118,6 +122,7 @@ async function ProductContent({ params, searchParams }: { params: Params; search
     ...(canSeeStock || canSeeSuppliers ? [{ id: "estoque", label: "Estoque e custo" }] : []),
     ...(canSeeSuppliers ? [{ id: "fornecedores", label: "Fornecedores" }] : []),
     { id: "codigos", label: "Códigos de barras" },
+    { id: "auditoria", label: "Auditoria" },
   ];
   const tab = activeTab(tabs, aba);
   const needsStructure = tab === "cadastro" || tab === "codigos";
@@ -157,12 +162,38 @@ async function ProductContent({ params, searchParams }: { params: Params; search
 
   const query = typeof catalogo === "string" ? catalogo.trim() : "";
   const linkingId = typeof vincular === "string" ? vincular : "";
-  const catalog =
-    tab === "cadastro" && !product.catalog_product_id && canManage && query
-      ? await apiFetch<CatalogRow[]>(`/admin/catalog?q=${encodeURIComponent(query)}`)
-      : null;
+  const byBarcode = origem === "barcode";
+  const searching = tab === "cadastro" && !product.catalog_product_id && canManage;
+  // Busca automática pelos códigos de barras do produto (os internos da loja não estão no Catálogo).
+  const codes = searching
+    ? product.barcodes
+        .filter((row) => !row.is_internal)
+        .map((row) => row.code)
+        .slice(0, 3)
+    : [];
+  // Só a busca enviada entra na auditoria; a volta da tela para confirmar o vínculo, não.
+  const audited = linkingId ? "" : `&productId=${productPath}&kind=search`;
+  const [catalog, lookups, catalogHistory] = await Promise.all([
+    searching && query && !byBarcode
+      ? apiFetch<CatalogRow[]>(`/admin/catalog?q=${encodeURIComponent(query)}${audited}`)
+      : null,
+    Promise.all(
+      codes.map((code) =>
+        apiFetch<CatalogRow[]>(`/admin/catalog?q=${encodeURIComponent(code)}&productId=${productPath}&kind=lookup`),
+      ),
+    ),
+    tab === "auditoria" ? apiFetch<CatalogEvent[]>(`/admin/products/${productPath}/catalog-history`) : null,
+  ]);
   const items = catalog?.ok ? catalog.data : [];
-  const linking = items.find((item) => item.id === linkingId && !item.product_id);
+  const suggestions = codes.flatMap((code, index) => {
+    const result = lookups[index];
+    return result.ok
+      ? result.data.filter((row) => row.barcodes.includes(code) && !row.product_id).map((row) => ({ code, row }))
+      : [];
+  });
+  const linking = (byBarcode ? suggestions.map((entry) => entry.row) : items).find(
+    (item) => item.id === linkingId && !item.product_id,
+  );
 
   for (const item of tabs) {
     if (item.id === "cadastro") item.attention = !product.catalog_product_id;
@@ -210,15 +241,24 @@ async function ProductContent({ params, searchParams }: { params: Params; search
                   <p className={styles.warning}>
                     Sem Catálogo: fica sem tributação e sem poder ser vendido até ser vinculado.
                   </p>
-                  {canManage && (
-                    <form action={path} className={styles.inline}>
-                      <label>
-                        Consultar o Catálogo para vincular
-                        <input name="catalogo" type="search" size={40} maxLength={200} defaultValue={query} required />
-                      </label>
-                      <button type="submit">Consultar</button>
-                    </form>
+                  {suggestions.map(({ code, row }) => (
+                    <div key={row.id} className={search.found} role="status">
+                      <span>
+                        Encontrado no Catálogo pelo código de barras {code}: <strong>{row.name}</strong>
+                        {row.manufacturer && ` · ${row.manufacturer}`}
+                      </span>
+                      {linking?.id !== row.id && (
+                        <Link href={`${path}?vincular=${row.id}&origem=barcode`}>Vincular a este item</Link>
+                      )}
+                    </div>
+                  ))}
+                  {codes.length > 0 && suggestions.length === 0 && lookups.every((result) => result.ok) && (
+                    <p className={styles.hint}>Nenhum código de barras deste produto está no Catálogo.</p>
                   )}
+                  {lookups.map((result, index) =>
+                    result.ok ? null : <ErrorNotice key={codes[index]} error={result.error} />,
+                  )}
+                  {canManage && <CatalogSearchButton action={path} initial={query} />}
                   {catalog && !catalog.ok && <ErrorNotice error={catalog.error} />}
                   {catalog?.ok && items.length === 0 && (
                     <p className={styles.hint}>Nenhum item encontrado no Catálogo.</p>
@@ -247,6 +287,7 @@ async function ProductContent({ params, searchParams }: { params: Params; search
                 structure={structure}
                 canManage={canManage}
                 linkingTo={linking?.id}
+                linkSource={byBarcode ? "barcode" : "manual"}
               />
             </section>
           </>
@@ -535,6 +576,21 @@ async function ProductContent({ params, searchParams }: { params: Params; search
               />
             ))}
             {canManage && <AddBarcodeForm productId={product.id} channels={structure.channels} />}
+          </section>
+        )}
+
+        {tab === "auditoria" && catalogHistory && (
+          <section className={styles.card}>
+            <h2>Catálogo</h2>
+            <p className={styles.hint}>
+              Cada busca no Catálogo feita na tela do produto, a automática pelo código de barras e cada vínculo feito,
+              trocado ou desfeito.
+            </p>
+            {catalogHistory.ok ? (
+              <CatalogAudit events={catalogHistory.data} />
+            ) : (
+              <ErrorNotice error={catalogHistory.error} />
+            )}
           </section>
         )}
       </Tabs>

@@ -1,0 +1,76 @@
+.searching {
+  align-self: center;
+  color: var(--muted);
+  font-size: 0.875rem;
+  animation: pulse 1.2s var(--ease) infinite alternate;
+}
+
+@keyframes pulse {
+  from {
+    opacity: 0.45;
+  }
+}
+
+.openButton {
+  align-self: flex-start;
+  border-color: var(--brand);
+  color: var(--brand-strong);
+  background: var(--surface);
+}
+
+.dialog {
+  width: min(520px, calc(100vw - 32px));
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--foreground);
+  background: var(--surface);
+  box-shadow: var(--shadow-2);
+}
+
+.dialog[open] {
+  animation: dialog-in var(--normal) var(--ease);
+}
+
+.dialog::backdrop {
+  background: rgb(15 21 19 / 40%);
+  animation: backdrop-in var(--normal) var(--ease);
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.dialogBody {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px 24px;
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Achado automático: faixa discreta com a cor da marca. */
+.found {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--brand);
+  border-radius: var(--radius-sm);
+  background: var(--brand-soft);
+}
