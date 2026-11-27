@@ -2,6 +2,7 @@ import 'package:flutter/material.dart' hide Text;
 
 import 'caps.dart';
 import 'keys_hint.dart';
+import 'pdv_motion.dart';
 import 'pdv_theme.dart';
 
 /// Tamanho das janelas internas do PDV. Só existem estes dois: mudou aqui, muda em todas.
@@ -61,48 +62,53 @@ class PdvWindow extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
       child: content,
     );
-    return Dialog(
-      key: const Key('pdv-window'),
-      insetPadding: EdgeInsets.zero,
-      backgroundColor: PdvColors.paper,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(PdvShape.panel),
-      ),
-      // O espaço da tela que a janela tem (o mesmo que o caixa vê).
-      child: LayoutBuilder(
-        builder: (context, screen) {
-          final width = large
-              ? screen.maxWidth * largeShare
-              : compactWidth.clamp(0.0, screen.maxWidth * 0.9);
-          final maxHeight = screen.maxHeight * largeShare;
-          return SizedBox(
-            key: const Key('pdv-window-frame'),
-            width: width,
-            height: large ? maxHeight : null,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: maxHeight),
-              child: Column(
-                mainAxisSize: large ? MainAxisSize.max : MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _Header(
-                    title: title,
-                    subtitle: subtitle,
-                    tags: tags,
-                    closeKey: closeKey,
-                    onClose: onClose,
-                  ),
-                  Flexible(
-                    fit: large ? FlexFit.tight : FlexFit.loose,
-                    child: scroll ? SingleChildScrollView(child: body) : body,
-                  ),
-                  if (actions.isNotEmpty) _Footer(actions: actions),
-                ],
+    // Abre crescendo de leve (96% para 100%) e esmaecendo; fecha pelo esmaecer da própria rota.
+    return PdvAppear(
+      offset: Offset.zero,
+      scale: 0.96,
+      child: Dialog(
+        key: const Key('pdv-window'),
+        insetPadding: EdgeInsets.zero,
+        backgroundColor: PdvColors.paper,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(PdvShape.panel),
+        ),
+        // O espaço da tela que a janela tem (o mesmo que o caixa vê).
+        child: LayoutBuilder(
+          builder: (context, screen) {
+            final width = large
+                ? screen.maxWidth * largeShare
+                : compactWidth.clamp(0.0, screen.maxWidth * 0.9);
+            final maxHeight = screen.maxHeight * largeShare;
+            return SizedBox(
+              key: const Key('pdv-window-frame'),
+              width: width,
+              height: large ? maxHeight : null,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: maxHeight),
+                child: Column(
+                  mainAxisSize: large ? MainAxisSize.max : MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _Header(
+                      title: title,
+                      subtitle: subtitle,
+                      tags: tags,
+                      closeKey: closeKey,
+                      onClose: onClose,
+                    ),
+                    Flexible(
+                      fit: large ? FlexFit.tight : FlexFit.loose,
+                      child: scroll ? SingleChildScrollView(child: body) : body,
+                    ),
+                    if (actions.isNotEmpty) _Footer(actions: actions),
+                  ],
+                ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
@@ -215,8 +221,14 @@ class _Footer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hints = [for (final action in actions) if (action is KeysHint) action];
-    final buttons = [for (final action in actions) if (action is! KeysHint) action];
+    final hints = [
+      for (final action in actions)
+        if (action is KeysHint) action,
+    ];
+    final buttons = [
+      for (final action in actions)
+        if (action is! KeysHint) action,
+    ];
     return Container(
       decoration: const BoxDecoration(
         color: PdvColors.surface,

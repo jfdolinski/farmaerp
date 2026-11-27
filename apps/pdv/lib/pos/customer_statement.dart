@@ -4,6 +4,7 @@ import '../core/error_display.dart';
 import '../customers/customer_service.dart';
 import '../terminal/terminal_api.dart' show ApiException;
 import '../ui/caps.dart';
+import '../ui/pdv_motion.dart';
 import '../ui/pdv_theme.dart';
 import '../ui/pdv_window.dart';
 import 'cart.dart';
@@ -122,7 +123,14 @@ class _Body extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Wrap(spacing: 16, runSpacing: 16, children: cards),
+              Wrap(
+                spacing: 16,
+                runSpacing: 16,
+                children: [
+                  for (var i = 0; i < cards.length; i += 1)
+                    PdvAppear(delay: PdvMotion.stagger * i, child: cards[i]),
+                ],
+              ),
               const SizedBox(height: 24),
               if (wide)
                 Row(
