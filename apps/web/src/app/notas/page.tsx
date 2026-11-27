@@ -7,6 +7,7 @@ import { ErrorNotice } from "../error-notice";
 import styles from "../terminais/page.module.css";
 import { CONFIRMATION_LABELS, dateText, moneyText, STATUS_LABELS } from "./format";
 import { AwarenessList, SummaryRow, UploadForm } from "./ui";
+import { activeTab, TabItem, Tabs } from "../shell/tabs";
 
 export const metadata: Metadata = { title: "Notas de compra · FarmaERP" };
 
@@ -30,7 +31,7 @@ interface InvoiceListRow {
 
 const STATUSES = ["review", "posted", "not_postable", "cancelled"];
 
-type SearchParams = Promise<{ situacao?: string | string[] }>;
+type SearchParams = Promise<{ situacao?: string | string[]; aba?: string | string[] }>;
 
 export default function InvoicesPage({ searchParams }: { searchParams: SearchParams }) {
   return (
@@ -58,13 +59,24 @@ async function InvoicesContent({ searchParams }: { searchParams: SearchParams })
     );
   }
 
-  const { situacao } = await searchParams;
+  const { situacao, aba } = await searchParams;
   const status = typeof situacao === "string" && STATUSES.includes(situacao) ? situacao : "";
-  const [invoices, summaries] = await Promise.all([
-    apiFetch<InvoiceListRow[]>(`/admin/purchase-invoices?status=${status}`),
+  const listInvoices = () => apiFetch<InvoiceListRow[]>(`/admin/purchase-invoices?status=${status}`);
+  // Os resumos aguardando ciência vêm sempre (dão o número da aba); a lista de notas, só na aba dela.
+  const [requested, summaries] = await Promise.all([
+    aba === "ciencia" ? null : listInvoices(),
     apiFetch<SummaryRow[]>("/admin/purchase-summaries"),
   ]);
-  if (!invoices.ok) redirectIfNeeded(invoices.error, "/notas");
+  const tabs: TabItem[] = [
+    { id: "notas", label: "Notas" },
+    ...(summaries.ok && summaries.data.length > 0
+      ? [{ id: "ciencia", label: "Aguardando ciência", count: summaries.data.length, attention: true }]
+      : []),
+  ];
+  const tab = activeTab(tabs, aba);
+  const invoices = tab === "notas" ? (requested ?? (await listInvoices())) : null;
+  const main = invoices ?? summaries;
+  if (!main.ok) redirectIfNeeded(main.error, "/notas");
 
   return (
     <>
@@ -73,88 +85,96 @@ async function InvoicesContent({ searchParams }: { searchParams: SearchParams })
         <h1>Notas de compra</h1>
         <Link href="/fornecedores">Fornecedores</Link>
       </div>
-      {canManage && (
-        <section className={styles.card}>
-          <h2>Importar XML</h2>
-          <UploadForm />
-        </section>
-      )}
-      {!summaries.ok && <ErrorNotice error={summaries.error} />}
-      {summaries.ok && summaries.data.length > 0 && (
-        <section className={styles.card}>
-          <h2>Aguardando ciência</h2>
-          <AwarenessList rows={summaries.data} />
-        </section>
-      )}
-      <section className={styles.card}>
-        <form action="/notas" className={styles.inline}>
-          <label>
-            Situação
-            <select name="situacao" defaultValue={status}>
-              <option value="">Todas</option>
-              <option value="review">Em conferência</option>
-              <option value="posted">Lançada no estoque</option>
-              <option value="not_postable">Não vai para o estoque</option>
-              <option value="cancelled">Cancelada</option>
-            </select>
-          </label>
-          <button type="submit">Filtrar</button>
-        </form>
-        {!invoices.ok && <ErrorNotice error={invoices.error} />}
-        {invoices.ok && invoices.data.length === 0 && <p className={styles.hint}>Nenhuma nota importada ainda.</p>}
-        {invoices.ok && invoices.data.length > 0 && (
-          <div className={styles.tableWrap}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Nota</th>
-                  <th>Fornecedor</th>
-                  <th>Filial</th>
-                  <th>Emissão</th>
-                  <th>Valor</th>
-                  <th>Situação</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoices.data.map((invoice) => (
-                  <tr key={invoice.id}>
-                    <td>
-                      <Link href={`/notas/${invoice.id}`}>
-                        {invoice.number} / {invoice.series}
-                      </Link>
-                      {invoice.environment === 2 && <small className={styles.warning}>Teste da Sefaz</small>}
-                    </td>
-                    <td>{invoice.supplier_name}</td>
-                    <td>{invoice.branch_name}</td>
-                    <td>{dateText(invoice.issued_at)}</td>
-                    <td>{moneyText(invoice.invoice_total)}</td>
-                    <td>
-                      {STATUS_LABELS[invoice.status] ?? invoice.status}
-                      {invoice.status === "review" && Number(invoice.pending_count) > 0 && (
-                        <small className={styles.warning}>
-                          {invoice.pending_count} de {invoice.item_count} itens a conferir
-                        </small>
-                      )}
-                      {invoice.status === "review" && Number(invoice.pending_count) === 0 && (
-                        <small>Todos os itens ligados</small>
-                      )}
-                      {invoice.cancelled_at && invoice.status === "posted" && (
-                        <small className={styles.warning}>Cancelada pelo emitente depois do lançamento</small>
-                      )}
-                      {invoice.status !== "cancelled" && (
-                        <small className={invoice.confirmation === "confirmed" ? undefined : styles.hint}>
-                          {CONFIRMATION_LABELS[invoice.confirmation] ?? invoice.confirmation}
-                          {invoice.source === "download" && " · baixada da Sefaz"}
-                        </small>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      <Tabs base="/notas" items={tabs} active={tab} keep={status ? { situacao: status } : {}}>
+        {!summaries.ok && <ErrorNotice error={summaries.error} />}
+        {tab === "ciencia" && summaries.ok && (
+          <section className={styles.card}>
+            <h2>Aguardando ciência</h2>
+            <AwarenessList rows={summaries.data} />
+          </section>
         )}
-      </section>
+        {tab === "notas" && invoices && (
+          <>
+            {canManage && (
+              <section className={styles.card}>
+                <h2>Importar XML</h2>
+                <UploadForm />
+              </section>
+            )}
+            <section className={styles.card}>
+              <form action="/notas" className={styles.inline}>
+                <label>
+                  Situação
+                  <select name="situacao" defaultValue={status}>
+                    <option value="">Todas</option>
+                    <option value="review">Em conferência</option>
+                    <option value="posted">Lançada no estoque</option>
+                    <option value="not_postable">Não vai para o estoque</option>
+                    <option value="cancelled">Cancelada</option>
+                  </select>
+                </label>
+                <button type="submit">Filtrar</button>
+              </form>
+              {!invoices.ok && <ErrorNotice error={invoices.error} />}
+              {invoices.ok && invoices.data.length === 0 && (
+                <p className={styles.hint}>Nenhuma nota importada ainda.</p>
+              )}
+              {invoices.ok && invoices.data.length > 0 && (
+                <div className={styles.tableWrap}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Nota</th>
+                        <th>Fornecedor</th>
+                        <th>Filial</th>
+                        <th>Emissão</th>
+                        <th>Valor</th>
+                        <th>Situação</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {invoices.data.map((invoice) => (
+                        <tr key={invoice.id}>
+                          <td>
+                            <Link href={`/notas/${invoice.id}`}>
+                              {invoice.number} / {invoice.series}
+                            </Link>
+                            {invoice.environment === 2 && <small className={styles.warning}>Teste da Sefaz</small>}
+                          </td>
+                          <td>{invoice.supplier_name}</td>
+                          <td>{invoice.branch_name}</td>
+                          <td>{dateText(invoice.issued_at)}</td>
+                          <td>{moneyText(invoice.invoice_total)}</td>
+                          <td>
+                            {STATUS_LABELS[invoice.status] ?? invoice.status}
+                            {invoice.status === "review" && Number(invoice.pending_count) > 0 && (
+                              <small className={styles.warning}>
+                                {invoice.pending_count} de {invoice.item_count} itens a conferir
+                              </small>
+                            )}
+                            {invoice.status === "review" && Number(invoice.pending_count) === 0 && (
+                              <small>Todos os itens ligados</small>
+                            )}
+                            {invoice.cancelled_at && invoice.status === "posted" && (
+                              <small className={styles.warning}>Cancelada pelo emitente depois do lançamento</small>
+                            )}
+                            {invoice.status !== "cancelled" && (
+                              <small className={invoice.confirmation === "confirmed" ? undefined : styles.hint}>
+                                {CONFIRMATION_LABELS[invoice.confirmation] ?? invoice.confirmation}
+                                {invoice.source === "download" && " · baixada da Sefaz"}
+                              </small>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </>
+        )}
+      </Tabs>
     </>
   );
 }

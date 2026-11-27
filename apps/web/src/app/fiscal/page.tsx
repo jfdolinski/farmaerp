@@ -239,7 +239,7 @@ function DfeStatus({ row, branchId }: { row?: DfeRow; branchId: string }) {
       )}
       {waiting > 0 && (
         <p>
-          <Link href="/notas">
+          <Link href="/notas?aba=ciencia">
             {waiting === 1
               ? "1 nota aguardando ciência"
               : `${waiting.toLocaleString("pt-BR")} notas aguardando ciência`}

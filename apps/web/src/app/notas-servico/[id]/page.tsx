@@ -14,6 +14,7 @@ import {
   PIS_COFINS_WITHHOLDING_LABELS,
   SERVICE_STATUS_LABELS,
 } from "../format";
+import { activeTab, TabItem, Tabs } from "../../shell/tabs";
 
 export const metadata: Metadata = { title: "Nota de serviço · FarmaERP" };
 
@@ -59,18 +60,19 @@ interface ServiceInvoiceDetail {
 }
 
 type Params = Promise<{ id: string }>;
+type SearchParams = Promise<{ aba?: string | string[] }>;
 
-export default function ServiceInvoicePage({ params }: { params: Params }) {
+export default function ServiceInvoicePage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   return (
     <main className={styles.page}>
       <Suspense fallback={<p className={styles.hint}>Carregando nota de serviço...</p>}>
-        <ServiceInvoiceContent params={params} />
+        <ServiceInvoiceContent params={params} searchParams={searchParams} />
       </Suspense>
     </main>
   );
 }
 
-async function ServiceInvoiceContent({ params }: { params: Params }) {
+async function ServiceInvoiceContent({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   const { id } = await params;
   const path = `/notas-servico/${id}`;
   const user = await requireUser(path);
@@ -105,6 +107,11 @@ async function ServiceInvoiceContent({ params }: { params: Params }) {
     ["PIS", note.pis_value],
     ["COFINS", note.cofins_value],
   ];
+  const tabs: TabItem[] = [
+    { id: "resumo", label: "Resumo" },
+    { id: "valores", label: "Valores e retenções" },
+  ];
+  const tab = activeTab(tabs, (await searchParams).aba);
 
   return (
     <>
@@ -113,116 +120,126 @@ async function ServiceInvoiceContent({ params }: { params: Params }) {
         <h1>Nota de serviço {note.number}</h1>
         <Link href="/notas-servico">Voltar para notas de serviço</Link>
       </div>
-      <section className={styles.card}>
-        <h2>{note.provider_name}</h2>
-        <p className={styles.hint}>
-          {documentText(note.provider_document)}
-          {note.provider_location && ` · ${note.provider_location}`} · Para {note.branch_name} · Emitida em{" "}
-          {dateTimeText(note.issued_at)} · Competência {competenceText(note.competence)}
-        </p>
-        {note.environment === 2 && (
-          <p className={styles.warning}>Nota do ambiente de testes do Ambiente Nacional.</p>
-        )}
-        <p>
-          <strong className={note.status === "active" ? undefined : styles.warning}>
-            {SERVICE_STATUS_LABELS[note.status] ?? note.status}
-          </strong>
-          {note.status_changed_at && ` em ${dateTimeText(note.status_changed_at)}`}
-          {note.replaced_by && (
-            <>
-              {" "}
-              pela nota <Link href={`/notas-servico/${note.replaced_by}`}>{note.replaced_by_number}</Link>
-            </>
-          )}
-        </p>
-        {note.replaces_id && (
-          <p className={styles.hint}>
-            Esta nota substitui a nota <Link href={`/notas-servico/${note.replaces_id}`}>{note.replaces_number}</Link>.
-          </p>
-        )}
-        <p className={styles.hint}>Chave {note.access_key}</p>
-        <p>
-          <a href={`/notas-servico/${note.id}/xml`} download>
-            Baixar XML
-          </a>
-        </p>
-      </section>
-
-      <section className={styles.card}>
-        <h2>Serviço</h2>
-        <p>{note.description}</p>
-        <p className={styles.hint}>
-          {[
-            note.service_code && `Código nacional ${note.service_code}`,
-            note.municipal_code && `Código municipal ${note.municipal_code}`,
-            note.nbs_code && `NBS ${note.nbs_code}`,
-            note.incidence_location && `ISS devido em ${note.incidence_location}`,
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-        </p>
-      </section>
-
-      <section className={styles.card}>
-        <h2>Valores</h2>
-        <div className={styles.tableWrap}>
-          <table>
-            <tbody>
-              <tr>
-                <th scope="row">Valor do serviço</th>
-                <td>{moneyText(note.service_value)}</td>
-              </tr>
-              {Number(note.unconditional_discount) > 0 && (
-                <tr>
-                  <th scope="row">Desconto incondicionado</th>
-                  <td>{moneyText(note.unconditional_discount)}</td>
-                </tr>
+      <Tabs base={path} items={tabs} active={tab}>
+        {tab === "resumo" && (
+          <>
+            <section className={styles.card}>
+              <h2>{note.provider_name}</h2>
+              <p className={styles.hint}>
+                {documentText(note.provider_document)}
+                {note.provider_location && ` · ${note.provider_location}`} · Para {note.branch_name} · Emitida em{" "}
+                {dateTimeText(note.issued_at)} · Competência {competenceText(note.competence)}
+              </p>
+              {note.environment === 2 && (
+                <p className={styles.warning}>Nota do ambiente de testes do Ambiente Nacional.</p>
               )}
-              {Number(note.deductions) > 0 && (
-                <tr>
-                  <th scope="row">Deduções</th>
-                  <td>{moneyText(note.deductions)}</td>
-                </tr>
+              <p>
+                <strong className={note.status === "active" ? undefined : styles.warning}>
+                  {SERVICE_STATUS_LABELS[note.status] ?? note.status}
+                </strong>
+                {note.status_changed_at && ` em ${dateTimeText(note.status_changed_at)}`}
+                {note.replaced_by && (
+                  <>
+                    {" "}
+                    pela nota <Link href={`/notas-servico/${note.replaced_by}`}>{note.replaced_by_number}</Link>
+                  </>
+                )}
+              </p>
+              {note.replaces_id && (
+                <p className={styles.hint}>
+                  Esta nota substitui a nota{" "}
+                  <Link href={`/notas-servico/${note.replaces_id}`}>{note.replaces_number}</Link>.
+                </p>
               )}
-              <tr>
-                <th scope="row">
-                  ISS{note.iss_rate !== null && ` (${Number(note.iss_rate).toLocaleString("pt-BR")}%)`}
-                </th>
-                <td>
-                  {moneyText(note.iss_value)}
-                  {note.iss_withholding !== null && (
-                    <small className={styles.hint}> {ISS_WITHHOLDING_LABELS[note.iss_withholding]}</small>
-                  )}
-                </td>
-              </tr>
-              {retentions
-                .filter(([, value]) => Number(value) > 0)
-                .map(([label, value]) => (
-                  <tr key={label}>
-                    <th scope="row">{label}</th>
-                    <td>{moneyText(value)}</td>
+              <p className={styles.hint}>Chave {note.access_key}</p>
+              <p>
+                <a href={`/notas-servico/${note.id}/xml`} download>
+                  Baixar XML
+                </a>
+              </p>
+            </section>
+
+            <section className={styles.card}>
+              <h2>Serviço</h2>
+              <p>{note.description}</p>
+              <p className={styles.hint}>
+                {[
+                  note.service_code && `Código nacional ${note.service_code}`,
+                  note.municipal_code && `Código municipal ${note.municipal_code}`,
+                  note.nbs_code && `NBS ${note.nbs_code}`,
+                  note.incidence_location && `ISS devido em ${note.incidence_location}`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            </section>
+          </>
+        )}
+
+        {tab === "valores" && (
+          <section className={styles.card}>
+            <h2>Valores</h2>
+            <div className={styles.tableWrap}>
+              <table>
+                <tbody>
+                  <tr>
+                    <th scope="row">Valor do serviço</th>
+                    <td>{moneyText(note.service_value)}</td>
                   </tr>
-                ))}
-              <tr>
-                <th scope="row">Total retido</th>
-                <td>{moneyText(note.total_withheld)}</td>
-              </tr>
-              <tr>
-                <th scope="row">Valor líquido</th>
-                <td>
-                  <strong>{moneyText(note.net_value)}</strong>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        {note.pis_cofins_withholding !== null && (
-          <p className={styles.hint}>{PIS_COFINS_WITHHOLDING_LABELS[note.pis_cofins_withholding]}</p>
+                  {Number(note.unconditional_discount) > 0 && (
+                    <tr>
+                      <th scope="row">Desconto incondicionado</th>
+                      <td>{moneyText(note.unconditional_discount)}</td>
+                    </tr>
+                  )}
+                  {Number(note.deductions) > 0 && (
+                    <tr>
+                      <th scope="row">Deduções</th>
+                      <td>{moneyText(note.deductions)}</td>
+                    </tr>
+                  )}
+                  <tr>
+                    <th scope="row">
+                      ISS{note.iss_rate !== null && ` (${Number(note.iss_rate).toLocaleString("pt-BR")}%)`}
+                    </th>
+                    <td>
+                      {moneyText(note.iss_value)}
+                      {note.iss_withholding !== null && (
+                        <small className={styles.hint}> {ISS_WITHHOLDING_LABELS[note.iss_withholding]}</small>
+                      )}
+                    </td>
+                  </tr>
+                  {retentions
+                    .filter(([, value]) => Number(value) > 0)
+                    .map(([label, value]) => (
+                      <tr key={label}>
+                        <th scope="row">{label}</th>
+                        <td>{moneyText(value)}</td>
+                      </tr>
+                    ))}
+                  <tr>
+                    <th scope="row">Total retido</th>
+                    <td>{moneyText(note.total_withheld)}</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">Valor líquido</th>
+                    <td>
+                      <strong>{moneyText(note.net_value)}</strong>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            {note.pis_cofins_withholding !== null && (
+              <p className={styles.hint}>{PIS_COFINS_WITHHOLDING_LABELS[note.pis_cofins_withholding]}</p>
+            )}
+            <p className={styles.hint}>
+              Os valores são os da nota emitida pelo prestador. Quem retém imposto precisa recolhê-lo: confira com o
+              contador.
+            </p>
+          </section>
         )}
-        <p className={styles.hint}>
-          Os valores são os da nota emitida pelo prestador. Quem retém imposto precisa recolhê-lo: confira com o contador.
-        </p>
-      </section>
+      </Tabs>
     </>
   );
 }

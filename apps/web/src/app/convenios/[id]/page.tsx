@@ -7,6 +7,7 @@ import { ErrorNotice } from "../../error-notice";
 import { dayText, InvoiceItem, itemLabel, momentText, moneyText, STATUS, todayText } from "../format";
 import { ClosingDayForm, CloseInvoiceForm } from "../ui";
 import styles from "../../terminais/page.module.css";
+import { activeTab, TabItem, Tabs } from "../../shell/tabs";
 
 export const metadata: Metadata = { title: "Faturas do convênio · FarmaERP" };
 
@@ -33,7 +34,7 @@ interface InvoiceRow {
 }
 
 type Params = Promise<{ id: string }>;
-type Search = Promise<{ ate?: string }>;
+type Search = Promise<{ ate?: string; aba?: string | string[] }>;
 
 export default function AgreementInvoicesPage({ params, searchParams }: { params: Params; searchParams: Search }) {
   return (
@@ -47,7 +48,7 @@ export default function AgreementInvoicesPage({ params, searchParams }: { params
 
 async function InvoicesContent({ params, searchParams }: { params: Params; searchParams: Search }) {
   const { id } = await params;
-  const { ate } = await searchParams;
+  const { ate, aba } = await searchParams;
   const path = `/convenios/${id}`;
   const user = await requireUser(path);
 
@@ -64,18 +65,28 @@ async function InvoicesContent({ params, searchParams }: { params: Params; searc
   }
 
   const until = ate && /^\d{4}-\d{2}-\d{2}$/.test(ate) ? ate : "";
+  const tabs: TabItem[] = [
+    { id: "proxima", label: "Próxima fatura" },
+    { id: "fechadas", label: "Faturas fechadas" },
+  ];
+  const tab = activeTab(tabs, aba);
+  // A prévia vem sempre: dá o nome do convênio no título.
   const [preview, invoices] = await Promise.all([
     apiFetch<Preview>(`/admin/agreements/${encodeURIComponent(id)}/invoice-preview${until ? `?until=${until}` : ""}`),
-    apiFetch<InvoiceRow[]>(`/admin/agreements/${encodeURIComponent(id)}/invoices`),
+    tab === "fechadas" ? apiFetch<InvoiceRow[]>(`/admin/agreements/${encodeURIComponent(id)}/invoices`) : null,
   ]);
   if (!preview.ok) redirectIfNeeded(preview.error, path);
-  if (!invoices.ok) redirectIfNeeded(invoices.error, path);
+  if (invoices && !invoices.ok) redirectIfNeeded(invoices.error, path);
 
   const byCustomer = new Map<string, { name: string; registration: string; total: number }>();
   if (preview.ok) {
     for (const item of preview.data.items) {
       const key = `${item.customer_name ?? ""}|${item.registration ?? ""}`;
-      const entry = byCustomer.get(key) ?? { name: item.customer_name ?? "Sem cliente", registration: item.registration ?? "", total: 0 };
+      const entry = byCustomer.get(key) ?? {
+        name: item.customer_name ?? "Sem cliente",
+        registration: item.registration ?? "",
+        total: 0,
+      };
       entry.total = Math.round((entry.total + Number(item.amount)) * 100) / 100;
       byCustomer.set(key, entry);
     }
@@ -88,127 +99,136 @@ async function InvoicesContent({ params, searchParams }: { params: Params; searc
         <h1>Faturas{preview.ok ? ` · ${preview.data.agreement_name}` : ""}</h1>
         <Link href="/convenios">Voltar para convênios</Link>
       </div>
-      {!preview.ok && <ErrorNotice error={preview.error} />}
-      {preview.ok && (
-        <>
-          <section className={styles.card}>
-            <h2>Fechamento</h2>
-            <ClosingDayForm agreementId={id} day={preview.data.closing_day} />
-          </section>
-          <section className={styles.card}>
-            <h2>Próxima fatura</h2>
-            <form method="get" className={styles.inline}>
-              <label>
-                Fechar até
-                <input type="date" name="ate" defaultValue={preview.data.period_end} max={todayText()} required />
-              </label>
-              <button type="submit">Ver prévia</button>
-            </form>
-            <p className={styles.hint}>
-              {preview.data.period_start
-                ? `Período de ${dayText(preview.data.period_start)} a ${dayText(preview.data.period_end)}.`
-                : `Primeira fatura: tudo o que foi vendido até ${dayText(preview.data.period_end)}.`}{" "}
-              Entram as vendas no convênio e as devoluções dessas vendas (como abatimento) que ainda não estão em fatura.
-            </p>
-            {preview.data.items.length === 0 ? (
-              <p className={styles.hint}>Nada para faturar até esta data.</p>
-            ) : (
-              <>
-                <div className={styles.tableWrap}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Cliente</th>
-                        <th>Matrícula</th>
-                        <th>Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[...byCustomer.values()].map((row) => (
-                        <tr key={`${row.name}|${row.registration}`}>
-                          <td>{row.name}</td>
-                          <td>{row.registration}</td>
-                          <td>R$ {moneyText(row.total)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <details className={styles.reason}>
-                  <summary>{preview.data.items.length} lançamento(s)</summary>
+      <Tabs base={path} items={tabs} active={tab}>
+        {tab === "proxima" && !preview.ok && <ErrorNotice error={preview.error} />}
+        {tab === "proxima" && preview.ok && (
+          <>
+            <section className={styles.card}>
+              <h2>Fechamento</h2>
+              <ClosingDayForm agreementId={id} day={preview.data.closing_day} />
+            </section>
+            <section className={styles.card}>
+              <h2>Próxima fatura</h2>
+              <form method="get" className={styles.inline}>
+                <label>
+                  Fechar até
+                  <input type="date" name="ate" defaultValue={preview.data.period_end} max={todayText()} required />
+                </label>
+                <button type="submit">Ver prévia</button>
+              </form>
+              <p className={styles.hint}>
+                {preview.data.period_start
+                  ? `Período de ${dayText(preview.data.period_start)} a ${dayText(preview.data.period_end)}.`
+                  : `Primeira fatura: tudo o que foi vendido até ${dayText(preview.data.period_end)}.`}{" "}
+                Entram as vendas no convênio e as devoluções dessas vendas (como abatimento) que ainda não estão em
+                fatura.
+              </p>
+              {preview.data.items.length === 0 ? (
+                <p className={styles.hint}>Nada para faturar até esta data.</p>
+              ) : (
+                <>
                   <div className={styles.tableWrap}>
                     <table>
                       <thead>
                         <tr>
-                          <th>Data</th>
                           <th>Cliente</th>
-                          <th>Lançamento</th>
-                          <th>Valor</th>
+                          <th>Matrícula</th>
+                          <th>Total</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {preview.data.items.map((item, index) => (
-                          <tr key={index}>
-                            <td>{momentText(item.occurred_at)}</td>
-                            <td>{item.customer_name}</td>
-                            <td>{itemLabel(item)}</td>
-                            <td>R$ {moneyText(item.amount)}</td>
+                        {[...byCustomer.values()].map((row) => (
+                          <tr key={`${row.name}|${row.registration}`}>
+                            <td>{row.name}</td>
+                            <td>{row.registration}</td>
+                            <td>R$ {moneyText(row.total)}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                </details>
-                <p>
-                  <strong>Total da fatura: R$ {moneyText(preview.data.total)}</strong>
-                </p>
-              </>
-            )}
-            <CloseInvoiceForm agreementId={id} until={preview.data.period_end} disabled={preview.data.items.length === 0} />
-          </section>
-        </>
-      )}
-      <section className={styles.card}>
-        <h2>Faturas fechadas</h2>
-        {!invoices.ok && <ErrorNotice error={invoices.error} />}
-        {invoices.ok && invoices.data.length === 0 && <p className={styles.hint}>Nenhuma fatura ainda.</p>}
-        {invoices.ok && invoices.data.length > 0 && (
-          <div className={styles.tableWrap}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Período</th>
-                  <th>Situação</th>
-                  <th>Lançamentos</th>
-                  <th>Total</th>
-                  <th>Fechada por</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoices.data.map((invoice) => (
-                  <tr key={invoice.id}>
-                    <td>
-                      <Link href={`/convenios/faturas/${invoice.id}`}>
-                        {dayText(invoice.period_start)} a {dayText(invoice.period_end)}
-                      </Link>
-                    </td>
-                    <td>
-                      {STATUS[invoice.status] ?? invoice.status}
-                      {invoice.paid_on && <small>em {dayText(invoice.paid_on)}</small>}
-                    </td>
-                    <td>{invoice.item_count}</td>
-                    <td>R$ {moneyText(invoice.total)}</td>
-                    <td>
-                      {invoice.closed_by_name}
-                      <small>{momentText(invoice.created_at)}</small>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                  <details className={styles.reason}>
+                    <summary>{preview.data.items.length} lançamento(s)</summary>
+                    <div className={styles.tableWrap}>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Data</th>
+                            <th>Cliente</th>
+                            <th>Lançamento</th>
+                            <th>Valor</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {preview.data.items.map((item, index) => (
+                            <tr key={index}>
+                              <td>{momentText(item.occurred_at)}</td>
+                              <td>{item.customer_name}</td>
+                              <td>{itemLabel(item)}</td>
+                              <td>R$ {moneyText(item.amount)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </details>
+                  <p>
+                    <strong>Total da fatura: R$ {moneyText(preview.data.total)}</strong>
+                  </p>
+                </>
+              )}
+              <CloseInvoiceForm
+                agreementId={id}
+                until={preview.data.period_end}
+                disabled={preview.data.items.length === 0}
+              />
+            </section>
+          </>
         )}
-      </section>
+        {tab === "fechadas" && invoices && (
+          <section className={styles.card}>
+            <h2>Faturas fechadas</h2>
+            {!invoices.ok && <ErrorNotice error={invoices.error} />}
+            {invoices.ok && invoices.data.length === 0 && <p className={styles.hint}>Nenhuma fatura ainda.</p>}
+            {invoices.ok && invoices.data.length > 0 && (
+              <div className={styles.tableWrap}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Período</th>
+                      <th>Situação</th>
+                      <th>Lançamentos</th>
+                      <th>Total</th>
+                      <th>Fechada por</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invoices.data.map((invoice) => (
+                      <tr key={invoice.id}>
+                        <td>
+                          <Link href={`/convenios/faturas/${invoice.id}`}>
+                            {dayText(invoice.period_start)} a {dayText(invoice.period_end)}
+                          </Link>
+                        </td>
+                        <td>
+                          {STATUS[invoice.status] ?? invoice.status}
+                          {invoice.paid_on && <small>em {dayText(invoice.paid_on)}</small>}
+                        </td>
+                        <td>{invoice.item_count}</td>
+                        <td>R$ {moneyText(invoice.total)}</td>
+                        <td>
+                          {invoice.closed_by_name}
+                          <small>{momentText(invoice.created_at)}</small>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+      </Tabs>
     </>
   );
 }
