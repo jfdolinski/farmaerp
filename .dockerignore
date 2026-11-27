@@ -12,3 +12,5 @@
 apps/pdv
 docs
 *.md
+# O motor fiscal em JavaScript é gerado do Dart e vai na imagem da API.
+!packages/fiscal-js/dist/fiscal.js

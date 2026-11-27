@@ -7,9 +7,11 @@ COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY db/package.json db/
 COPY packages/error-catalog/package.json packages/error-catalog/
+COPY packages/fiscal-js/package.json packages/fiscal-js/
 RUN npm ci --no-audit --no-fund
 COPY apps/api apps/api
 COPY packages/error-catalog packages/error-catalog
+COPY packages/fiscal-js packages/fiscal-js
 RUN npm run build -w apps/api
 
 FROM node:24.22.1-slim AS deps
@@ -19,7 +21,8 @@ COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY db/package.json db/
 COPY packages/error-catalog/package.json packages/error-catalog/
-RUN npm ci --omit=dev --no-audit --no-fund -w apps/api -w db -w packages/error-catalog
+COPY packages/fiscal-js/package.json packages/fiscal-js/
+RUN npm ci --omit=dev --no-audit --no-fund -w apps/api -w db -w packages/error-catalog -w packages/fiscal-js
 
 FROM node:24.22.1-slim
 ENV NODE_ENV=production
@@ -35,6 +38,10 @@ COPY db/migrations db/migrations
 COPY db/seeds db/seeds
 COPY db/bootstrap/sql db/bootstrap/sql
 COPY packages/error-catalog packages/error-catalog
+# Motor fiscal do PDV compilado para JavaScript (NF-e emitida pela central).
+COPY packages/fiscal-js/package.json packages/fiscal-js/package.json
+COPY packages/fiscal-js/index.js packages/fiscal-js/index.js
+COPY packages/fiscal-js/dist/fiscal.js packages/fiscal-js/dist/fiscal.js
 COPY --chmod=755 apps/api/docker-entrypoint.sh docker-entrypoint.sh
 USER node
 EXPOSE 3001
