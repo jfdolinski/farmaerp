@@ -256,6 +256,92 @@ void main() {
       expect(focused(const Key('seller-code')), isTrue);
     });
 
+    testWidgets('venda concluída: tela preta com o troco pede o vendedor; só F6, F7 e F8 funcionam', (tester) async {
+      await tester.runAsync(() => controller.login('3', '2468'));
+      controller.openShift(0);
+      await tester.runAsync(() => controller.identifySeller('3'));
+      await pump(tester);
+      expect(find.byKey(const Key('seller-band')), findsOneWidget);
+      expect(find.byKey(const Key('seller-lock')), findsNothing);
+      await tester.enterText(find.byKey(const Key('scan-field')), '7890000000017');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await settle(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.f10);
+      await settle(tester);
+      await tester.enterText(find.byKey(const Key('payment-amount')), '20,00');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await settle(tester);
+      await tester.tap(find.byKey(const Key('finish')));
+      await settle(tester);
+
+      expect(controller.sellerLock, isTrue);
+      expect(find.byKey(const Key('seller-lock')), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(const Key('seller-lock-change'))).data, caps('R\$ 10,00'));
+      expect(find.byKey(const Key('seller-lock-info')), findsOneWidget);
+      // Cobre a tela toda, inclusive a barra de cima.
+      expect(tester.getRect(find.byKey(const Key('seller-lock'))), tester.getRect(find.byType(MaterialApp)));
+      expect(tester.getRect(find.byType(MaterialApp)).size, const Size(1500, 1000));
+      expect(focused(const Key('seller-code')), isTrue);
+      expect(find.byKey(const Key('seller-band')), findsNothing);
+
+      // Atalhos da venda não fazem nada; o Esc não tira a tela preta.
+      for (final key in [LogicalKeyboardKey.f2, LogicalKeyboardKey.f4, LogicalKeyboardKey.f9, LogicalKeyboardKey.f10, LogicalKeyboardKey.escape]) {
+        await tester.sendKeyEvent(key);
+        await settle(tester);
+        expect(find.byKey(const Key('seller-lock')), findsOneWidget);
+        expect(find.byKey(const Key('customer-query')), findsNothing);
+        expect(find.byKey(const Key('return-dialog')), findsNothing);
+        expect(focused(const Key('seller-code')), isTrue, reason: '$key');
+      }
+      // Sangria (F6) abre por cima e, ao fechar, o cursor volta para o vendedor.
+      await tester.sendKeyEvent(LogicalKeyboardKey.f6);
+      await settle(tester);
+      expect(find.byKey(const Key('cash-movement-dialog')), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await settle(tester);
+      expect(find.byKey(const Key('cash-movement-dialog')), findsNothing);
+      expect(focused(const Key('seller-code')), isTrue);
+      await tester.sendKeyEvent(LogicalKeyboardKey.f7);
+      await settle(tester);
+      expect(find.byKey(const Key('cash-movement-dialog')), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await settle(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.f8);
+      await settle(tester);
+      expect(find.byKey(const Key('close-shift-dialog')), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await settle(tester);
+
+      // Código errado: o aviso aparece na própria tela preta.
+      await tester.enterText(find.byKey(const Key('seller-code')), '999');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await settle(tester);
+      expect(find.byKey(const Key('seller-lock-notice')), findsOneWidget);
+      expect(controller.sellerLock, isTrue);
+
+      await tester.enterText(find.byKey(const Key('seller-code')), '3');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await settle(tester);
+      expect(controller.sellerLock, isFalse);
+      expect(find.byKey(const Key('seller-lock')), findsNothing);
+      expect(find.byKey(const Key('seller-band')), findsOneWidget);
+      expect(focused(const Key('scan-field')), isTrue);
+    });
+
+    test('sair do caixa tira o bloqueio; sem venda concluída, não bloqueia', () async {
+      await controller.login('3', '2468');
+      controller.openShift(0);
+      expect(controller.sellerLock, isFalse);
+      await controller.identifySeller('3');
+      controller.scan('7890000000017');
+      controller.startPayment();
+      controller.addPayment(Payment(method: PaymentMethod.cash, amountCents: 1000));
+      await controller.finish();
+      expect(controller.sellerLock, isTrue);
+      controller.logout();
+      expect(controller.sellerLock, isFalse);
+    });
+
     testWidgets('controlado: ao finalizar, o botão da receita recebe o foco', (tester) async {
       await tester.runAsync(() => controller.login('3', '2468'));
       controller.openShift(0);
@@ -468,11 +554,23 @@ void main() {
       await tester.tap(find.byKey(const Key('customer-history-open')));
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       await tester.pumpAndSettle();
-      expect(findTextContaining('Ticket médio: '), findsOneWidget);
-      expect(findTextContaining('45,00'), findsOneWidget);
-      expect(findTextContaining('1-000010 · Loja Centro · 2 itens'), findsOneWidget);
-      expect(find.byKey(const Key('customer-history-p1')), findsOneWidget);
-      await tester.tap(findText('Fechar').last);
+      // Tela toda: cartões com os números e tabelas com as compras e os produtos.
+      final screen = tester.getSize(find.byKey(const Key('customer-history')));
+      expect(screen, const Size(1500, 1000));
+      final ticket = find.byKey(const Key('customer-history-ticket'));
+      expect(find.descendant(of: ticket, matching: findText('Ticket médio (12 meses)')), findsOneWidget);
+      expect(find.descendant(of: ticket, matching: findText('R\$ 45,00')), findsOneWidget);
+      expect(findText('R\$ 90,00'), findsOneWidget);
+      expect(findText('20/11/2026'), findsNWidgets(3));
+      final recent = find.byKey(const Key('customer-history-recent'));
+      for (final cell in ['1-000010', 'Loja Centro', '2', 'R\$ 70,00']) {
+        expect(find.descendant(of: recent, matching: findText(cell)), findsOneWidget, reason: cell);
+      }
+      final recurring = find.byKey(const Key('customer-history-recurring'));
+      expect(find.descendant(of: recurring, matching: find.byKey(const Key('customer-history-p1'))), findsOneWidget);
+      expect(find.descendant(of: recurring, matching: findText('Losartana 50 mg')), findsOneWidget);
+      expect(find.descendant(of: recurring, matching: findText('3')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('customer-history-close')));
       await tester.pumpAndSettle();
 
       api.historyFailure = const ApiException('FA001');

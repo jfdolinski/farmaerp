@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../face/face_widgets.dart';
 import '../ui/caps.dart';
+import '../ui/pdv_theme.dart';
 import 'focus_kit.dart';
 import 'money.dart';
 import 'pos_controller.dart';
@@ -55,15 +56,42 @@ class _SellerPanelState extends State<SellerPanel> {
     final controller = widget.controller;
     final seller = controller.seller;
     if (seller != null) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 8),
+      // Faixa no tom do terminal: quem está atendendo fica visível de longe.
+      final scheme = Theme.of(context).colorScheme;
+      return Container(
+        key: const Key('seller-band'),
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+        decoration: BoxDecoration(color: scheme.primary, borderRadius: BorderRadius.circular(PdvShape.button)),
         child: Row(
           children: [
-            const Icon(Icons.badge_outlined),
-            const SizedBox(width: 8),
-            Expanded(child: Text('Vendedor: ${seller.name}', key: const Key('seller-name'))),
+            Icon(Icons.badge_outlined, color: scheme.onPrimary, size: 32),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    controller.database.fixedSellerId == null ? 'Vendedor · código ${seller.code}' : 'Vendedor padrão do terminal',
+                    style: TextStyle(color: scheme.onPrimary.withValues(alpha: 0.8), fontSize: 13),
+                  ),
+                  Text(
+                    seller.name,
+                    key: const Key('seller-name'),
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: scheme.onPrimary, fontSize: 24, fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ),
+            ),
             if (controller.database.fixedSellerId == null)
-              TextButton(key: const Key('seller-change'), onPressed: controller.changeSeller, child: const Text('Trocar')),
+              TextButton(
+                key: const Key('seller-change'),
+                style: TextButton.styleFrom(foregroundColor: scheme.onPrimary),
+                onPressed: controller.changeSeller,
+                child: const Text('Trocar'),
+              ),
           ],
         ),
       );

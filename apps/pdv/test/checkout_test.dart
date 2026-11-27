@@ -275,7 +275,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('quote-lookup')), findsNothing);
     expect(find.byKey(const Key('cart-quote')), findsOneWidget);
-    expect(tester.widget<Text>(find.byKey(const Key('seller-name'))).data, caps('Vendedor: Balconista Ana'));
+    expect(tester.widget<Text>(find.byKey(const Key('seller-name'))).data, caps('Balconista Ana'));
   });
 
   group('parte C: orçamentos juntados e estoque negativo', () {

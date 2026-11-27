@@ -153,6 +153,16 @@ class PosController extends ChangeNotifier {
   /// Quem responde pelos limites de desconto: no caixa, o operador; no orçamento, o vendedor.
   LocalUser? get actor => quoteMode ? cart.seller : operator;
 
+  /// Tela bloqueada (fundo preto) depois de concluir a venda ou o orçamento, até identificar o
+  /// vendedor do próximo atendimento. Terminal com vendedor padrão não bloqueia.
+  bool sellerLock = false;
+
+  /// Depois de concluir: o vendedor padrão já entra; sem ele, bloqueia pedindo o vendedor.
+  void _lockForNextSeller() {
+    _applyFixedSeller();
+    sellerLock = cart.seller == null;
+  }
+
   /// Vendedor fixo do terminal (autoatendimento) entra sozinho.
   void _applyFixedSeller() {
     if (cart.seller != null) return;
@@ -178,6 +188,7 @@ class PosController extends ChangeNotifier {
       }
       if (!user.can('sales.quote') && !user.can('sales.sell')) throw const PosException('FA880');
       cart.seller = user;
+      sellerLock = false;
       info = null;
       logger?.info('Vendedor identificado', fields: {'seller_code': user.code});
       return true;
@@ -335,6 +346,7 @@ class PosController extends ChangeNotifier {
 
   void logout() {
     operator = null;
+    sellerLock = false;
     pendingControlled = null;
     _payAfterControlled = false;
     pendingZeroStock = null;
@@ -1946,6 +1958,7 @@ class PosController extends ChangeNotifier {
       lastSaleCanceled = false;
       logger?.info('Venda concluída', fields: {'sale_code': draft.code, 'items': cart.lines.length});
       cart.clear();
+      _lockForNextSeller();
       paying = false;
       info = document?.authorized ?? false
           ? 'Venda ${draft.code} concluída. NFC-e ${document!.number} autorizada.'
@@ -2000,6 +2013,7 @@ class PosController extends ChangeNotifier {
         'card': cardNumber != null,
       });
       cart.clear();
+      _lockForNextSeller();
       info = cardNumber == null
           ? 'Orçamento ${draft.code} concluído.'
           : 'Orçamento ${draft.code} concluído na plaquinha $cardNumber.';

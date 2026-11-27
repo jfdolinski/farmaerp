@@ -99,6 +99,23 @@ void main() {
   List<Map<String, Object?>> outbox(String kind) =>
       database.nextOutboxBatch().where((item) => item.kind == kind).map((item) => item.payload).toList();
 
+  test('terminal com vendedor padrão: depois da venda, ele já entra e a tela não bloqueia', () async {
+    await ready();
+    expect(controller.sellerLock, isFalse);
+    expect(controller.cart.seller?.id, operatorId);
+  });
+
+  testWidgets('terminal com vendedor padrão: sem tela preta e sem o botão de trocar', (tester) async {
+    await tester.runAsync(ready);
+    await tester.binding.setSurfaceSize(const Size(1400, 900));
+    await tester.pumpWidget(MaterialApp(home: PosScreen(controller: controller)));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('seller-lock')), findsNothing);
+    expect(find.byKey(const Key('seller-band')), findsOneWidget);
+    expect(find.byKey(const Key('seller-change')), findsNothing);
+    expect(findText('Vendedor padrão do terminal'), findsOneWidget);
+  });
+
   group('regras', () {
     test('limite de sangria: administrador sem teto, sem perfil com limite é zero', () {
       LocalUser person(Map<String, double?> limits, {bool admin = false}) => LocalUser(
