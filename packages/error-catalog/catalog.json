@@ -292,7 +292,9 @@
       "import_waiting_note_id_uuid_v7_check",
       "abc_curve_setting_id_uuid_v7_check",
       "customer_abc_id_uuid_v7_check",
-      "customer_abc_event_id_uuid_v7_check"
+      "customer_abc_event_id_uuid_v7_check",
+      "purchase_invoice_installment_id_uuid_v7_check",
+      "purchase_invoice_audit_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -1690,7 +1692,16 @@
       "service_invoice_net_value_check",
       "service_invoice_replaces_key_check",
       "service_invoice_status_check",
-      "service_invoice_status_date_check"
+      "service_invoice_status_date_check",
+      "purchase_invoice_content_check",
+      "purchase_invoice_content_error_check",
+      "purchase_invoice_content_read_check",
+      "purchase_invoice_installment_line_check",
+      "purchase_invoice_installment_number_check",
+      "purchase_invoice_installment_amount_check",
+      "purchase_invoice_installment_line_key",
+      "purchase_invoice_audit_kind_check",
+      "purchase_invoice_audit_detail_check"
     ]
   },
   "FA932": {
