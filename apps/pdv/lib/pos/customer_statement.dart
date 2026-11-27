@@ -5,6 +5,7 @@ import '../customers/customer_service.dart';
 import '../terminal/terminal_api.dart' show ApiException;
 import '../ui/caps.dart';
 import '../ui/pdv_theme.dart';
+import '../ui/pdv_window.dart';
 import 'cart.dart';
 import 'money.dart';
 
@@ -24,101 +25,39 @@ class CustomerStatement extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog.fullscreen(
+    return PdvWindow(
       key: const Key('customer-history'),
-      backgroundColor: PdvColors.paper,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _Header(customer: customer),
-          Expanded(
-            child: FutureBuilder<CustomerHistory>(
-              future: history,
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  final error = snapshot.error;
-                  final code = error is ApiException
-                      ? (const {'FA001', 'FA008', 'FA009'}.contains(error.code) ? 'FA984' : error.code)
-                      : 'FA000';
-                  final display = ErrorDisplay.fromCode(code);
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Text(
-                        '${display.message} ${display.action}',
-                        key: const Key('customer-history-error'),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 18),
-                      ),
-                    ),
-                  );
-                }
-                final data = snapshot.data;
-                if (data == null) return const Align(alignment: Alignment.topCenter, child: LinearProgressIndicator());
-                return _Body(customer: customer, history: data);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Header extends StatelessWidget {
-  const _Header({required this.customer});
-
-  final SaleCustomer customer;
-
-  @override
-  Widget build(BuildContext context) {
-    final tags = [
-      'Código ${customer.code}',
-      if (customer.documentMasked != null) customer.documentMasked!,
-      if (customer.abcCurve != null) 'Curva ${customer.abcCurve}',
-    ];
-    return Material(
-      color: PdvColors.surface,
-      elevation: 1,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 16, 16, 16),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('Extrato de ${customer.name}', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    children: [
-                      for (final tag in tags)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: PdvColors.paper,
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: PdvColors.line),
-                          ),
-                          child: Text(tag, style: const TextStyle(fontSize: 13, color: PdvColors.inkSoft)),
-                        ),
-                    ],
-                  ),
-                ],
+      title: 'Extrato de ${customer.name}',
+      tags: [
+        'Código ${customer.code}',
+        if (customer.documentMasked != null) customer.documentMasked!,
+        if (customer.abcCurve != null) 'Curva ${customer.abcCurve}',
+      ],
+      closeKey: const Key('customer-history-close'),
+      // As tabelas e os cartões rolam dentro do corpo (o _Body tem a própria rolagem).
+      scroll: false,
+      content: FutureBuilder<CustomerHistory>(
+        future: history,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            final error = snapshot.error;
+            final code = error is ApiException
+                ? (const {'FA001', 'FA008', 'FA009'}.contains(error.code) ? 'FA984' : error.code)
+                : 'FA000';
+            final display = ErrorDisplay.fromCode(code);
+            return Center(
+              child: Text(
+                '${display.message} ${display.action}',
+                key: const Key('customer-history-error'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 18),
               ),
-            ),
-            OutlinedButton.icon(
-              key: const Key('customer-history-close'),
-              autofocus: true,
-              onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.close),
-              label: const Text('Fechar (Esc)'),
-            ),
-          ],
-        ),
+            );
+          }
+          final data = snapshot.data;
+          if (data == null) return const Align(alignment: Alignment.topCenter, child: LinearProgressIndicator());
+          return _Body(customer: customer, history: data);
+        },
       ),
     );
   }
@@ -180,7 +119,6 @@ class _Body extends StatelessWidget {
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 1100;
         return SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

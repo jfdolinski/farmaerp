@@ -7,6 +7,7 @@ import '../core/error_display.dart';
 import '../face/face_service.dart';
 import '../face/face_widgets.dart';
 import '../ui/caps.dart';
+import '../ui/pdv_window.dart';
 import 'cart.dart';
 import 'cash_dialogs.dart';
 import 'credit.dart';
@@ -1540,29 +1541,26 @@ Future<String?> choosePrinter(
 }) {
   return showDialog<String>(
     context: context,
-    builder: (context) => SimpleDialog(
-      title: const Text('Impressora do comprovante'),
-      children: [
-        SimpleDialogOption(
-          key: const Key('printer-pdf'),
-          onPressed: () => Navigator.pop(context, 'pdf'),
-          child: Text(
-            'Salvar em PDF${current == null || current == 'pdf' ? ' (em uso)' : ''}',
+    builder: (context) => PdvWindow(
+      size: PdvWindowSize.compact,
+      title: 'Impressora do comprovante',
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ListTile(
+            key: const Key('printer-pdf'),
+            autofocus: true,
+            onTap: () => Navigator.pop(context, 'pdf'),
+            title: Text('Salvar em PDF${current == null || current == 'pdf' ? ' (em uso)' : ''}'),
           ),
-        ),
-        for (final name in printers)
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(context, 'escpos:$name'),
-            child: Text(
-              '$name (térmica ESC/POS)${current == 'escpos:$name' ? ' (em uso)' : ''}',
+          for (final name in printers)
+            ListTile(
+              onTap: () => Navigator.pop(context, 'escpos:$name'),
+              title: Text('$name (térmica ESC/POS)${current == 'escpos:$name' ? ' (em uso)' : ''}'),
             ),
-          ),
-        if (printers.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-            child: Text('Nenhuma impressora instalada no Windows.'),
-          ),
-      ],
+          if (printers.isEmpty) const Text('Nenhuma impressora instalada no Windows.'),
+        ],
+      ),
     ),
   );
 }

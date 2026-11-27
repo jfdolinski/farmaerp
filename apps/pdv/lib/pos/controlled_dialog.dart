@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../face/face_widgets.dart';
 import '../ui/caps.dart';
+import '../ui/pdv_window.dart';
 import '../ui/keys_hint.dart';
 import '../ui/date_field.dart';
 import 'controlled.dart';
@@ -298,260 +299,258 @@ class _ControlledDialogState extends State<_ControlledDialog> {
         final errors = pendingOnly ? const <String, String>{} : prescriptionErrors(_form, DateTime.now());
         final notice = controller.notice;
         final sources = controller.prescriptionSources(pending);
-        return AlertDialog(
+        return PdvWindow(
           key: const Key('controlled-dialog'),
-          title: Text('Controlado · ${pending.product.name}'),
-          content: SizedBox(
-            width: 720,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (notice != null)
-                    Container(
-                      key: const Key('controlled-notice'),
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(8),
-                      margin: const EdgeInsets.only(bottom: 8),
-                      color: Theme.of(context).colorScheme.errorContainer,
-                      child: Text('${notice.message} ${notice.action}'),
-                    ),
-                  if (!pendingOnly && sources.isNotEmpty) ...[
-                    Wrap(spacing: 8, runSpacing: 8, children: [
-                      for (final (index, source) in sources.indexed)
-                        OutlinedButton(
-                          key: Key('rx-reuse-$index'),
-                          onPressed: () => _reuse(source),
-                          child: Text('Usar a receita de ${source.product.name}'),
-                        ),
-                    ]),
-                    if (_reuseMessage != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(_reuseMessage!, key: const Key('rx-reuse-message')),
-                      ),
-                    const SizedBox(height: 8),
-                  ],
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.end,
-                    children: [
-                      SizedBox(
-                        width: 120,
-                        child: NumberField(
-                          key: const Key('rx-quantity'),
-                          controller: _quantity,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
-                          decoration: const InputDecoration(labelText: 'Quantidade'),
-                          onChanged: (_) => setState(() {}),
-                        ),
-                      ),
-                      if (_batches.isNotEmpty && !pendingOnly)
-                        SizedBox(
-                          width: 420,
-                          child: DropdownButtonFormField<String>(
-                            isExpanded: true,
-                            key: const Key('rx-batch'),
-                            initialValue: _batchId,
-                            decoration: const InputDecoration(labelText: 'Lote (o que vence primeiro vem antes)'),
-                            items: [
-                              for (final batch in _batches)
-                                DropdownMenuItem(
-                                  value: batch.id,
-                                  child: Text('${batch.number} · vence ${batch.expiresOn.split('-').reversed.join('/')} · '
-                                      'saldo ${formatMilli(batch.availableMilli)}'),
-                                ),
-                            ],
-                            onChanged: (value) => setState(() => _batchId = value),
-                          ),
-                        ),
-                    ],
+          title: 'Receita do controlado',
+          subtitle: pending.product.name,
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (notice != null)
+                  Container(
+                    key: const Key('controlled-notice'),
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(8),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    color: Theme.of(context).colorScheme.errorContainer,
+                    child: Text('${notice.message} ${notice.action}'),
                   ),
-                  const SizedBox(height: 12),
-                  if (pendingOnly) ...[
-                    Text(
-                      _batches.isEmpty
-                          ? 'Não há saldo em lote deste controlado na cópia do terminal.'
-                          : 'Nenhum lote tem saldo para essa quantidade.',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                if (!pendingOnly && sources.isNotEmpty) ...[
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    for (final (index, source) in sources.indexed)
+                      OutlinedButton(
+                        key: Key('rx-reuse-$index'),
+                        onPressed: () => _reuse(source),
+                        child: Text('Usar a receita de ${source.product.name}'),
+                      ),
+                  ]),
+                  if (_reuseMessage != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(_reuseMessage!, key: const Key('rx-reuse-message')),
                     ),
-                    const Text(
-                      'O farmacêutico pode liberar a venda com o estoque negativo. Ela fica pendente e os dados da receita '
-                      'e do comprador são completados depois, na retaguarda, para o SNGPC. Guarde a receita.',
-                    ),
-                    TextField(
-                      key: const Key('rx-pending-reason'),
-                      controller: _reason,
-                      focusNode: _reasonFocus,
-                      maxLength: 500,
-                      decoration: InputDecoration(
-                        labelText: 'Motivo (por exemplo, nota de entrada ainda não lançada)',
-                        errorText: _tried && _reason.text.trim().isEmpty ? 'Informe o motivo' : null,
-                      ),
-                    ),
-                  ] else ...[
-                    Text('Receita', style: Theme.of(context).textTheme.titleSmall),
-                    Wrap(spacing: 12, runSpacing: 8, children: [
-                      SizedBox(
-                        width: 280,
-                        child: DropdownButtonFormField<PrescriptionType>(
-                          isExpanded: true,
-                          key: const Key('rx-type'),
-                          initialValue: _form.type,
-                          decoration: InputDecoration(
-                            labelText: 'Tipo de receita',
-                            helperText: _form.type == pending.suggestedType ? null : 'A lista pede ${pending.suggestedType.label}',
-                          ),
-                          items: [for (final type in PrescriptionType.values) DropdownMenuItem(value: type, child: Text(type.label))],
-                          onChanged: (value) => setState(() => _form.type = value ?? _form.type),
-                        ),
-                      ),
-                      _text('number', _form.type.isNotification ? 'Número da notificação' : 'Número da receita', errors: errors),
-                      SizedBox(
-                        width: 200,
-                        child: DateField(
-                          key: const Key('rx-date'),
-                          controller: _field('date'),
-                          focusNode: _node('date'),
-                          label: 'Data da receita',
-                          errorText: _tried ? errors['date'] : null,
-                          lastDate: DateTime.now(),
-                          onChanged: (_) => setState(_collect),
-                        ),
-                      ),
-                    ]),
-                    const SizedBox(height: 12),
-                    Text('Prescritor', style: Theme.of(context).textTheme.titleSmall),
-                    SizedBox(
-                      width: 420,
-                      child: TextField(
-                        key: const Key('rx-prescriber-search'),
-                        controller: _prescriberSearch,
-                        decoration: const InputDecoration(labelText: 'Buscar no cadastro (nome ou número no conselho)'),
-                        onChanged: (value) => setState(() => _prescribers = controller.searchPrescribers(value)),
-                      ),
-                    ),
-                    if (_prescribers.isNotEmpty)
-                      Wrap(spacing: 8, runSpacing: 4, children: [
-                        for (final (index, professional) in _prescribers.indexed)
-                          ActionChip(
-                            key: Key('rx-prescriber-$index'),
-                            label: Text(professional.label),
-                            onPressed: () => _choosePrescriber(professional),
-                          ),
-                      ])
-                    else if (_prescriberSearch.text.trim().length >= 2)
-                      const Text('Nenhum prescritor encontrado. Preencha abaixo e cadastre.'),
-                    Wrap(spacing: 12, runSpacing: 8, children: [
-                      _text('prescriberName', 'Nome', errors: errors, width: 300),
-                      SizedBox(
-                        width: 110,
-                        child: DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          key: Key('rx-council-$_formVersion'),
-                          initialValue: _form.prescriberCouncil,
-                          decoration: const InputDecoration(labelText: 'Conselho'),
-                          items: [for (final council in prescriberCouncils) DropdownMenuItem(value: council, child: Text(council))],
-                          onChanged: (value) => setState(() => _form.prescriberCouncil = value ?? 'CRM'),
-                        ),
-                      ),
-                      _text('prescriberNumber', 'Número', errors: errors, width: 140),
-                      _text('prescriberState', 'UF', errors: errors, width: 70, formatters: _state),
-                      if (!controller.prescriberRegistered(_form))
-                        OutlinedButton(
-                          key: const Key('rx-prescriber-save'),
-                          onPressed: _registerPrescriber,
-                          child: const Text('Cadastrar prescritor'),
-                        ),
-                    ]),
-                    if (_prescriberMessage != null) Text(_prescriberMessage!, key: const Key('rx-prescriber-message')),
-                    const SizedBox(height: 12),
-                    Text(_form.type.requiresBuyer ? 'Comprador' : 'Comprador (opcional no antimicrobiano)',
-                        style: Theme.of(context).textTheme.titleSmall),
-                    Wrap(spacing: 12, runSpacing: 8, children: [
-                      _text('buyerName', 'Nome', errors: errors, width: 300),
-                      SizedBox(
-                        width: 140,
-                        child: DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          key: Key('rx-document-type-$_formVersion'),
-                          initialValue: _form.buyerDocumentType,
-                          decoration: const InputDecoration(labelText: 'Documento'),
-                          items: [
-                            for (final entry in buyerDocumentTypes.entries) DropdownMenuItem(value: entry.key, child: Text(entry.value)),
-                          ],
-                          onChanged: (value) => setState(() => _form.buyerDocumentType = value ?? 'rg'),
-                        ),
-                      ),
-                      _text('buyerDocument', 'Número do documento', errors: errors, width: 180),
-                      _text('buyerIssuer', 'Órgão emissor', errors: errors, width: 120),
-                      _text('buyerState', 'UF', errors: errors, width: 70, formatters: _state),
-                    ]),
-                    const SizedBox(height: 12),
-                    Text(
-                      _form.type == PrescriptionType.antimicrobial ? 'Paciente (idade e sexo obrigatórios)' : 'Paciente (opcional)',
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                    Wrap(spacing: 12, runSpacing: 8, children: [
-                      _text('patientName', 'Nome', errors: errors, width: 300),
-                      _text('patientAge', 'Idade', errors: errors, width: 90, keyboard: TextInputType.number,
-                          formatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(3)]),
-                      SizedBox(
-                        width: 140,
-                        child: DropdownButtonFormField<String?>(
-                          isExpanded: true,
-                          key: Key('rx-patient-sex-$_formVersion'),
-                          initialValue: _form.patientSex,
-                          decoration: InputDecoration(labelText: 'Sexo', errorText: _tried ? errors['patientSex'] : null),
-                          items: const [
-                            DropdownMenuItem(value: null, child: Text('—')),
-                            DropdownMenuItem(value: 'F', child: Text('Feminino')),
-                            DropdownMenuItem(value: 'M', child: Text('Masculino')),
-                          ],
-                          onChanged: (value) => setState(() => _form.patientSex = value),
-                        ),
-                      ),
-                    ]),
-                  ],
-                  const SizedBox(height: 12),
-                  Text('Liberação do farmacêutico', style: Theme.of(context).textTheme.titleSmall),
-                  Wrap(spacing: 12, runSpacing: 8, children: [
-                    SizedBox(
-                      width: 160,
-                      child: TextField(
-                        key: const Key('rx-code'),
-                        controller: _code,
-                        focusNode: _codeFocus,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        decoration: const InputDecoration(labelText: 'Código'),
-                      ),
-                    ),
+                  const SizedBox(height: 8),
+                ],
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.end,
+                  children: [
                     SizedBox(
                       width: 120,
-                      child: TextField(
-                        key: const Key('rx-pin'),
-                        controller: _pin,
-                        focusNode: _pinFocus,
-                        obscureText: true,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
-                        decoration: const InputDecoration(labelText: 'PIN'),
-                        onSubmitted: (_) => _release(),
+                      child: NumberField(
+                        key: const Key('rx-quantity'),
+                        controller: _quantity,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
+                        decoration: const InputDecoration(labelText: 'Quantidade'),
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                    if (_batches.isNotEmpty && !pendingOnly)
+                      SizedBox(
+                        width: 420,
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          key: const Key('rx-batch'),
+                          initialValue: _batchId,
+                          decoration: const InputDecoration(labelText: 'Lote (o que vence primeiro vem antes)'),
+                          items: [
+                            for (final batch in _batches)
+                              DropdownMenuItem(
+                                value: batch.id,
+                                child: Text('${batch.number} · vence ${batch.expiresOn.split('-').reversed.join('/')} · '
+                                    'saldo ${formatMilli(batch.availableMilli)}'),
+                              ),
+                          ],
+                          onChanged: (value) => setState(() => _batchId = value),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (pendingOnly) ...[
+                  Text(
+                    _batches.isEmpty
+                        ? 'Não há saldo em lote deste controlado na cópia do terminal.'
+                        : 'Nenhum lote tem saldo para essa quantidade.',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const Text(
+                    'O farmacêutico pode liberar a venda com o estoque negativo. Ela fica pendente e os dados da receita '
+                    'e do comprador são completados depois, na retaguarda, para o SNGPC. Guarde a receita.',
+                  ),
+                  TextField(
+                    key: const Key('rx-pending-reason'),
+                    controller: _reason,
+                    focusNode: _reasonFocus,
+                    maxLength: 500,
+                    decoration: InputDecoration(
+                      labelText: 'Motivo (por exemplo, nota de entrada ainda não lançada)',
+                      errorText: _tried && _reason.text.trim().isEmpty ? 'Informe o motivo' : null,
+                    ),
+                  ),
+                ] else ...[
+                  Text('Receita', style: Theme.of(context).textTheme.titleSmall),
+                  Wrap(spacing: 12, runSpacing: 8, children: [
+                    SizedBox(
+                      width: 280,
+                      child: DropdownButtonFormField<PrescriptionType>(
+                        isExpanded: true,
+                        key: const Key('rx-type'),
+                        initialValue: _form.type,
+                        decoration: InputDecoration(
+                          labelText: 'Tipo de receita',
+                          helperText: _form.type == pending.suggestedType ? null : 'A lista pede ${pending.suggestedType.label}',
+                        ),
+                        items: [for (final type in PrescriptionType.values) DropdownMenuItem(value: type, child: Text(type.label))],
+                        onChanged: (value) => setState(() => _form.type = value ?? _form.type),
+                      ),
+                    ),
+                    _text('number', _form.type.isNotification ? 'Número da notificação' : 'Número da receita', errors: errors),
+                    SizedBox(
+                      width: 200,
+                      child: DateField(
+                        key: const Key('rx-date'),
+                        controller: _field('date'),
+                        focusNode: _node('date'),
+                        label: 'Data da receita',
+                        errorText: _tried ? errors['date'] : null,
+                        lastDate: DateTime.now(),
+                        onChanged: (_) => setState(_collect),
                       ),
                     ),
                   ]),
-                  FaceApproveButton(
-                    controller: widget.controller,
-                    onApproved: (code) {
-                      _code.text = code;
-                      _pin.clear();
-                      _release();
-                    },
+                  const SizedBox(height: 12),
+                  Text('Prescritor', style: Theme.of(context).textTheme.titleSmall),
+                  SizedBox(
+                    width: 420,
+                    child: TextField(
+                      key: const Key('rx-prescriber-search'),
+                      controller: _prescriberSearch,
+                      decoration: const InputDecoration(labelText: 'Buscar no cadastro (nome ou número no conselho)'),
+                      onChanged: (value) => setState(() => _prescribers = controller.searchPrescribers(value)),
+                    ),
                   ),
+                  if (_prescribers.isNotEmpty)
+                    Wrap(spacing: 8, runSpacing: 4, children: [
+                      for (final (index, professional) in _prescribers.indexed)
+                        ActionChip(
+                          key: Key('rx-prescriber-$index'),
+                          label: Text(professional.label),
+                          onPressed: () => _choosePrescriber(professional),
+                        ),
+                    ])
+                  else if (_prescriberSearch.text.trim().length >= 2)
+                    const Text('Nenhum prescritor encontrado. Preencha abaixo e cadastre.'),
+                  Wrap(spacing: 12, runSpacing: 8, children: [
+                    _text('prescriberName', 'Nome', errors: errors, width: 300),
+                    SizedBox(
+                      width: 110,
+                      child: DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        key: Key('rx-council-$_formVersion'),
+                        initialValue: _form.prescriberCouncil,
+                        decoration: const InputDecoration(labelText: 'Conselho'),
+                        items: [for (final council in prescriberCouncils) DropdownMenuItem(value: council, child: Text(council))],
+                        onChanged: (value) => setState(() => _form.prescriberCouncil = value ?? 'CRM'),
+                      ),
+                    ),
+                    _text('prescriberNumber', 'Número', errors: errors, width: 140),
+                    _text('prescriberState', 'UF', errors: errors, width: 70, formatters: _state),
+                    if (!controller.prescriberRegistered(_form))
+                      OutlinedButton(
+                        key: const Key('rx-prescriber-save'),
+                        onPressed: _registerPrescriber,
+                        child: const Text('Cadastrar prescritor'),
+                      ),
+                  ]),
+                  if (_prescriberMessage != null) Text(_prescriberMessage!, key: const Key('rx-prescriber-message')),
+                  const SizedBox(height: 12),
+                  Text(_form.type.requiresBuyer ? 'Comprador' : 'Comprador (opcional no antimicrobiano)',
+                      style: Theme.of(context).textTheme.titleSmall),
+                  Wrap(spacing: 12, runSpacing: 8, children: [
+                    _text('buyerName', 'Nome', errors: errors, width: 300),
+                    SizedBox(
+                      width: 140,
+                      child: DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        key: Key('rx-document-type-$_formVersion'),
+                        initialValue: _form.buyerDocumentType,
+                        decoration: const InputDecoration(labelText: 'Documento'),
+                        items: [
+                          for (final entry in buyerDocumentTypes.entries) DropdownMenuItem(value: entry.key, child: Text(entry.value)),
+                        ],
+                        onChanged: (value) => setState(() => _form.buyerDocumentType = value ?? 'rg'),
+                      ),
+                    ),
+                    _text('buyerDocument', 'Número do documento', errors: errors, width: 180),
+                    _text('buyerIssuer', 'Órgão emissor', errors: errors, width: 120),
+                    _text('buyerState', 'UF', errors: errors, width: 70, formatters: _state),
+                  ]),
+                  const SizedBox(height: 12),
+                  Text(
+                    _form.type == PrescriptionType.antimicrobial ? 'Paciente (idade e sexo obrigatórios)' : 'Paciente (opcional)',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  Wrap(spacing: 12, runSpacing: 8, children: [
+                    _text('patientName', 'Nome', errors: errors, width: 300),
+                    _text('patientAge', 'Idade', errors: errors, width: 90, keyboard: TextInputType.number,
+                        formatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(3)]),
+                    SizedBox(
+                      width: 140,
+                      child: DropdownButtonFormField<String?>(
+                        isExpanded: true,
+                        key: Key('rx-patient-sex-$_formVersion'),
+                        initialValue: _form.patientSex,
+                        decoration: InputDecoration(labelText: 'Sexo', errorText: _tried ? errors['patientSex'] : null),
+                        items: const [
+                          DropdownMenuItem(value: null, child: Text('—')),
+                          DropdownMenuItem(value: 'F', child: Text('Feminino')),
+                          DropdownMenuItem(value: 'M', child: Text('Masculino')),
+                        ],
+                        onChanged: (value) => setState(() => _form.patientSex = value),
+                      ),
+                    ),
+                  ]),
                 ],
-              ),
+                const SizedBox(height: 12),
+                Text('Liberação do farmacêutico', style: Theme.of(context).textTheme.titleSmall),
+                Wrap(spacing: 12, runSpacing: 8, children: [
+                  SizedBox(
+                    width: 160,
+                    child: TextField(
+                      key: const Key('rx-code'),
+                      controller: _code,
+                      focusNode: _codeFocus,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: const InputDecoration(labelText: 'Código'),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 120,
+                    child: TextField(
+                      key: const Key('rx-pin'),
+                      controller: _pin,
+                      focusNode: _pinFocus,
+                      obscureText: true,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
+                      decoration: const InputDecoration(labelText: 'PIN'),
+                      onSubmitted: (_) => _release(),
+                    ),
+                  ),
+                ]),
+                FaceApproveButton(
+                  controller: widget.controller,
+                  onApproved: (code) {
+                    _code.text = code;
+                    _pin.clear();
+                    _release();
+                  },
+                ),
+              ],
             ),
           ),
           actions: [

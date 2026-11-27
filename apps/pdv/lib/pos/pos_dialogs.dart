@@ -9,6 +9,7 @@ import '../face/face_widgets.dart';
 import '../local/local_database.dart';
 import '../terminal/terminal_api.dart';
 import '../ui/caps.dart';
+import '../ui/pdv_window.dart';
 import '../ui/keys_hint.dart';
 import '../ui/date_field.dart';
 import 'cart.dart';
@@ -112,70 +113,68 @@ class _DiscountDialogState extends State<_DiscountDialog> {
   Widget build(BuildContext context) {
     final line = widget.line;
     final notice = _needsRelease ? ErrorDisplay.fromCode('FA978') : null;
-    return AlertDialog(
-      title: Text('Desconto · ${line.product.name}'),
-      content: SizedBox(
-        width: 380,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          // Folga entre os campos: o rótulo de cima não encosta no texto.
-          spacing: 10,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Valor do item: ${formatCents(line.grossCents)}'),
-            if (line.product.maxDiscountBp != null)
-              Text('Máximo do produto: ${formatCents(line.product.maxDiscountBp!).replaceFirst('R\$ ', '')}%'),
-            const SizedBox(height: 8),
-            SegmentedButton<bool>(
-              segments: const [ButtonSegment(value: true, label: Text('%')), ButtonSegment(value: false, label: Text('R\$'))],
-              selected: {_percent},
-              onSelectionChanged: _needsRelease ? null : (value) => setState(() => _percent = value.first),
+    return PdvWindow(
+      title: 'Desconto no item',
+      subtitle: line.product.name,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        // Folga entre os campos: o rótulo de cima não encosta no texto.
+        spacing: 10,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Valor do item: ${formatCents(line.grossCents)}'),
+          if (line.product.maxDiscountBp != null)
+            Text('Máximo do produto: ${formatCents(line.product.maxDiscountBp!).replaceFirst('R\$ ', '')}%'),
+          const SizedBox(height: 8),
+          SegmentedButton<bool>(
+            segments: const [ButtonSegment(value: true, label: Text('%')), ButtonSegment(value: false, label: Text('R\$'))],
+            selected: {_percent},
+            onSelectionChanged: _needsRelease ? null : (value) => setState(() => _percent = value.first),
+          ),
+          NumberField(
+            key: const Key('discount-value'),
+            controller: _value,
+            focusNode: _valueFocus,
+            autofocus: true,
+            decimal: true,
+            enabled: !_needsRelease,
+            decoration: InputDecoration(labelText: _percent ? 'Desconto (%)' : 'Desconto (R\$)'),
+            onSubmitted: (_) => _apply(),
+          ),
+          if (notice != null) ...[
+            const SizedBox(height: 12),
+            Text(notice.message, style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(notice.action),
+            TextField(
+              key: const Key('supervisor-code'),
+              controller: _code,
+              focusNode: _codeFocus,
+              onSubmitted: (_) => _pinFocus.requestFocus(),
+              decoration: const InputDecoration(labelText: 'Código do supervisor'),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             ),
-            NumberField(
-              key: const Key('discount-value'),
-              controller: _value,
-              focusNode: _valueFocus,
-              autofocus: true,
-              decimal: true,
-              enabled: !_needsRelease,
-              decoration: InputDecoration(labelText: _percent ? 'Desconto (%)' : 'Desconto (R\$)'),
-              onSubmitted: (_) => _apply(),
+            TextField(
+              key: const Key('supervisor-pin'),
+              controller: _pin,
+              focusNode: _pinFocus,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'PIN do supervisor'),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
             ),
-            if (notice != null) ...[
-              const SizedBox(height: 12),
-              Text(notice.message, style: const TextStyle(fontWeight: FontWeight.bold)),
-              Text(notice.action),
-              TextField(
-                key: const Key('supervisor-code'),
-                controller: _code,
-                focusNode: _codeFocus,
-                onSubmitted: (_) => _pinFocus.requestFocus(),
-                decoration: const InputDecoration(labelText: 'Código do supervisor'),
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              ),
-              TextField(
-                key: const Key('supervisor-pin'),
-                controller: _pin,
-                focusNode: _pinFocus,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: 'PIN do supervisor'),
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
-              ),
-              FaceApproveButton(
-                controller: widget.controller,
-                onApproved: (code) {
-                  _code.text = code;
-                  _pin.clear();
-                  _apply();
-                },
-              ),
-              TextField(key: const Key('release-reason'), controller: _reason, decoration: const InputDecoration(labelText: 'Motivo')),
-            ],
-            if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, key: const Key('discount-error'))),
+            FaceApproveButton(
+              controller: widget.controller,
+              onApproved: (code) {
+                _code.text = code;
+                _pin.clear();
+                _apply();
+              },
+            ),
+            TextField(key: const Key('release-reason'), controller: _reason, decoration: const InputDecoration(labelText: 'Motivo')),
           ],
-        ),
+          if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, key: const Key('discount-error'))),
+        ],
       ),
       actions: [
         const KeysHint(),
@@ -315,24 +314,23 @@ Future<void> showNetworkStock(BuildContext context, PosController controller, Sa
   if (rows == null || !context.mounted) return;
   await showDialog<void>(
     context: context,
-    builder: (context) => AlertDialog(
-      title: Text('Estoque nas filiais · ${product.name}'),
-      content: SizedBox(
-        width: 420,
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            for (final row in rows)
-              ListTile(
-                key: Key('network-${row['branch_id']}'),
-                title: Text('${row['branch_name']}${row['own'] == true ? ' (esta filial)' : ''}'),
-                subtitle: Text([row['city'], row['phone']].whereType<String>().join(' · ')),
-                trailing: Text(formatMilli(((row['quantity'] as num) * 1000).round().clamp(0, 1 << 40))),
-              ),
-          ],
-        ),
+    builder: (context) => PdvWindow(
+      key: const Key('network-stock'),
+      title: 'Estoque nas filiais',
+      subtitle: product.name,
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final row in rows)
+            ListTile(
+              key: Key('network-${row['branch_id']}'),
+              title: Text('${row['branch_name']}${row['own'] == true ? ' (esta filial)' : ''}'),
+              subtitle: Text([row['city'], row['phone']].whereType<String>().join(' · ')),
+              trailing: Text(formatMilli(((row['quantity'] as num) * 1000).round().clamp(0, 1 << 40))),
+            ),
+        ],
       ),
-      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fechar'))],
+      actions: [TextButton(autofocus: true, onPressed: () => Navigator.pop(context), child: const Text('Fechar'))],
     ),
   );
 }
@@ -584,64 +582,61 @@ class _CustomerDialogState extends State<_CustomerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(_creating ? 'Cadastrar cliente' : 'Identificar o cliente'),
-      content: SizedBox(
-        width: 480,
-        child: _creating ? SingleChildScrollView(child: _createForm()) : Column(
-          mainAxisSize: MainAxisSize.min,
-          // Folga entre os campos: o rótulo de cima não encosta no texto.
-          spacing: 10,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SuggestionKeys(
-              onMove: (step) {
-                if (_results.isEmpty) return;
-                setState(() => _highlight = (_highlight + step).clamp(0, _results.length - 1));
+    return PdvWindow(
+      title: _creating ? 'Cadastrar cliente' : 'Identificar o cliente',
+      content: _creating ? SingleChildScrollView(child: _createForm()) : Column(
+        mainAxisSize: MainAxisSize.min,
+        // Folga entre os campos: o rótulo de cima não encosta no texto.
+        spacing: 10,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SuggestionKeys(
+            onMove: (step) {
+              if (_results.isEmpty) return;
+              setState(() => _highlight = (_highlight + step).clamp(0, _results.length - 1));
+            },
+            onClose: () => Navigator.pop(context),
+            child: TextField(
+              key: const Key('customer-query'),
+              controller: _query,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Nome, código ou CPF/CNPJ', helperText: 'As sugestões aparecem a partir de 3 letras.'),
+              onChanged: (text) {
+                _onTyping(text);
+                setState(() {});
               },
-              onClose: () => Navigator.pop(context),
-              child: TextField(
-                key: const Key('customer-query'),
-                controller: _query,
-                autofocus: true,
-                decoration: const InputDecoration(labelText: 'Nome, código ou CPF/CNPJ', helperText: 'As sugestões aparecem a partir de 3 letras.'),
-                onChanged: (text) {
-                  _onTyping(text);
-                  setState(() {});
-                },
-                onSubmitted: (_) => _submit(),
-              ),
+              onSubmitted: (_) => _submit(),
             ),
-            if (_online == false)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Text('Sem internet: a lista mostra só os clientes já usados neste terminal.', key: Key('customer-offline')),
-              ),
-            if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!)),
-            if (_searching) const LinearProgressIndicator(),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 320),
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  for (final (index, customer) in _results.indexed)
-                    ListTile(
-                      key: Key('customer-${customer.code}'),
-                      selected: index == _highlight,
-                      selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
-                      title: Text(customer.name),
-                      subtitle: Text([
-                        'Código ${customer.code}',
-                        ?customer.documentMasked,
-                        if (customer.city != null) '${customer.city}/${customer.state ?? ''}',
-                      ].join(' · ')),
-                      onTap: () => _choose(customer),
-                    ),
-                ],
-              ),
+          ),
+          if (_online == false)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text('Sem internet: a lista mostra só os clientes já usados neste terminal.', key: Key('customer-offline')),
             ),
-          ],
-        ),
+          if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!)),
+          if (_searching) const LinearProgressIndicator(),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 320),
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                for (final (index, customer) in _results.indexed)
+                  ListTile(
+                    key: Key('customer-${customer.code}'),
+                    selected: index == _highlight,
+                    selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
+                    title: Text(customer.name),
+                    subtitle: Text([
+                      'Código ${customer.code}',
+                      ?customer.documentMasked,
+                      if (customer.city != null) '${customer.city}/${customer.state ?? ''}',
+                    ].join(' · ')),
+                    onTap: () => _choose(customer),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
       actions: [
         const KeysHint(),
@@ -718,48 +713,46 @@ class _CancelSaleDialogState extends State<_CancelSaleDialog> {
   @override
   Widget build(BuildContext context) {
     final sale = widget.controller.lastSale;
-    return AlertDialog(
-      title: Text('Cancelar a venda ${sale?.code ?? ''}'),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          // Folga entre os campos: o rótulo de cima não encosta no texto.
-          spacing: 10,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('A NFC-e é cancelada na Sefaz e a venda é desfeita (estoque, pagamentos, cashback e crediário). '
-                'Precisa de internet e da liberação de um supervisor.'),
-            TextField(
-              key: const Key('cancel-reason'),
-              controller: _reason,
-              autofocus: true,
-              maxLength: 255,
-              decoration: const InputDecoration(labelText: 'Motivo (mínimo 15 letras)'),
-              onSubmitted: (_) => _codeFocus.requestFocus(),
-            ),
-            TextField(
-              key: const Key('cancel-supervisor-code'),
-              controller: _code,
-              focusNode: _codeFocus,
-              onSubmitted: (_) => _pinFocus.requestFocus(),
-              decoration: const InputDecoration(labelText: 'Código do supervisor'),
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            ),
-            TextField(
-              key: const Key('cancel-supervisor-pin'),
-              controller: _pin,
-              focusNode: _pinFocus,
-              obscureText: true,
-              onSubmitted: (_) => _confirm(),
-              decoration: const InputDecoration(labelText: 'PIN do supervisor'),
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
-            ),
-            if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, key: const Key('cancel-error'))),
-          ],
-        ),
+    return PdvWindow(
+      size: PdvWindowSize.compact,
+      title: 'Cancelar a venda ${sale?.code ?? ''}',
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        // Folga entre os campos: o rótulo de cima não encosta no texto.
+        spacing: 10,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('A NFC-e é cancelada na Sefaz e a venda é desfeita (estoque, pagamentos, cashback e crediário). '
+              'Precisa de internet e da liberação de um supervisor.'),
+          TextField(
+            key: const Key('cancel-reason'),
+            controller: _reason,
+            autofocus: true,
+            maxLength: 255,
+            decoration: const InputDecoration(labelText: 'Motivo (mínimo 15 letras)'),
+            onSubmitted: (_) => _codeFocus.requestFocus(),
+          ),
+          TextField(
+            key: const Key('cancel-supervisor-code'),
+            controller: _code,
+            focusNode: _codeFocus,
+            onSubmitted: (_) => _pinFocus.requestFocus(),
+            decoration: const InputDecoration(labelText: 'Código do supervisor'),
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          ),
+          TextField(
+            key: const Key('cancel-supervisor-pin'),
+            controller: _pin,
+            focusNode: _pinFocus,
+            obscureText: true,
+            onSubmitted: (_) => _confirm(),
+            decoration: const InputDecoration(labelText: 'PIN do supervisor'),
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
+          ),
+          if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, key: const Key('cancel-error'))),
+        ],
       ),
       actions: [
         const KeysHint(),
@@ -835,43 +828,41 @@ class _ReleaseDialogState extends State<ReleaseDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.title),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          // Folga entre os campos: o rótulo de cima não encosta no texto.
-          spacing: 10,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(widget.message, key: const Key('release-message')),
-            if (widget.needsSupervisor) ...[
-              const SizedBox(height: 8),
-              Text(widget.supervisorHint, key: const Key('release-hint')),
-              TextField(
-                key: const Key('release-code'),
-                controller: _code,
-                autofocus: true,
-                onSubmitted: (_) => _pinFocus.requestFocus(),
-                decoration: const InputDecoration(labelText: 'Código do supervisor'),
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              ),
-              TextField(
-                key: const Key('release-pin'),
-                controller: _pin,
-                focusNode: _pinFocus,
-                obscureText: true,
-                onSubmitted: (_) => _confirm(),
-                decoration: const InputDecoration(labelText: 'PIN do supervisor'),
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
-              ),
-            ],
-            if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, key: const Key('release-error'))),
+    return PdvWindow(
+      size: PdvWindowSize.compact,
+      title: widget.title,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        // Folga entre os campos: o rótulo de cima não encosta no texto.
+        spacing: 10,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(widget.message, key: const Key('release-message')),
+          if (widget.needsSupervisor) ...[
+            const SizedBox(height: 8),
+            Text(widget.supervisorHint, key: const Key('release-hint')),
+            TextField(
+              key: const Key('release-code'),
+              controller: _code,
+              autofocus: true,
+              onSubmitted: (_) => _pinFocus.requestFocus(),
+              decoration: const InputDecoration(labelText: 'Código do supervisor'),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
+            TextField(
+              key: const Key('release-pin'),
+              controller: _pin,
+              focusNode: _pinFocus,
+              obscureText: true,
+              onSubmitted: (_) => _confirm(),
+              decoration: const InputDecoration(labelText: 'PIN do supervisor'),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
+            ),
           ],
-        ),
+          if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, key: const Key('release-error'))),
+        ],
       ),
       actions: [
         const KeysHint(),
