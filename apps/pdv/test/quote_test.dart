@@ -173,22 +173,25 @@ void main() {
       controller = build(database);
     });
 
-    test('sem entrada nem turno; controlado e falta de estoque só avisam; desconto pelo limite do vendedor', () async {
+    test('sem entrada nem turno; controlado só avisa; sem estoque pede a liberação; desconto pelo limite do vendedor', () async {
       expect(controller.quoteMode, isTrue);
       expect(controller.operator, isNull);
       await controller.identifySeller('6');
       controller.scan('7890000000055');
       expect(controller.pendingControlled, isNull);
       controller.scan('7890000000017');
+      // O estoque tem 1: a segunda unidade deixaria negativo e pede quem libera (a balconista não pode).
       controller.scan('7890000000017');
-      expect(controller.cart.lines.map((l) => [l.product.code, l.quantityMilli]), [[4, 1000], [1, 2000]]);
+      expect(controller.pendingZeroStock?.product.code, 1);
+      controller.cancelZeroStock();
+      expect(controller.cart.lines.map((l) => [l.product.code, l.quantityMilli]), [[4, 1000], [1, 1000]]);
       expect(controller.notice, isNull);
       // Limite da balconista: 5%.
       final line = controller.cart.lines.last;
-      expect(controller.applyDiscount(line, 100).name, 'none');
-      expect(line.discountCents, 100);
-      expect(controller.applyDiscount(line, 200).name, 'release');
-      expect(await controller.releaseDiscount(line, 200, '2', '2468', 'Cliente antigo'), isTrue);
+      expect(controller.applyDiscount(line, 50).name, 'none');
+      expect(line.discountCents, 50);
+      expect(controller.applyDiscount(line, 100).name, 'release');
+      expect(await controller.releaseDiscount(line, 100, '2', '2468', 'Cliente antigo'), isTrue);
       expect(line.release?.supervisorName, 'Gerente Centro');
     });
 

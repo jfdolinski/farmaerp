@@ -28,7 +28,7 @@ PullItem product(String id, int code, String name, String barcode, num price, Ma
   },
 );
 
-LocalDatabase seeded() {
+LocalDatabase seeded({String profile = 'cashier'}) {
   final database = LocalDatabase.inMemory();
   database.applyPage(
     PullPage(format: 4, until: '10', items: [
@@ -37,6 +37,7 @@ LocalDatabase seeded() {
         'company': {'trade_name': 'Farmácia Demonstração'},
         'series': const [],
         'fixed_seller_id': operatorId,
+        'terminal_profile': profile,
       }),
       PullItem(type: 'user', id: operatorId, data: {
         'code': 3, 'name': 'Operador Centro', 'is_admin': false, 'roles': const [], 'permissions': const ['sales.sell'],
@@ -99,6 +100,50 @@ void main() {
     controller.scan('7890000000024');
     expect(controller.cart.lines.last.autoDiscountCents, 0);
     expect(controller.cart.discountCents, 300);
+  });
+
+  test('orçamento: o desconto automático entra ao incluir o item, como no caixa', () async {
+    database.close();
+    database = seeded(profile: 'quote');
+    controller = PosController(
+      database: database,
+      auth: PosAuth(database: database, clock: () => now),
+      printer: () => printer,
+      terminalNumber: () => 1,
+      clock: () => now,
+    );
+    expect(controller.quoteMode, isTrue);
+    controller.scan('7890000000017');
+    final line = controller.cart.lines.single;
+    expect([line.grossCents, line.autoDiscountCents, line.totalCents], [1000, 100, 900]);
+    expect(line.autoApplied.map((a) => a.name), ['Fabricante M1 10%']);
+  });
+
+  test('mesmos itens e mesmo cliente: o orçamento e o caixa chegam ao mesmo total', () async {
+    const customer = SaleCustomer(id: '019a0000-0000-7000-8000-0000000000c1', name: 'Cliente', code: 1, groupId: 'G1');
+    List<int> totals(PosController pos) => [pos.cart.subtotalCents, pos.cart.discountCents, pos.cart.totalCents];
+    controller.scan('7890000000017');
+    controller.scan('7890000000024');
+    controller.setQuantity(controller.cart.lines.first, 3000);
+    controller.cart.customer = customer;
+    controller.reprice();
+    final cashier = totals(controller);
+    final quoteDatabase = seeded(profile: 'quote');
+    addTearDown(quoteDatabase.close);
+    final quote = PosController(
+      database: quoteDatabase,
+      auth: PosAuth(database: quoteDatabase, clock: () => now),
+      printer: () => printer,
+      terminalNumber: () => 1,
+      clock: () => now,
+    );
+    quote.scan('7890000000017');
+    quote.scan('7890000000024');
+    quote.setQuantity(quote.cart.lines.first, 3000);
+    quote.cart.customer = customer;
+    quote.reprice();
+    expect(totals(quote), cashier);
+    expect(cashier[1], greaterThan(0));
   });
 
   test('PIX: o valor sugerido já tem o desconto; com o PIX lançado, a venda fecha e leva as regras', () async {

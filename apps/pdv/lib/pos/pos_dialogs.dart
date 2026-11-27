@@ -229,8 +229,8 @@ class _ZeroStockPanelState extends State<ZeroStockPanel> {
   @override
   Widget build(BuildContext context) {
     final pending = widget.pending;
-    final hours = pending.minutesOffline ~/ 60;
-    final minutes = pending.minutesOffline % 60;
+    final offline = pending.minutesOffline;
+    final stock = pending.product.stockMilli;
     final colors = Theme.of(context).colorScheme;
     return Card(
       key: const Key('zero-stock-panel'),
@@ -240,10 +240,14 @@ class _ZeroStockPanelState extends State<ZeroStockPanel> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('${pending.product.name} está sem estoque na cópia deste terminal.', style: const TextStyle(fontWeight: FontWeight.bold)),
             Text(
-              'O PDV está sem sincronizar há ${hours > 0 ? '$hours h ' : ''}$minutes min. A venda só passa com a autorização '
-              'do gerente e fica registrada para conferência.',
+              '${pending.product.name}: o estoque fica negativo (saldo ${stock < 0 ? '-' : ''}${formatMilli(stock.abs())}).',
+              key: const Key('zero-stock-title'),
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            Text(
+              '${offline == null ? '' : 'O PDV está sem sincronizar há ${offline ~/ 60 > 0 ? '${offline ~/ 60} h ' : ''}${offline % 60} min. '}'
+              'Para vender assim, quem tem "Vender com estoque negativo" digita o código e o PIN. Fica registrado para conferência.',
             ),
             Row(
               children: [
@@ -253,7 +257,7 @@ class _ZeroStockPanelState extends State<ZeroStockPanel> {
                     controller: _code,
                     focusNode: widget.focusNode,
                     onSubmitted: (_) => _pinFocus.requestFocus(),
-                    decoration: const InputDecoration(labelText: 'Código do gerente'),
+                    decoration: const InputDecoration(labelText: 'Código de quem libera'),
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   ),
@@ -289,7 +293,7 @@ class _ZeroStockPanelState extends State<ZeroStockPanel> {
                 FilledButton(
                   key: const Key('zero-stock-approve'),
                   onPressed: widget.controller.busy ? null : _approve,
-                  child: const Text('Autorizar'),
+                  child: const Text('Liberar'),
                 ),
               ],
             ),
@@ -968,4 +972,25 @@ Future<String?> showRegistrationRelease(BuildContext context, PosController cont
     ),
   );
   return released;
+}
+
+/// Libera de uma vez os itens sem estoque que vieram dos orçamentos: código e PIN de quem tem
+/// "Vender com estoque negativo".
+Future<void> showStockReleaseDialog(BuildContext context, PosController controller) {
+  final lines = controller.linesNeedingStockRelease;
+  return showDialog<bool>(
+    context: context,
+    builder: (_) => ReleaseDialog(
+      controller: controller,
+      title: 'Liberar estoque negativo',
+      message: [
+        'Estes itens deixam o estoque negativo e precisam de liberação:',
+        for (final line in lines) '• ${line.product.name} (saldo ${line.product.stockMilli < 0 ? '-' : ''}${formatMilli(line.product.stockMilli.abs())})',
+      ].join('\n'),
+      needsSupervisor: true,
+      supervisorHint: 'Quem tem "Vender com estoque negativo" digita o código e o PIN.',
+      confirmLabel: 'Liberar',
+      onConfirm: (code, pin) => controller.releasePendingStock(code, pin),
+    ),
+  );
 }

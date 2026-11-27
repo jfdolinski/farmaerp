@@ -224,8 +224,8 @@ export function ReasonAction({
 }
 
 /**
- * Venda sem estoque com o PDV sem internet: liberada só depois deste tempo sem sincronizar, com a
- * autorização do gerente. A filial tem o padrão; o terminal pode ter uma exceção.
+ * Tempo sem sincronizar para o PDV contar como sem internet (a venda com estoque negativo liberada fica
+ * registrada com os minutos). A filial tem o padrão; o terminal pode ter uma exceção.
  */
 export function OfflineMinutesForm({
   scope,
@@ -243,7 +243,7 @@ export function OfflineMinutesForm({
     <details className={styles.reason}>
       <summary>
         {scope === "branch"
-          ? `Venda sem estoque sem internet: após ${current} min`
+          ? `Sem internet: após ${current} min`
           : current === null
             ? `Sem internet: ${inherited} min (da filial)`
             : `Sem internet: ${current} min (deste terminal)`}

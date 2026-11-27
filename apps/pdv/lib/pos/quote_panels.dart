@@ -193,7 +193,28 @@ class _QuotePanelState extends State<QuotePanel> {
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.person),
                 title: Text(cart.customer!.name),
-                trailing: IconButton(tooltip: 'TIRAR O CLIENTE', icon: const Icon(Icons.close), onPressed: controller.clearCustomer),
+                subtitle: Text(
+                  [
+                    'Código ${cart.customer!.code}',
+                    ?cart.customer!.documentMasked,
+                    if (cart.customer!.agreements.isNotEmpty)
+                      'Convênio: ${cart.customer!.agreements.map((a) => a['name']).join(', ')}',
+                  ].join(' · '),
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      key: const Key('customer-history-open'),
+                      tooltip: 'HISTÓRICO DE COMPRAS',
+                      icon: const Icon(Icons.receipt_long),
+                      onPressed: controller.customers == null
+                          ? null
+                          : () => (widget.dialog ?? (open) => open())(() => showCustomerHistoryDialog(context, controller)),
+                    ),
+                    IconButton(tooltip: 'TIRAR O CLIENTE', icon: const Icon(Icons.close), onPressed: controller.clearCustomer),
+                  ],
+                ),
               ),
             const SizedBox(height: 8),
             Text('${cart.lines.length} ${cart.lines.length == 1 ? 'item' : 'itens'}'),
@@ -219,6 +240,15 @@ class _QuotePanelState extends State<QuotePanel> {
               onChanged: noCard ? null : (value) => setState(() => _print = value ?? true),
               title: Text(noCard ? 'Imprimir o cupom (sem plaquinha, o cupom sai sempre)' : 'Imprimir o cupom'),
             ),
+            if (controller.linesNeedingStockRelease.isNotEmpty)
+              OutlinedButton.icon(
+                key: const Key('stock-release-open'),
+                onPressed: controller.busy
+                    ? null
+                    : () => (widget.dialog ?? (open) => open())(() => showStockReleaseDialog(context, controller)),
+                icon: const Icon(Icons.inventory_2_outlined),
+                label: Text('Liberar estoque negativo (${controller.linesNeedingStockRelease.length})'),
+              ),
             FilledButton.icon(
               key: const Key('quote-finish'),
               onPressed: cart.isEmpty || controller.busy ? null : _finish,
@@ -271,6 +301,16 @@ class _QuoteLookupDialogState extends State<_QuoteLookupDialog> {
   List<Map<String, dynamic>>? _pending;
   bool _loading = true;
   int _highlight = 0;
+
+  /// Orçamentos marcados para juntar, na ordem em que foram marcados (o primeiro manda no cliente).
+  final _selected = <String>[];
+
+  Future<void> _merge() async {
+    if (_selected.length < 2) return;
+    final navigator = Navigator.of(context);
+    final ok = await widget.controller.loadQuotes(List.of(_selected));
+    if (ok) navigator.pop();
+  }
 
   /// Pendentes que combinam com o que foi digitado (plaquinha, código, vendedor ou cliente).
   List<Map<String, dynamic>> get _filtered {
@@ -385,6 +425,24 @@ class _QuoteLookupDialogState extends State<_QuoteLookupDialog> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _selected.isEmpty
+                            ? 'Para juntar orçamentos numa venda, marque dois ou mais na lista.'
+                            : 'Marcados: ${_selected.join(', ')}. O cliente é o do primeiro marcado que tiver cliente.',
+                        key: const Key('quote-merge-hint'),
+                      ),
+                    ),
+                    OutlinedButton(
+                      key: const Key('quote-merge'),
+                      onPressed: controller.busy || _selected.length < 2 ? null : _merge,
+                      child: Text('Juntar selecionados (${_selected.length})'),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 12),
                 Text('Pendentes da loja', style: Theme.of(context).textTheme.titleSmall),
                 if (_loading) const Padding(padding: EdgeInsets.all(8), child: LinearProgressIndicator()),
@@ -416,6 +474,20 @@ class _QuoteLookupDialogState extends State<_QuoteLookupDialog> {
                               _time(quote['quoted_at'] as String?),
                             ].join(' · ')),
                             onTap: controller.busy ? null : () => _load(quote['code'] as String),
+                            trailing: Checkbox(
+                              key: Key('quote-pick-${quote['code']}'),
+                              value: _selected.contains(quote['code']),
+                              onChanged: controller.busy
+                                  ? null
+                                  : (value) => setState(() {
+                                      final code = quote['code'] as String;
+                                      if (value ?? false) {
+                                        if (!_selected.contains(code)) _selected.add(code);
+                                      } else {
+                                        _selected.remove(code);
+                                      }
+                                    }),
+                            ),
                           ),
                       ],
                     ),

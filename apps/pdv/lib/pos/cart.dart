@@ -62,8 +62,17 @@ class CartLine {
   /// Controlado: receita, comprador e lote (ou a liberação pendente), com o farmacêutico que liberou.
   ControlledRelease? controlled;
 
-  /// Venda sem estoque autorizada com o PDV sem internet.
-  ({String supervisorId, String supervisorName, int minutesOffline})? zeroStockRelease;
+  /// Venda com estoque negativo liberada: quem liberou (quem vendeu, com a permissão, ou o
+  /// supervisor), o saldo da hora e, sem internet, há quantos minutos o terminal não sincroniza.
+  ({String supervisorId, String supervisorName, int? minutesOffline, int? stockMilli})? zeroStockRelease;
+
+  /// Item sem estoque que ainda espera a liberação (veio de um orçamento sem ela).
+  bool needsStockRelease = false;
+
+  /// Orçamentos juntados no caixa: o vendedor e o orçamento de origem do item.
+  String? sellerId;
+  String? sellerName;
+  String? quoteId;
 
   /// Desconto manual em centésimos de ponto percentual (850 = 8,5%).
   int get discountBp => grossCents == 0 ? 0 : (manualDiscountCents * 10000 / grossCents).ceil();
@@ -77,9 +86,13 @@ class CartLine {
     if (product.status == 'on_order') 'Produto por encomenda',
     if (product.status == 'blocked') 'Produto bloqueado para compra: vende só o que há em estoque',
     if (zeroStockRelease != null)
-      'Sem estoque: autorizado por ${zeroStockRelease!.supervisorName} (${zeroStockRelease!.minutesOffline} min sem internet)'
+      'Estoque negativo liberado por ${zeroStockRelease!.supervisorName}'
+          '${zeroStockRelease!.minutesOffline == null ? '' : ' (${zeroStockRelease!.minutesOffline} min sem internet)'}'
+    else if (needsStockRelease)
+      'Sem estoque (saldo ${product.stockMilli < 0 ? '-' : ''}${formatMilli(product.stockMilli.abs())}): precisa de liberação'
     else if (product.stockMilli <= 0)
       'Sem estoque na cópia local',
+    if (sellerName != null) 'Vendedor: $sellerName',
     if (release != null) 'Desconto liberado por ${release!.supervisorName}',
     if (product.controlledClass != null && controlled == null)
       'Controlado: falta a receita (pedida ao finalizar)'
@@ -223,7 +236,7 @@ class Cart {
         : (quantityMilli * product.barcodeFractionMilli! / 1000).round();
     for (final line in lines) {
       if (merge && controlled == null && line.controlled == null && line.product.id == product.id && line.manualDiscountCents == 0 &&
-          line.zeroStockRelease == null) {
+          line.zeroStockRelease == null && !line.needsStockRelease && line.quoteId == null) {
         line.quantityMilli += quantity;
         return line;
       }
@@ -292,7 +305,13 @@ SaleDraft buildSale({
       'release': line.release == null ? null : {'supervisor_id': line.release!.supervisorId, 'reason': line.release!.reason},
       'zero_stock_release': line.zeroStockRelease == null
           ? null
-          : {'supervisor_id': line.zeroStockRelease!.supervisorId, 'minutes_offline': line.zeroStockRelease!.minutesOffline},
+          : {
+              'supervisor_id': line.zeroStockRelease!.supervisorId,
+              'minutes_offline': line.zeroStockRelease!.minutesOffline,
+              'stock': line.zeroStockRelease!.stockMilli == null ? null : quantity(line.zeroStockRelease!.stockMilli!),
+            },
+      'seller_id': line.sellerId,
+      'quote_id': line.quoteId,
       'controlled': line.controlled?.toJson(),
     });
     rows.add({
@@ -386,6 +405,13 @@ SaleDraft buildQuote({
         'release': cart.lines[index].release == null
             ? null
             : {'supervisor_id': cart.lines[index].release!.supervisorId, 'reason': cart.lines[index].release!.reason},
+        // Liberação do estoque negativo feita no orçamento: o caixa não pede de novo.
+        'zero_stock_release': cart.lines[index].zeroStockRelease == null
+            ? null
+            : {
+                'supervisor_id': cart.lines[index].zeroStockRelease!.supervisorId,
+                'stock': cart.lines[index].zeroStockRelease!.stockMilli == null ? null : cart.lines[index].zeroStockRelease!.stockMilli! / 1000,
+              },
       },
   ];
   return SaleDraft(

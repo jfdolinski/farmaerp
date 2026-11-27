@@ -3656,5 +3656,13 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": []
+  },
+  "FA760": {
+    "message": "Há itens sem estoque esperando a liberação.",
+    "action": "Peça a quem tem \"Vender com estoque negativo\" para liberar (botão Liberar estoque negativo) ou tire os itens.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
   }
 }

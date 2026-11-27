@@ -1008,6 +1008,13 @@ class _TotalsPanel extends StatelessWidget {
               ),
             if (cart.quoteCode != null) Text('Orçamento ${cart.quoteCode}', key: const Key('cart-quote')),
             const SizedBox(height: 8),
+            if (controller.linesNeedingStockRelease.isNotEmpty)
+              OutlinedButton.icon(
+                key: const Key('stock-release-open'),
+                onPressed: controller.busy ? null : () => dialog(() => showStockReleaseDialog(context, controller)),
+                icon: const Icon(Icons.inventory_2_outlined),
+                label: Text('Liberar estoque negativo (${controller.linesNeedingStockRelease.length})'),
+              ),
             FilledButton.icon(
               key: const Key('pay'),
               onPressed: cart.isEmpty ? null : controller.startPayment,
