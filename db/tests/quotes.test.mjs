@@ -360,7 +360,7 @@ describe('orçamento no caixa', () => {
 
     const byCard = await lookup('300');
     expect(byCard).toMatchObject({ id: open.id, card_number: 300, seller_id: clerk.id, customer_id: null });
-    expect(byCard.items).toEqual([{ line: 1, product_id: product.id, quantity: 2, unit_price: 10, discount: 2, total: 18, release: { supervisor_id: operator.id, reason: 'Fiel' } }]);
+    expect(byCard.items).toEqual([{ line: 1, product_id: product.id, quantity: 2, unit_price: 10, discount: 2, total: 18, release: { supervisor_id: operator.id, reason: 'Fiel' }, zero_stock_release: null }]);
     expect((await lookup(` ${(await codeOf(open.id)).toLowerCase()} `)).id).toBe(open.id);
     // A plaquinha 302 aponta para o orçamento novo; o código do antigo diz que foi substituído.
     expect((await lookup('302')).id).toBe(replacedSecond.id);

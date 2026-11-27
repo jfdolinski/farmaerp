@@ -2414,7 +2414,8 @@
       "quote_item_total_check",
       "quote_item_release_reason_check",
       "quote_item_release_check",
-      "quote_item_line_key"
+      "quote_item_line_key",
+      "quote_item_stock_release_check"
     ]
   },
   "FA884": {
