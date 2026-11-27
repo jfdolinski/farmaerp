@@ -19,6 +19,7 @@ import 'controlled_dialog.dart';
 import 'display_settings.dart';
 import 'pos_dialogs.dart';
 import 'product_info.dart';
+import 'product_results.dart';
 import 'quote_panels.dart';
 import 'seller_lock.dart';
 import 'return_dialog.dart';
@@ -749,6 +750,17 @@ class _ItemsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A lista da busca mostra 10 linhas; em tela baixa, o que couber em 60% do painel (no mínimo 3).
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final room = constraints.maxHeight.isFinite ? constraints.maxHeight * 0.6 : double.infinity;
+        final rows = room.isFinite ? (room / ProductResults.rowHeight).floor().clamp(3, 10) : 10;
+        return _build(context, rows);
+      },
+    );
+  }
+
+  Widget _build(BuildContext context, int visibleRows) {
     final cart = controller.cart;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -792,60 +804,17 @@ class _ItemsPanel extends StatelessWidget {
           ),
         ),
         if (controller.results.isNotEmpty)
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 260),
-            child: Card(
-              child: ListView(
-                shrinkWrap: true,
-                children: [
-                  for (final (index, product) in controller.results.indexed)
-                    ListTile(
-                      key: Key('result-${product.code}'),
-                      selected: index == highlight,
-                      selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
-                      title: Text(product.name),
-                      subtitle: Text(
-                        [
-                          if (product.activeIngredient != null)
-                            product.activeIngredient!,
-                          if (product.manufacturer != null)
-                            product.manufacturer!,
-                          'Estoque ${formatMilli(product.stockMilli < 0 ? 0 : product.stockMilli)}',
-                          if (product.controlledClass != null) 'Controlado',
-                        ].join(' · '),
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            product.priceCents == null
-                                ? 'Sem preço'
-                                : formatCents(product.priceCents!),
-                          ),
-                          IconButton(
-                            key: Key('info-result-${product.code}'),
-                            tooltip: 'DADOS DO PRODUTO',
-                            icon: const Icon(Icons.info_outline),
-                            onPressed: () => dialog(() => showProductInfo(context, controller, product)),
-                          ),
-                          IconButton(
-                            key: Key('network-result-${product.code}'),
-                            tooltip: 'ESTOQUE NAS FILIAIS',
-                            icon: const Icon(Icons.store),
-                            onPressed: () =>
-                                dialog(() => showNetworkStock(context, controller, product)),
-                          ),
-                        ],
-                      ),
-                      onTap: () {
-                        controller.add(product);
-                        scan.clear();
-                        scanFocus.requestFocus();
-                      },
-                    ),
-                ],
-              ),
-            ),
+          ProductResults(
+            results: controller.results,
+            highlight: highlight,
+            visibleRows: visibleRows,
+            onPick: (product) {
+              controller.add(product);
+              scan.clear();
+              scanFocus.requestFocus();
+            },
+            onInfo: (product) => dialog(() => showProductInfo(context, controller, product)),
+            onNetwork: (product) => dialog(() => showNetworkStock(context, controller, product)),
           ),
         const SizedBox(height: 12),
         Expanded(
