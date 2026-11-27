@@ -7,6 +7,7 @@ import { ErrorNotice } from "../error-notice";
 import { CreateTenantForm, IssuerDecision, type PendingIssuer } from "./ui";
 import styles from "../terminais/page.module.css";
 import { activeTab, TabItem, Tabs } from "../shell/tabs";
+import { LoginImageForm } from "./login-image";
 
 export const metadata: Metadata = { title: "Plataforma · FarmaERP" };
 
@@ -60,8 +61,11 @@ async function PlatformContent({ searchParams }: { searchParams: SearchParams })
     { id: "clientes", label: "Clientes", count: result.ok ? result.data.length : undefined },
     { id: "cnpjs", label: "CNPJs aguardando", count: waiting, attention: waiting > 0 },
     { id: "nova", label: "Nova empresa" },
+    { id: "entrada", label: "Tela de entrada" },
   ];
   const tab = activeTab(tabs, (await searchParams).aba);
+  const loginImage =
+    tab === "entrada" ? await apiFetch<{ sha256: string | null }>("/public/login-image/info") : null;
 
   return (
     <>
@@ -151,6 +155,16 @@ async function PlatformContent({ searchParams }: { searchParams: SearchParams })
               Outros CNPJs do mesmo dono são cadastrados depois pelo administrador da empresa, em Empresas.
             </p>
             <CreateTenantForm />
+          </section>
+        )}
+        {tab === "entrada" && loginImage && (
+          <section className={styles.card}>
+            <h2>Imagem da tela de entrada</h2>
+            {loginImage.ok ? (
+              <LoginImageForm current={loginImage.data.sha256} />
+            ) : (
+              <ErrorNotice error={loginImage.error} />
+            )}
           </section>
         )}
       </Tabs>

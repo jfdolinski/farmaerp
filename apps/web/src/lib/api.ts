@@ -42,7 +42,7 @@ async function clientIp(): Promise<string | null> {
 export async function apiFetch<T>(
   path: string,
   options: {
-    method?: "GET" | "POST" | "PATCH" | "PUT";
+    method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
     body?: unknown;
     xml?: string;
     csv?: string;
@@ -104,7 +104,11 @@ export async function apiDownload(path: string, extraHeaders: Record<string, str
 }
 
 /** Parte binária de um arquivo (a importação das notas), enviada como veio. */
-export async function apiUpload<T>(path: string, body: ArrayBuffer): Promise<ApiResult<T>> {
+export async function apiUpload<T>(
+  path: string,
+  body: ArrayBuffer,
+  contentType = "application/octet-stream",
+): Promise<ApiResult<T>> {
   const apiUrl = process.env.API_URL ?? "http://127.0.0.1:3001";
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   const ip = await clientIp();
@@ -116,7 +120,7 @@ export async function apiUpload<T>(path: string, body: ArrayBuffer): Promise<Api
       // Uma parte tem alguns MB: mais tempo que as outras chamadas.
       signal: AbortSignal.timeout(120_000),
       headers: {
-        "Content-Type": "application/octet-stream",
+        "Content-Type": contentType,
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(ip ? { "X-Forwarded-For": ip } : {}),
       },

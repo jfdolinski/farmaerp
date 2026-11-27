@@ -4,6 +4,7 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthController } from './auth/auth.controller.js';
 import { PlatformController } from './auth/platform.controller.js';
+import { LoginImageController } from './auth/login-image.controller.js';
 import { RolesController } from './auth/roles.controller.js';
 import { SessionGuard } from './auth/session.guard.js';
 import { UsersController } from './auth/users.controller.js';
@@ -84,6 +85,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     CreditController,
     CashbackController,
     PlatformController,
+    LoginImageController,
     AgreementsController,
     AgreementInvoicesController,
     SuppliersController,
