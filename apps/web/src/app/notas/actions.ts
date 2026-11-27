@@ -238,3 +238,22 @@ export async function discardInvoice(_previous: ItemFormState, form: FormData): 
   if (!result.ok) return failure(result.error, `/notas/${id}`);
   redirect("/notas");
 }
+
+const NFE_RESULT: Record<string, string> = {
+  authorized: "NF-e autorizada pela Sefaz.",
+  pending: "A Sefaz não respondeu. A NF-e ficou pendente: tente transmitir de novo em alguns minutos.",
+  rejected: "A Sefaz recusou a NF-e. Veja o motivo, corrija e emita de novo.",
+};
+
+/** Emite a NF-e da devolução ao fornecedor (ou transmite de novo a pendente). */
+export async function emitReturnNfe(_previous: ItemFormState, form: FormData): Promise<ItemFormState> {
+  const returnId = text(form, "returnId");
+  const invoiceId = text(form, "invoiceId");
+  const result = await apiFetch<{ id: string; status: string }>(
+    `/admin/purchase-returns/${encodeURIComponent(returnId)}/nfe`,
+    { method: "POST", timeoutMs: 90_000 },
+  );
+  if (!result.ok) return failure(result.error, `/notas/${invoiceId}?aba=devolucoes`);
+  refresh();
+  return { done: true, notice: NFE_RESULT[result.data.status] ?? "NF-e processada." };
+}

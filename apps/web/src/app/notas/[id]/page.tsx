@@ -19,7 +19,7 @@ import {
   STATUS_LABELS,
   CONFIRMATION_LABELS,
 } from "../format";
-import { ReturnsSection, type Returns } from "./returns";
+import { ReturnsSection, type ReturnNfe, type Returns } from "./returns";
 import { activeTab, TabItem, Tabs } from "../../shell/tabs";
 import {
   BatchForm,
@@ -128,6 +128,8 @@ interface InvoiceDetail {
   cancel_reason: string | null;
   cancelled_by_name: string | null;
   returns: Returns;
+  return_nfes: ReturnNfe[];
+  can_issue_nfe: boolean;
   source: string;
   confirmation: string;
   confirmation_required: boolean;
@@ -467,6 +469,8 @@ async function InvoiceContent({ params, searchParams }: { params: Params; search
           <ReturnsSection
             invoiceId={invoice.id}
             data={invoice.returns}
+            nfes={invoice.return_nfes}
+            canIssueNfe={invoice.can_issue_nfe}
             values={Object.fromEntries(
               invoice.items.map((item) => [
                 item.id,

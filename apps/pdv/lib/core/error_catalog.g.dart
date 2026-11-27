@@ -910,6 +910,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Fale com o suporte: o NCM vem do XML da nota de compra.',
     retryable: false,
   ),
+  'FA775': ErrorCatalogEntry(
+    code: 'FA775',
+    message: 'Este padrão fiscal da devolução não é aceito.',
+    action: 'Confira o CFOP e os códigos de situação tributária escolhidos para a filial.',
+    retryable: false,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',

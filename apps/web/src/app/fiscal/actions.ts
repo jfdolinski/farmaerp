@@ -123,3 +123,28 @@ export async function setNfce(_previous: FiscalFormState, form: FormData): Promi
     }),
   );
 }
+
+const RETURN_TAX_FIELDS = [
+  "cfop_internal",
+  "cfop_interstate",
+  "cfop_st_internal",
+  "cfop_st_interstate",
+  "simples_csosn",
+  "simples_csosn_st",
+  "normal_cst",
+  "normal_cst_st",
+  "pis_cst",
+  "cofins_cst",
+];
+
+/** Padrões fiscais da NF-e de devolução da filial. O banco confere a permissão e os valores. */
+export async function setReturnTax(_previous: FiscalFormState, form: FormData): Promise<FiscalFormState> {
+  const id = encodeURIComponent(text(form, "branchId"));
+  const body = Object.fromEntries(RETURN_TAX_FIELDS.map((field) => [field, text(form, field).trim()]));
+  return finish(await apiFetch(`/admin/fiscal/return-tax/${id}`, { method: "PATCH", body }));
+}
+
+export async function resetReturnTax(_previous: FiscalFormState, form: FormData): Promise<FiscalFormState> {
+  const id = encodeURIComponent(text(form, "branchId"));
+  return finish(await apiFetch(`/admin/fiscal/return-tax/${id}/reset`, { method: "POST" }));
+}

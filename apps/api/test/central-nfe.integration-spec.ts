@@ -171,4 +171,22 @@ describe('NF-e de devolução emitida pela central', () => {
     expect(reissued.id).not.toBe(rejected.id);
     expect(keyOf(received.at(-1)!)).not.toBe(rejectedKey);
   });
+
+  it('padrões fiscais da devolução: lista, altera, recusa valor fora da lista e volta ao padrão', async () => {
+    const SUL = '019a0000-0000-7000-8000-000000000006';
+    const rows = (await admin('get', '/fiscal/return-tax').expect(200)).body as Json[];
+    expect(rows.map((row) => row.branch_id)).toEqual(expect.arrayContaining([CENTRO, SUL]));
+    expect(rows.find((row) => row.branch_id === SUL)).toMatchObject({ can_manage: true, settings: { cfop_internal: '5202', pis_cst: '49' } });
+
+    const changed = (await admin('patch', `/fiscal/return-tax/${SUL}`).send({ pis_cst: '99', cofins_cst: '99' }).expect(200)).body as Json;
+    expect(changed).toMatchObject({ pis_cst: '99', cofins_cst: '99', cfop_internal: '5202' });
+    expect(((await admin('get', '/fiscal/return-tax').expect(200)).body as Json[]).find((row) => row.branch_id === SUL)).toMatchObject({ customized: true });
+
+    expect(codeOf(await admin('patch', `/fiscal/return-tax/${SUL}`).send({ cfop_internal: '6202' }).expect(422))).toBe('FA775');
+    expect(codeOf(await admin('patch', `/fiscal/return-tax/${SUL}`, OPERATOR).send({ pis_cst: '49' }).expect(403))).toBe('FA002');
+    expect(codeOf(await admin('patch', '/fiscal/return-tax/nao-e-uuid').send({}).expect(422))).toBe('FA005');
+
+    expect((await admin('post', `/fiscal/return-tax/${SUL}/reset`).expect(200)).body).toMatchObject({ pis_cst: '49', cofins_cst: '49' });
+    expect(((await admin('get', '/fiscal/return-tax').expect(200)).body as Json[]).find((row) => row.branch_id === SUL)).toMatchObject({ customized: false });
+  });
 });
