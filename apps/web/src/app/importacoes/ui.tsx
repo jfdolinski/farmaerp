@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import type { ApiError } from "@/lib/api";
 import { ErrorNotice } from "../error-notice";
 import styles from "../terminais/page.module.css";
-import { completeImport, startImport } from "./actions";
+import { completeImport, completePlatformImport, startImport, startPlatformImport } from "./actions";
 import { fileSize } from "./labels";
 
 /** A retaguarda repassa cada parte à API; o proxy do Next aceita até 10 MB por requisição. */
@@ -20,11 +20,11 @@ function catalogError(code: string): ApiError {
 }
 
 /** Envia uma parte; tenta de novo só quando a conexão cai (a API não chegou a responder). */
-async function sendPart(id: string, part: number, blob: Blob): Promise<ApiError | null> {
+async function sendPart(base: string, id: string, part: number, blob: Blob): Promise<ApiError | null> {
   for (let attempt = 1; attempt <= ATTEMPTS; attempt += 1) {
     let response: Response;
     try {
-      response = await fetch(`/importacoes/envio/${id}/${part}`, {
+      response = await fetch(`${base}/envio/${id}/${part}`, {
         method: "PUT",
         headers: { "Content-Type": "application/octet-stream" },
         body: blob,
@@ -44,8 +44,12 @@ async function sendPart(id: string, part: number, blob: Blob): Promise<ApiError 
   return catalogError("FA001");
 }
 
-/** Escolha do .zip e envio em partes, com o andamento. */
-export function ImportUploader() {
+/**
+ * Escolha do .zip e envio em partes, com o andamento. Com `groupId`, é a Plataforma enviando o arquivo
+ * de um cliente.
+ */
+export function ImportUploader({ groupId }: { groupId?: string } = {}) {
+  const base = groupId ? "/plataforma/importacao" : "/importacoes";
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [sent, setSent] = useState(0);
@@ -70,9 +74,12 @@ export function ImportUploader() {
     setBusy(true);
     setSent(0);
     try {
-      const started = await startImport(file.name, file.size);
+      const started = groupId
+        ? await startPlatformImport(groupId, file.name, file.size)
+        : await startImport(file.name, file.size);
       if (!started.ok) {
-        if (started.error.code === "FA402") router.push("/login?next=%2Fimportacoes&expired=1");
+        if (started.error.code === "FA402")
+          router.push(`/login?next=${encodeURIComponent(groupId ? "/plataforma" : base)}&expired=1`);
         setError(started.error);
         return;
       }
@@ -80,7 +87,7 @@ export function ImportUploader() {
       const size = Math.min(partBytes, MAX_PART);
       let offset = 0;
       for (let part = 1; offset < file.size; part += 1) {
-        const failure = await sendPart(id, part, file.slice(offset, offset + size));
+        const failure = await sendPart(base, id, part, file.slice(offset, offset + size));
         if (failure) {
           setError(failure);
           return;
@@ -88,12 +95,12 @@ export function ImportUploader() {
         offset = Math.min(offset + size, file.size);
         setSent(offset);
       }
-      const done = await completeImport(id);
+      const done = groupId ? await completePlatformImport(id) : await completeImport(id);
       if (!done.ok) {
         setError(done.error);
         return;
       }
-      router.push(`/importacoes/${id}`);
+      router.push(`${base}/${id}`);
     } finally {
       setBusy(false);
     }

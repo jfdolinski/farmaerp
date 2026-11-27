@@ -248,4 +248,35 @@ describe('importação das notas contra o banco real', () => {
     }
     expect((await call('get', `/admin/imports/${id}`).expect(200)).body).toMatchObject({ status: 'failed', error: 'Arquivo .zip inválido ou corrompido.' });
   });
+
+  it('Plataforma: o administrador escolhe o cliente e o arquivo entra no grupo dele, com o mesmo relatório', async () => {
+    const tag = randomInt(1e9);
+    const tenant = (await call('post', '/platform/tenants').send({
+      groupName: `Cliente importação ${tag}`, cnpj: randomCnpj(), legalName: 'Cliente Importação Ltda', tradeName: 'Cliente Importação',
+      branch: { name: 'Matriz', state: 'SP', city: 'Campinas' },
+      admin: { name: 'Dono do cliente', email: `dono-${tag}@cliente.test` },
+    }).expect(201)).body as { groupId: string };
+    const content = zip([['leia-me.txt', 'arquivo que não é nota']]);
+
+    // Quem não é administrador da plataforma não escolhe cliente; cliente que não existe é recusado.
+    expect(codeOf(await call('post', '/platform/imports', OPERATOR).send({ groupId: tenant.groupId, fileName: 'c.zip', size: content.length }).expect(403))).toBe('FA002');
+    expect(codeOf(await call('post', '/platform/imports').send({ groupId: '01900000-0000-7000-8000-000000000000', fileName: 'c.zip', size: content.length }).expect(404))).toBe('FA006');
+    expect(codeOf(await call('post', '/platform/imports').send({ fileName: 'c.zip', size: content.length }).expect(422))).toBe('FA005');
+
+    const { id } = (await call('post', '/platform/imports').send({ groupId: tenant.groupId, fileName: 'cliente.zip', size: content.length }).expect(201)).body as { id: string };
+    await call('put', `/platform/imports/${id}/parts/1`).set('Content-Type', 'application/octet-stream').send(content).expect(200);
+    await call('post', `/platform/imports/${id}/complete`).expect(200);
+    const service = app.get(ImportsService);
+    for (let i = 0; i < 20; i += 1) {
+      await service.tick();
+      if (((await call('get', `/platform/imports/${id}`).expect(200)).body as Json).status === 'done') break;
+    }
+    expect((await call('get', `/platform/imports/${id}`).expect(200)).body).toMatchObject({ status: 'done', totals: { entries: 1, ignored: 1 } });
+
+    // Aparece na lista do cliente, e não na do grupo de quem enviou; o operador não abre pela Plataforma.
+    expect(((await call('get', `/platform/imports?groupId=${tenant.groupId}`).expect(200)).body as Json[]).map((row) => row.id)).toContain(id);
+    expect(((await call('get', '/admin/imports').expect(200)).body as Json[]).map((row) => row.id)).not.toContain(id);
+    expect(codeOf(await call('get', `/admin/imports/${id}`).expect(404))).toBe('FA006');
+    expect(codeOf(await call('get', `/platform/imports/${id}`, OPERATOR).expect(403))).toBe('FA002');
+  });
 });
