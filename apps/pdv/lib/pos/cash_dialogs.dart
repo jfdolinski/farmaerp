@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../face/face_widgets.dart';
 import '../ui/caps.dart';
+import '../ui/pdv_window.dart';
 import '../ui/keys_hint.dart';
 import 'cash.dart';
 import 'focus_kit.dart';
@@ -150,123 +151,120 @@ class _CashMovementDialogState extends State<_CashMovementDialog> {
     final title = widget.withdrawal ? 'Sangria' : 'Suprimento';
     return ListenableBuilder(
       listenable: controller,
-      builder: (context, _) => AlertDialog(
+      builder: (context, _) => PdvWindow(
         key: const Key('cash-movement-dialog'),
-        title: Text(title),
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            // Folga entre os campos: o rótulo de cima não encosta no texto.
-            spacing: 10,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _dialogNotice(context, controller),
-              Text(widget.withdrawal
-                  ? 'Dinheiro que sai da gaveta (para o cofre ou o banco, ou para pagar uma devolução). Sai um comprovante para assinar.'
-                  : 'Troco que entra na gaveta. Sai um comprovante para assinar.'),
-              if (widget.withdrawal)
-                SegmentedButton<bool>(
-                  key: const Key('cash-kind'),
-                  segments: const [
-                    ButtonSegment(value: false, label: Text('Sangria comum')),
-                    ButtonSegment(value: true, label: Text('Devolução')),
-                  ],
-                  selected: {_forReturn},
-                  onSelectionChanged: _needsRelease
-                      ? null
-                      : (value) {
-                          setState(() {
-                            _forReturn = value.first;
-                            _refund = null;
-                            _amount.clear();
-                            _reason.clear();
-                          });
-                          WidgetsBinding.instance.addPostFrameCallback(
-                            (_) => (_forReturn ? _documentFocus : _amountFocus).requestFocus(),
-                          );
-                        },
-                ),
-              if (_forReturn)
-                TextField(
-                  key: const Key('cash-return-document'),
-                  controller: _document,
-                  focusNode: _documentFocus,
-                  autofocus: true,
-                  enabled: !_needsRelease,
-                  decoration: InputDecoration(
-                    labelText: 'Documento da devolução (por exemplo D3-000012)',
-                    helperText: _refund == null ? 'Leia ou digite o código do comprovante da devolução.' : null,
-                  ),
-                  onChanged: (_) => setState(() => _refund = null),
-                  onSubmitted: (_) => _findDocument(),
-                ),
-              NumberField(
-                key: const Key('cash-amount'),
-                controller: _amount,
-                focusNode: _amountFocus,
-                autofocus: !_forReturn,
-                decimal: true,
-                enabled: !_needsRelease && !_forReturn,
-                onSubmitted: (_) => _reasonFocus.requestFocus(),
-                inputFormatters: _moneyInput,
-                decoration: const InputDecoration(labelText: 'Valor (R\$)'),
+        title: title,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          // Folga entre os campos: o rótulo de cima não encosta no texto.
+          spacing: 10,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _dialogNotice(context, controller),
+            Text(widget.withdrawal
+                ? 'Dinheiro que sai da gaveta (para o cofre ou o banco, ou para pagar uma devolução). Sai um comprovante para assinar.'
+                : 'Troco que entra na gaveta. Sai um comprovante para assinar.'),
+            if (widget.withdrawal)
+              SegmentedButton<bool>(
+                key: const Key('cash-kind'),
+                segments: const [
+                  ButtonSegment(value: false, label: Text('Sangria comum')),
+                  ButtonSegment(value: true, label: Text('Devolução')),
+                ],
+                selected: {_forReturn},
+                onSelectionChanged: _needsRelease
+                    ? null
+                    : (value) {
+                        setState(() {
+                          _forReturn = value.first;
+                          _refund = null;
+                          _amount.clear();
+                          _reason.clear();
+                        });
+                        WidgetsBinding.instance.addPostFrameCallback(
+                          (_) => (_forReturn ? _documentFocus : _amountFocus).requestFocus(),
+                        );
+                      },
               ),
+            if (_forReturn)
               TextField(
-                key: const Key('cash-reason'),
-                controller: _reason,
-                focusNode: _reasonFocus,
-                onSubmitted: (_) => _confirm(),
-                enabled: !_needsRelease && !_forReturn,
-                maxLength: 500,
-                decoration: InputDecoration(labelText: widget.withdrawal ? 'Motivo (por exemplo, envelope do cofre)' : 'Motivo'),
+                key: const Key('cash-return-document'),
+                controller: _document,
+                focusNode: _documentFocus,
+                autofocus: true,
+                enabled: !_needsRelease,
+                decoration: InputDecoration(
+                  labelText: 'Documento da devolução (por exemplo D3-000012)',
+                  helperText: _refund == null ? 'Leia ou digite o código do comprovante da devolução.' : null,
+                ),
+                onChanged: (_) => setState(() => _refund = null),
+                onSubmitted: (_) => _findDocument(),
               ),
-              if (_needsRelease) ...[
-                Text(
-                  'Esta sangria passa do seu limite. Um supervisor libera com o código e o PIN; acima do limite dele, o gerente.',
-                  key: const Key('cash-release-hint'),
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        key: const Key('cash-release-code'),
-                        controller: _code,
-                        focusNode: _codeFocus,
-                        autofocus: true,
-                        onSubmitted: (_) => _pinFocus.requestFocus(),
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        decoration: const InputDecoration(labelText: 'Código de quem libera'),
-                      ),
+            NumberField(
+              key: const Key('cash-amount'),
+              controller: _amount,
+              focusNode: _amountFocus,
+              autofocus: !_forReturn,
+              decimal: true,
+              enabled: !_needsRelease && !_forReturn,
+              onSubmitted: (_) => _reasonFocus.requestFocus(),
+              inputFormatters: _moneyInput,
+              decoration: const InputDecoration(labelText: 'Valor (R\$)'),
+            ),
+            TextField(
+              key: const Key('cash-reason'),
+              controller: _reason,
+              focusNode: _reasonFocus,
+              onSubmitted: (_) => _confirm(),
+              enabled: !_needsRelease && !_forReturn,
+              maxLength: 500,
+              decoration: InputDecoration(labelText: widget.withdrawal ? 'Motivo (por exemplo, envelope do cofre)' : 'Motivo'),
+            ),
+            if (_needsRelease) ...[
+              Text(
+                'Esta sangria passa do seu limite. Um supervisor libera com o código e o PIN; acima do limite dele, o gerente.',
+                key: const Key('cash-release-hint'),
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      key: const Key('cash-release-code'),
+                      controller: _code,
+                      focusNode: _codeFocus,
+                      autofocus: true,
+                      onSubmitted: (_) => _pinFocus.requestFocus(),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: const InputDecoration(labelText: 'Código de quem libera'),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        key: const Key('cash-release-pin'),
-                        controller: _pin,
-                        focusNode: _pinFocus,
-                        obscureText: true,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
-                        decoration: const InputDecoration(labelText: 'PIN'),
-                        onSubmitted: (_) => _confirm(),
-                      ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      key: const Key('cash-release-pin'),
+                      controller: _pin,
+                      focusNode: _pinFocus,
+                      obscureText: true,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
+                      decoration: const InputDecoration(labelText: 'PIN'),
+                      onSubmitted: (_) => _confirm(),
                     ),
-                  ],
-                ),
-                FaceApproveButton(
-                  controller: widget.controller,
-                  onApproved: (code) {
-                    _code.text = code;
-                    _pin.clear();
-                    _confirm();
-                  },
-                ),
-              ],
+                  ),
+                ],
+              ),
+              FaceApproveButton(
+                controller: widget.controller,
+                onApproved: (code) {
+                  _code.text = code;
+                  _pin.clear();
+                  _confirm();
+                },
+              ),
             ],
-          ),
+          ],
         ),
         actions: [
           const KeysHint(),
@@ -336,50 +334,47 @@ class _CloseShiftDialogState extends State<_CloseShiftDialog> {
       builder: (context, _) {
         final counted = _counted;
         final missing = counted.values.any((value) => value == null);
-        return AlertDialog(
+        return PdvWindow(
           key: const Key('close-shift-dialog'),
-          title: const Text('Fechar o caixa'),
-          content: SizedBox(
-            width: 440,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                // Folga entre os campos: o rótulo de cima não encosta no texto.
-                spacing: 10,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _dialogNotice(context, controller),
-                  const Text(
-                    'Conte o dinheiro da gaveta (com o fundo de troco) e some os comprovantes de cartão e PIX. '
-                    'Informe o que contou: a conferência com o sistema é feita pela gerência. Sem movimento, informe 0.',
-                  ),
-                  for (final entry in countedMethods.entries)
-                    NumberField(
-                      key: Key('count-${entry.key}'),
-                      controller: _fields[entry.key]!,
-                      autofocus: entry.key == countedMethods.keys.first,
-                      decimal: true,
-                      enabled: !_confirming,
-                      inputFormatters: _moneyInput,
-                      decoration: InputDecoration(labelText: '${entry.value} (R\$)'),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                  TextField(
-                    key: const Key('count-note'),
-                    controller: _note,
+          title: 'Fechar o caixa',
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              // Folga entre os campos: o rótulo de cima não encosta no texto.
+              spacing: 10,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _dialogNotice(context, controller),
+                const Text(
+                  'Conte o dinheiro da gaveta (com o fundo de troco) e some os comprovantes de cartão e PIX. '
+                  'Informe o que contou: a conferência com o sistema é feita pela gerência. Sem movimento, informe 0.',
+                ),
+                for (final entry in countedMethods.entries)
+                  NumberField(
+                    key: Key('count-${entry.key}'),
+                    controller: _fields[entry.key]!,
+                    autofocus: entry.key == countedMethods.keys.first,
+                    decimal: true,
                     enabled: !_confirming,
-                    maxLength: 500,
-                    decoration: const InputDecoration(labelText: 'Observação (opcional)'),
+                    inputFormatters: _moneyInput,
+                    decoration: InputDecoration(labelText: '${entry.value} (R\$)'),
+                    onChanged: (_) => setState(() {}),
                   ),
-                  if (_confirming)
-                    Text(
-                      'Confira antes de fechar: ${countedMethods.entries.map((e) => '${e.value} ${formatCents(counted[e.key] ?? 0)}').join(' · ')}. '
-                      'Depois de fechado, o turno não reabre.',
-                      key: const Key('close-shift-confirm-text'),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                ],
-              ),
+                TextField(
+                  key: const Key('count-note'),
+                  controller: _note,
+                  enabled: !_confirming,
+                  maxLength: 500,
+                  decoration: const InputDecoration(labelText: 'Observação (opcional)'),
+                ),
+                if (_confirming)
+                  Text(
+                    'Confira antes de fechar: ${countedMethods.entries.map((e) => '${e.value} ${formatCents(counted[e.key] ?? 0)}').join(' · ')}. '
+                    'Depois de fechado, o turno não reabre.',
+                    key: const Key('close-shift-confirm-text'),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+              ],
             ),
           ),
           actions: [

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../face/face_widgets.dart';
 import '../ui/caps.dart';
+import '../ui/pdv_window.dart';
 import '../ui/keys_hint.dart';
 import 'cash_dialogs.dart';
 import 'focus_kit.dart';
@@ -155,161 +156,158 @@ class _ReturnDialogState extends State<_ReturnDialog> {
           final sold = _milli(item['quantity'] as num);
           preview += typed == remaining ? total - ((item['returned_amount'] as num) * 100).round() : (total * typed / sold).round();
         }
-        return AlertDialog(
+        return PdvWindow(
           key: const Key('return-dialog'),
-          title: const Text('Devolução'),
-          content: SizedBox(
-            width: 680,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                // Folga entre os campos: o rótulo de cima não encosta no texto.
-                spacing: 10,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (notice != null)
-                    Container(
-                      key: const Key('return-notice'),
-                      padding: const EdgeInsets.all(8),
-                      margin: const EdgeInsets.only(bottom: 8),
-                      color: Theme.of(context).colorScheme.errorContainer,
-                      child: Text('${notice.message} ${notice.action}'),
-                    ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          key: const Key('return-sale'),
-                          controller: _sale,
-                          focusNode: _saleFocus,
-                          autofocus: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Código da venda (no comprovante, por exemplo 3-000123)',
-                          ),
-                          onSubmitted: (_) => _search(),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      OutlinedButton(
-                        key: const Key('return-search'),
-                        onPressed: _searching ? null : _search,
-                        child: const Text('Buscar'),
-                      ),
-                    ],
+          title: 'Devolução',
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              // Folga entre os campos: o rótulo de cima não encosta no texto.
+              spacing: 10,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (notice != null)
+                  Container(
+                    key: const Key('return-notice'),
+                    padding: const EdgeInsets.all(8),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    color: Theme.of(context).colorScheme.errorContainer,
+                    child: Text('${notice.message} ${notice.action}'),
                   ),
-                  if (sale != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      'Venda ${sale['code']} · ${formatCents(((sale['total'] as num) * 100).round())}'
-                      '${sale['customer_name'] == null ? '' : ' · ${sale['customer_name']}'}',
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    if (sale['late'] == true)
-                      Text(
-                        'Fora do prazo de devolução da loja (${sale['return_days']} dias): precisa da liberação de outra pessoa.',
-                        key: const Key('return-late'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        key: const Key('return-sale'),
+                        controller: _sale,
+                        focusNode: _saleFocus,
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Código da venda (no comprovante, por exemplo 3-000123)',
+                        ),
+                        onSubmitted: (_) => _search(),
                       ),
-                    for (final item in _items)
-                      ListTile(
-                        key: Key('return-item-${item['line']}'),
-                        contentPadding: EdgeInsets.zero,
-                        title: Text('${item['line']} · ${item['product_code']} ${item['product_name']}'),
-                        subtitle: Text(item['controlled'] == true
-                            ? 'Controlado: a devolução é feita pelo farmacêutico, na manutenção do SNGPC.'
-                            : 'Vendido ${formatMilli(_milli(item['quantity'] as num))} · já voltou '
-                                '${formatMilli(_milli(item['returned_quantity'] as num))} · pode voltar ${formatMilli(_remaining(item))}'),
-                        trailing: SizedBox(
-                          width: 110,
-                          child: NumberField(
-                            key: Key('return-qty-${item['line']}'),
-                            controller: _quantities[item['id']]!,
-                            focusNode: _quantityFocus[item['id']],
-                            decimal: true,
-                            enabled: item['controlled'] != true && _remaining(item) > 0,
-                            decoration: const InputDecoration(labelText: 'Volta'),
-                            onChanged: (_) => setState(() {}),
-                          ),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton(
+                      key: const Key('return-search'),
+                      onPressed: _searching ? null : _search,
+                      child: const Text('Buscar'),
+                    ),
+                  ],
+                ),
+                if (sale != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Venda ${sale['code']} · ${formatCents(((sale['total'] as num) * 100).round())}'
+                    '${sale['customer_name'] == null ? '' : ' · ${sale['customer_name']}'}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  if (sale['late'] == true)
+                    Text(
+                      'Fora do prazo de devolução da loja (${sale['return_days']} dias): precisa da liberação de outra pessoa.',
+                      key: const Key('return-late'),
+                    ),
+                  for (final item in _items)
+                    ListTile(
+                      key: Key('return-item-${item['line']}'),
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('${item['line']} · ${item['product_code']} ${item['product_name']}'),
+                      subtitle: Text(item['controlled'] == true
+                          ? 'Controlado: a devolução é feita pelo farmacêutico, na manutenção do SNGPC.'
+                          : 'Vendido ${formatMilli(_milli(item['quantity'] as num))} · já voltou '
+                              '${formatMilli(_milli(item['returned_quantity'] as num))} · pode voltar ${formatMilli(_remaining(item))}'),
+                      trailing: SizedBox(
+                        width: 110,
+                        child: NumberField(
+                          key: Key('return-qty-${item['line']}'),
+                          controller: _quantities[item['id']]!,
+                          focusNode: _quantityFocus[item['id']],
+                          decimal: true,
+                          enabled: item['controlled'] != true && _remaining(item) > 0,
+                          decoration: const InputDecoration(labelText: 'Volta'),
+                          onChanged: (_) => setState(() {}),
                         ),
                       ),
-                    Text('Total da devolução: ${formatCents(preview)}', key: const Key('return-total')),
-                    TextField(
-                      key: const Key('return-reason'),
-                      controller: _reason,
-                      focusNode: _reasonFocus,
-                      maxLength: 500,
-                      decoration: const InputDecoration(labelText: 'Motivo (por exemplo, produto com defeito)'),
                     ),
-                    const Text('Para onde vai o valor?', style: TextStyle(fontWeight: FontWeight.bold)),
-                    RadioGroup<String>(
-                      groupValue: _destination,
-                      onChanged: (value) => setState(() => _destination = value ?? _destination),
-                      child: Column(
-                        children: [
-                          for (final entry in returnDestinationLabels.entries)
-                            if ((entry.key != 'agreement' || sale['has_agreement'] == true) &&
-                                (entry.key != 'store_credit' || sale['has_store_credit'] == true))
-                              RadioListTile<String>(
-                                key: Key('return-destination-${entry.key}'),
-                                value: entry.key,
-                                dense: true,
-                                title: Text(entry.value),
-                                subtitle: Text(switch (entry.key) {
-                                  'credit' => 'O cliente usa na próxima compra nesta loja.',
-                                  'agreement' => 'Abate na próxima fatura do convênio do cliente.',
-                                  'store_credit' => 'Abate o que o cliente deve no crediário.',
-                                  _ => 'Sai do caixa por uma sangria de devolução com o documento.',
-                                }),
-                              ),
-                        ],
-                      ),
+                  Text('Total da devolução: ${formatCents(preview)}', key: const Key('return-total')),
+                  TextField(
+                    key: const Key('return-reason'),
+                    controller: _reason,
+                    focusNode: _reasonFocus,
+                    maxLength: 500,
+                    decoration: const InputDecoration(labelText: 'Motivo (por exemplo, produto com defeito)'),
+                  ),
+                  const Text('Para onde vai o valor?', style: TextStyle(fontWeight: FontWeight.bold)),
+                  RadioGroup<String>(
+                    groupValue: _destination,
+                    onChanged: (value) => setState(() => _destination = value ?? _destination),
+                    child: Column(
+                      children: [
+                        for (final entry in returnDestinationLabels.entries)
+                          if ((entry.key != 'agreement' || sale['has_agreement'] == true) &&
+                              (entry.key != 'store_credit' || sale['has_store_credit'] == true))
+                            RadioListTile<String>(
+                              key: Key('return-destination-${entry.key}'),
+                              value: entry.key,
+                              dense: true,
+                              title: Text(entry.value),
+                              subtitle: Text(switch (entry.key) {
+                                'credit' => 'O cliente usa na próxima compra nesta loja.',
+                                'agreement' => 'Abate na próxima fatura do convênio do cliente.',
+                                'store_credit' => 'Abate o que o cliente deve no crediário.',
+                                _ => 'Sai do caixa por uma sangria de devolução com o documento.',
+                              }),
+                            ),
+                      ],
                     ),
-                    if (needsAuthorization) ...[
-                      Text(
-                        sale['late'] == true
-                            ? 'Liberação de outra pessoa com a permissão "Fazer devolução":'
-                            : 'Você não tem a permissão "Fazer devolução": chame quem tem para liberar.',
-                        key: const Key('return-authorization'),
-                      ),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              key: const Key('return-code'),
-                              controller: _code,
-                              focusNode: _codeFocus,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                              decoration: const InputDecoration(labelText: 'Código de quem libera'),
-                              onSubmitted: (_) => _pinFocus.requestFocus(),
-                            ),
+                  ),
+                  if (needsAuthorization) ...[
+                    Text(
+                      sale['late'] == true
+                          ? 'Liberação de outra pessoa com a permissão "Fazer devolução":'
+                          : 'Você não tem a permissão "Fazer devolução": chame quem tem para liberar.',
+                      key: const Key('return-authorization'),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            key: const Key('return-code'),
+                            controller: _code,
+                            focusNode: _codeFocus,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            decoration: const InputDecoration(labelText: 'Código de quem libera'),
+                            onSubmitted: (_) => _pinFocus.requestFocus(),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              key: const Key('return-pin'),
-                              controller: _pin,
-                              focusNode: _pinFocus,
-                              obscureText: true,
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
-                              decoration: const InputDecoration(labelText: 'PIN'),
-                              onSubmitted: (_) => _confirm(),
-                            ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            key: const Key('return-pin'),
+                            controller: _pin,
+                            focusNode: _pinFocus,
+                            obscureText: true,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
+                            decoration: const InputDecoration(labelText: 'PIN'),
+                            onSubmitted: (_) => _confirm(),
                           ),
-                        ],
-                      ),
-                      FaceApproveButton(
-                        controller: widget.controller,
-                        onApproved: (code) {
-                          _code.text = code;
-                          _pin.clear();
-                          _confirm();
-                        },
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
+                    FaceApproveButton(
+                      controller: widget.controller,
+                      onApproved: (code) {
+                        _code.text = code;
+                        _pin.clear();
+                        _confirm();
+                      },
+                    ),
                   ],
                 ],
-              ),
+              ],
             ),
           ),
           actions: [

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 
 import '../local/local_database.dart';
 import '../ui/caps.dart';
+import '../ui/pdv_window.dart';
 import '../ui/pdv_theme.dart';
 
 /// Tipo do terminal, com o nome, o ícone e o tom da cor base: orçamento claro, caixa médio e
@@ -189,89 +190,87 @@ Future<void> showDisplaySettings(BuildContext context, DisplaySettings settings)
     context: context,
     builder: (context) => ListenableBuilder(
       listenable: settings,
-      builder: (context, _) => AlertDialog(
+      builder: (context, _) => PdvWindow(
+      size: PdvWindowSize.compact,
         key: const Key('display-settings'),
-        title: const Text('Aparência do PDV'),
-        content: SizedBox(
-          width: 460,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                DropdownButtonFormField<double>(
-                  key: const Key('font-scale'),
-                  initialValue: settings.scale,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Tamanho'),
-                  items: [
-                    for (final scale in DisplaySettings.scales)
-                      DropdownMenuItem(value: scale, child: Text('${(scale * 100).round()}%${scale == 1.0 ? ' (padrão)' : ''}')),
-                  ],
-                  onChanged: (value) => settings.update(scale: value),
-                ),
-                DropdownButtonFormField<String>(
-                  key: const Key('font-family'),
-                  initialValue: settings.family,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Fonte'),
-                  items: [
-                    for (final entry in DisplaySettings.families.entries)
-                      DropdownMenuItem(value: entry.key, child: Text(entry.value)),
-                  ],
-                  onChanged: (value) => settings.update(family: value),
-                ),
-                SwitchListTile(
-                  key: const Key('font-bold'),
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Negrito'),
-                  value: settings.bold,
-                  onChanged: (value) => settings.update(bold: value),
-                ),
-                DropdownButtonFormField<String>(
-                  key: const Key('base-color'),
-                  initialValue: settings.color,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Cor base'),
-                  items: [
-                    for (final entry in DisplaySettings.colors.entries)
-                      DropdownMenuItem(
-                        value: entry.key,
-                        child: Row(
-                          children: [
-                            Icon(Icons.circle, color: entry.value.$2[600]),
-                            const SizedBox(width: 8),
-                            Text(entry.value.$1),
-                          ],
-                        ),
+        title: 'Aparência do PDV',
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DropdownButtonFormField<double>(
+                key: const Key('font-scale'),
+                initialValue: settings.scale,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Tamanho'),
+                items: [
+                  for (final scale in DisplaySettings.scales)
+                    DropdownMenuItem(value: scale, child: Text('${(scale * 100).round()}%${scale == 1.0 ? ' (padrão)' : ''}')),
+                ],
+                onChanged: (value) => settings.update(scale: value),
+              ),
+              DropdownButtonFormField<String>(
+                key: const Key('font-family'),
+                initialValue: settings.family,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Fonte'),
+                items: [
+                  for (final entry in DisplaySettings.families.entries)
+                    DropdownMenuItem(value: entry.key, child: Text(entry.value)),
+                ],
+                onChanged: (value) => settings.update(family: value),
+              ),
+              SwitchListTile(
+                key: const Key('font-bold'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Negrito'),
+                value: settings.bold,
+                onChanged: (value) => settings.update(bold: value),
+              ),
+              DropdownButtonFormField<String>(
+                key: const Key('base-color'),
+                initialValue: settings.color,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Cor base'),
+                items: [
+                  for (final entry in DisplaySettings.colors.entries)
+                    DropdownMenuItem(
+                      value: entry.key,
+                      child: Row(
+                        children: [
+                          Icon(Icons.circle, color: entry.value.$2[600]),
+                          const SizedBox(width: 8),
+                          Text(entry.value.$1),
+                        ],
                       ),
-                  ],
-                  onChanged: (value) => settings.update(color: value),
-                ),
-                const SizedBox(height: 12),
-                for (final kind in TerminalKind.values)
-                  Container(
-                    key: Key('tone-${kind.code}'),
-                    margin: const EdgeInsets.only(bottom: 4),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    color: DisplaySettings.toneOf(settings.color, kind),
-                    child: Row(
-                      children: [
-                        Icon(kind.icon, color: DisplaySettings.onTone(DisplaySettings.toneOf(settings.color, kind))),
-                        const SizedBox(width: 8),
-                        Text(
-                          kind.label,
-                          style: TextStyle(color: DisplaySettings.onTone(DisplaySettings.toneOf(settings.color, kind))),
-                        ),
-                      ],
                     ),
+                ],
+                onChanged: (value) => settings.update(color: value),
+              ),
+              const SizedBox(height: 12),
+              for (final kind in TerminalKind.values)
+                Container(
+                  key: Key('tone-${kind.code}'),
+                  margin: const EdgeInsets.only(bottom: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  color: DisplaySettings.toneOf(settings.color, kind),
+                  child: Row(
+                    children: [
+                      Icon(kind.icon, color: DisplaySettings.onTone(DisplaySettings.toneOf(settings.color, kind))),
+                      const SizedBox(width: 8),
+                      Text(
+                        kind.label,
+                        style: TextStyle(color: DisplaySettings.onTone(DisplaySettings.toneOf(settings.color, kind))),
+                      ),
+                    ],
                   ),
-                const SizedBox(height: 12),
-                const Text('Prévia: Dipirona Sódica 500 mg · R\$ 12,90', key: Key('font-preview')),
-                const SizedBox(height: 8),
-                const Text('Vale só para este terminal e fica guardado nele.'),
-              ],
-            ),
+                ),
+              const SizedBox(height: 12),
+              const Text('Prévia: Dipirona Sódica 500 mg · R\$ 12,90', key: Key('font-preview')),
+              const SizedBox(height: 8),
+              const Text('Vale só para este terminal e fica guardado nele.'),
+            ],
           ),
         ),
         actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Fechar'))],

@@ -5,6 +5,7 @@ import '../local/local_database.dart';
 import '../pos/pos_auth.dart';
 import '../pos/pos_controller.dart';
 import '../ui/caps.dart';
+import '../ui/pdv_window.dart';
 import 'face_reader.dart';
 import 'face_service.dart';
 
@@ -254,67 +255,65 @@ class _FaceEnrollmentDialogState extends State<_FaceEnrollmentDialog> {
   @override
   Widget build(BuildContext context) {
     final person = _person;
-    return AlertDialog(
+    return PdvWindow(
+      size: PdvWindowSize.compact,
       key: const Key('face-enrollment'),
-      title: const Text('Cadastrar rosto'),
-      content: SizedBox(
-        width: 480,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: switch (_step) {
-              _EnrollStep.authorize => [
-                const Text('Quem autoriza o cadastro (o gerente) digita o código e o PIN.'),
-                TextField(
-                  key: const Key('enroll-enroller-code'),
-                  controller: _enrollerCode,
-                  autofocus: true,
-                  decoration: const InputDecoration(labelText: 'Código de quem autoriza'),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                ),
-                TextField(
-                  key: const Key('enroll-enroller-pin'),
-                  controller: _enrollerPin,
-                  obscureText: true,
-                  decoration: const InputDecoration(labelText: 'PIN de quem autoriza'),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
-                ),
-                TextField(
-                  key: const Key('enroll-person-code'),
-                  controller: _personCode,
-                  decoration: const InputDecoration(labelText: 'Código da pessoa que vai cadastrar o rosto'),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  onSubmitted: (_) => _authorize(),
-                ),
-              ],
-              _EnrollStep.term => [
-                Text('Termo de consentimento: ${person!.name}', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                const Text(faceTermText, key: Key('face-term')),
-                const SizedBox(height: 8),
-                CheckboxListTile(
-                  key: const Key('face-term-agree'),
-                  contentPadding: EdgeInsets.zero,
-                  value: _agreed,
-                  onChanged: (value) => setState(() => _agreed = value ?? false),
-                  title: const Text('A pessoa leu o termo e concorda com o uso do rosto.'),
-                ),
-              ],
-              _EnrollStep.read => [
-                Text('Leitura do rosto: ${person!.name}', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                _CameraView(face: widget.face, message: _reader.message, failed: _reader.stage == FaceStage.failed),
-              ],
-              _EnrollStep.done => [
-                Text('Rosto de ${person!.name} cadastrado.', key: const Key('face-enrolled')),
-                const Text('Já vale neste terminal e chega aos outros PDVs da loja na próxima sincronização.'),
-              ],
-            },
-          ),
+      title: 'Cadastrar rosto',
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: switch (_step) {
+            _EnrollStep.authorize => [
+              const Text('Quem autoriza o cadastro (o gerente) digita o código e o PIN.'),
+              TextField(
+                key: const Key('enroll-enroller-code'),
+                controller: _enrollerCode,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: 'Código de quem autoriza'),
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              ),
+              TextField(
+                key: const Key('enroll-enroller-pin'),
+                controller: _enrollerPin,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'PIN de quem autoriza'),
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
+              ),
+              TextField(
+                key: const Key('enroll-person-code'),
+                controller: _personCode,
+                decoration: const InputDecoration(labelText: 'Código da pessoa que vai cadastrar o rosto'),
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                onSubmitted: (_) => _authorize(),
+              ),
+            ],
+            _EnrollStep.term => [
+              Text('Termo de consentimento: ${person!.name}', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              const Text(faceTermText, key: Key('face-term')),
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                key: const Key('face-term-agree'),
+                contentPadding: EdgeInsets.zero,
+                value: _agreed,
+                onChanged: (value) => setState(() => _agreed = value ?? false),
+                title: const Text('A pessoa leu o termo e concorda com o uso do rosto.'),
+              ),
+            ],
+            _EnrollStep.read => [
+              Text('Leitura do rosto: ${person!.name}', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              _CameraView(face: widget.face, message: _reader.message, failed: _reader.stage == FaceStage.failed),
+            ],
+            _EnrollStep.done => [
+              Text('Rosto de ${person!.name} cadastrado.', key: const Key('face-enrolled')),
+              const Text('Já vale neste terminal e chega aos outros PDVs da loja na próxima sincronização.'),
+            ],
+          },
         ),
       ),
       actions: [
@@ -432,13 +431,11 @@ class _FaceApprovalDialogState extends State<_FaceApprovalDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return PdvWindow(
+      size: PdvWindowSize.compact,
       key: const Key('face-approval'),
-      title: const Text('Liberar pela câmera'),
-      content: SizedBox(
-        width: 440,
-        child: _CameraView(face: widget.face, message: _error ?? _reader.message, failed: _error != null || _reader.stage == FaceStage.failed),
-      ),
+      title: 'Liberar pela câmera',
+      content: _CameraView(face: widget.face, message: _error ?? _reader.message, failed: _error != null || _reader.stage == FaceStage.failed),
       actions: [
         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
         if (!_reading)

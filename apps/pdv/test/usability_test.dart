@@ -554,9 +554,10 @@ void main() {
       await tester.tap(find.byKey(const Key('customer-history-open')));
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       await tester.pumpAndSettle();
-      // Tela toda: cartões com os números e tabelas com as compras e os produtos.
-      final screen = tester.getSize(find.byKey(const Key('customer-history')));
-      expect(screen, const Size(1500, 1000));
+      // Janela padrão (80% da tela): cartões com os números e tabelas com as compras e os produtos.
+      expect(find.byKey(const Key('customer-history')), findsOneWidget);
+      expect(tester.getSize(find.byKey(const Key('pdv-window-frame'))), const Size(1200, 800));
+      expect(findText('Extrato de ${controller.cart.customer!.name}'), findsOneWidget);
       final ticket = find.byKey(const Key('customer-history-ticket'));
       expect(find.descendant(of: ticket, matching: findText('Ticket médio (12 meses)')), findsOneWidget);
       expect(find.descendant(of: ticket, matching: findText('R\$ 45,00')), findsOneWidget);

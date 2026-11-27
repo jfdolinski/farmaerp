@@ -2,6 +2,7 @@ import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 
 import '../local/local_database.dart';
 import '../ui/caps.dart';
+import '../ui/pdv_window.dart';
 import 'money.dart';
 import 'pos_controller.dart';
 
@@ -17,15 +18,11 @@ Future<void> showProductInfo(BuildContext context, PosController controller, Sal
   final data = controller.database.productDetails(product.id);
   return showDialog<void>(
     context: context,
-    builder: (context) => AlertDialog(
+    builder: (context) => PdvWindow(
       key: const Key('product-info'),
-      title: Text('${product.code} · ${product.name}'),
-      content: SizedBox(
-        width: 520,
-        child: data == null
-            ? const Text('Este produto não está mais na cópia do terminal.')
-            : SingleChildScrollView(child: _Details(data: data)),
-      ),
+      title: product.name,
+      tags: ['Código ${product.code}'],
+      content: data == null ? const Text('Este produto não está mais na cópia do terminal.') : _Details(data: data),
       actions: [TextButton(autofocus: true, onPressed: () => Navigator.of(context).pop(), child: const Text('Fechar'))],
     ),
   );

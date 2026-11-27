@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../face/face_widgets.dart';
 import '../ui/caps.dart';
+import '../ui/pdv_window.dart';
 import '../ui/keys_hint.dart';
 import 'cash.dart';
 import 'credit.dart';
@@ -97,85 +98,82 @@ class _CreditReceiptDialogState extends State<_CreditReceiptDialog> {
     final customers = _customer == null ? controller.creditCustomers(_search.text) : const <({String id, String name, int code})>[];
     return ListenableBuilder(
       listenable: controller,
-      builder: (context, _) => AlertDialog(
+      builder: (context, _) => PdvWindow(
         key: const Key('credit-receipt-dialog'),
-        title: const Text('Receber crediário'),
-        content: SizedBox(
-          width: 520,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              // Folga entre os campos: o rótulo de cima não encosta no texto.
-              spacing: 10,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _notice(context, controller),
-                if (_customer == null) ...[
-                  const Text('Busque o cliente pelo nome ou pelo código. Aparecem os clientes com crediário neste terminal.'),
-                  TextField(
-                    key: const Key('credit-search'),
-                    controller: _search,
-                    autofocus: true,
-                    decoration: const InputDecoration(labelText: 'Cliente'),
-                    onChanged: (_) => setState(() {}),
+        title: 'Receber crediário',
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            // Folga entre os campos: o rótulo de cima não encosta no texto.
+            spacing: 10,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _notice(context, controller),
+              if (_customer == null) ...[
+                const Text('Busque o cliente pelo nome ou pelo código. Aparecem os clientes com crediário neste terminal.'),
+                TextField(
+                  key: const Key('credit-search'),
+                  controller: _search,
+                  autofocus: true,
+                  decoration: const InputDecoration(labelText: 'Cliente'),
+                  onChanged: (_) => setState(() {}),
+                ),
+                if (customers.isEmpty) const Text('Nenhum cliente com crediário encontrado.'),
+                for (final customer in customers)
+                  ListTile(
+                    key: Key('credit-customer-${customer.code}'),
+                    dense: true,
+                    title: Text(customer.name),
+                    subtitle: Text('Código ${customer.code}'),
+                    onTap: () => _choose(customer),
                   ),
-                  if (customers.isEmpty) const Text('Nenhum cliente com crediário encontrado.'),
-                  for (final customer in customers)
-                    ListTile(
-                      key: Key('credit-customer-${customer.code}'),
-                      dense: true,
-                      title: Text(customer.name),
-                      subtitle: Text('Código ${customer.code}'),
-                      onTap: () => _choose(customer),
-                    ),
-                ] else ...[
-                  Text('${_customer!.code} · ${_customer!.name}', style: Theme.of(context).textTheme.titleMedium),
-                  if (summary == null || summary.positions.isEmpty)
-                    const Text('Nada em aberto no crediário.')
-                  else ...[
-                    for (final item in summary.positions)
-                      Text(
-                        'Vence ${_brDay(item.state.dueDate)}: ${formatCents(item.position.principalCents)}'
-                        '${item.position.feeCents + item.position.interestCents > 0 ? ' + multa e juros ${formatCents(item.position.feeCents + item.position.interestCents)}' : ''}',
-                      ),
+              ] else ...[
+                Text('${_customer!.code} · ${_customer!.name}', style: Theme.of(context).textTheme.titleMedium),
+                if (summary == null || summary.positions.isEmpty)
+                  const Text('Nada em aberto no crediário.')
+                else ...[
+                  for (final item in summary.positions)
                     Text(
-                      'Total em aberto hoje: ${formatCents(summary.totalOpenCents)}',
-                      key: const Key('credit-total-open'),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      'Vence ${_brDay(item.state.dueDate)}: ${formatCents(item.position.principalCents)}'
+                      '${item.position.feeCents + item.position.interestCents > 0 ? ' + multa e juros ${formatCents(item.position.feeCents + item.position.interestCents)}' : ''}',
                     ),
-                  ],
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      for (final entry in countedMethods.entries)
-                        ChoiceChip(
-                          key: Key('credit-method-${entry.key}'),
-                          label: Text(entry.value),
-                          selected: _method == entry.key,
-                          onSelected: (_) => setState(() => _method = entry.key),
-                        ),
-                    ],
+                  Text(
+                    'Total em aberto hoje: ${formatCents(summary.totalOpenCents)}',
+                    key: const Key('credit-total-open'),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  NumberField(
-                    key: const Key('credit-amount'),
-                    controller: _amount,
-                    focusNode: _amountFocus,
-                    decimal: true,
-                    inputFormatters: _moneyInput,
-                    decoration: const InputDecoration(
-                      labelText: 'Valor recebido (R\$)',
-                      helperText: 'Abate primeiro multa e juros, depois a parcela mais antiga.',
-                    ),
-                    onSubmitted: (_) => _confirm(),
-                  ),
-                  if (_method == 'credit_card' || _method == 'debit_card') ...[
-                    TextField(controller: _brand, decoration: const InputDecoration(labelText: 'Bandeira (opcional)')),
-                    TextField(controller: _authorization, decoration: const InputDecoration(labelText: 'Autorização da maquininha (opcional)')),
+                ],
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final entry in countedMethods.entries)
+                      ChoiceChip(
+                        key: Key('credit-method-${entry.key}'),
+                        label: Text(entry.value),
+                        selected: _method == entry.key,
+                        onSelected: (_) => setState(() => _method = entry.key),
+                      ),
                   ],
+                ),
+                NumberField(
+                  key: const Key('credit-amount'),
+                  controller: _amount,
+                  focusNode: _amountFocus,
+                  decimal: true,
+                  inputFormatters: _moneyInput,
+                  decoration: const InputDecoration(
+                    labelText: 'Valor recebido (R\$)',
+                    helperText: 'Abate primeiro multa e juros, depois a parcela mais antiga.',
+                  ),
+                  onSubmitted: (_) => _confirm(),
+                ),
+                if (_method == 'credit_card' || _method == 'debit_card') ...[
+                  TextField(controller: _brand, decoration: const InputDecoration(labelText: 'Bandeira (opcional)')),
+                  TextField(controller: _authorization, decoration: const InputDecoration(labelText: 'Autorização da maquininha (opcional)')),
                 ],
               ],
-            ),
+            ],
           ),
         ),
         actions: [
@@ -244,65 +242,63 @@ class _CreditReleaseDialogState extends State<_CreditReleaseDialog> {
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: widget.controller,
-    builder: (context, _) => AlertDialog(
+    builder: (context, _) => PdvWindow(
+      size: PdvWindowSize.compact,
       key: const Key('credit-release-dialog'),
-      title: const Text('Liberar o crediário'),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          // Folga entre os campos: o rótulo de cima não encosta no texto.
-          spacing: 10,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _notice(context, widget.controller),
-            Text(
-              '${formatCents(widget.amountCents)} no crediário passa do seu limite. Outra pessoa com limite maior libera com o código e o PIN.',
-            ),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    key: const Key('credit-release-code'),
-                    controller: _code,
-                    autofocus: true,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: const InputDecoration(labelText: 'Código de quem libera'),
-                    onSubmitted: (_) => _pinFocus.requestFocus(),
-                  ),
+      title: 'Liberar o crediário',
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        // Folga entre os campos: o rótulo de cima não encosta no texto.
+        spacing: 10,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _notice(context, widget.controller),
+          Text(
+            '${formatCents(widget.amountCents)} no crediário passa do seu limite. Outra pessoa com limite maior libera com o código e o PIN.',
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  key: const Key('credit-release-code'),
+                  controller: _code,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: const InputDecoration(labelText: 'Código de quem libera'),
+                  onSubmitted: (_) => _pinFocus.requestFocus(),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    key: const Key('credit-release-pin'),
-                    controller: _pin,
-                    focusNode: _pinFocus,
-                    obscureText: true,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
-                    decoration: const InputDecoration(labelText: 'PIN'),
-                    onSubmitted: (_) => _confirm(),
-                  ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  key: const Key('credit-release-pin'),
+                  controller: _pin,
+                  focusNode: _pinFocus,
+                  obscureText: true,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
+                  decoration: const InputDecoration(labelText: 'PIN'),
+                  onSubmitted: (_) => _confirm(),
                 ),
-              ],
-            ),
-            TextField(
-              key: const Key('credit-release-reason'),
-              controller: _reason,
-              maxLength: 500,
-              decoration: const InputDecoration(labelText: 'Motivo (opcional)'),
-            ),
-            FaceApproveButton(
-              controller: widget.controller,
-              onApproved: (code) {
-                _code.text = code;
-                _pin.clear();
-                _confirm();
-              },
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+          TextField(
+            key: const Key('credit-release-reason'),
+            controller: _reason,
+            maxLength: 500,
+            decoration: const InputDecoration(labelText: 'Motivo (opcional)'),
+          ),
+          FaceApproveButton(
+            controller: widget.controller,
+            onApproved: (code) {
+              _code.text = code;
+              _pin.clear();
+              _confirm();
+            },
+          ),
+        ],
       ),
       actions: [
         const KeysHint(),

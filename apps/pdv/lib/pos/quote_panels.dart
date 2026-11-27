@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../face/face_widgets.dart';
 import '../ui/caps.dart';
+import '../ui/pdv_window.dart';
 import '../ui/pdv_theme.dart';
 import 'focus_kit.dart';
 import 'money.dart';
@@ -407,122 +408,119 @@ class _QuoteLookupDialogState extends State<_QuoteLookupDialog> {
       builder: (context, _) {
         final notice = controller.notice;
         final pending = _filtered;
-        return AlertDialog(
+        return PdvWindow(
           key: const Key('quote-lookup'),
-          title: const Text('Puxar orçamento'),
-          content: SizedBox(
-            width: 620,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (notice != null)
-                  Container(
-                    key: const Key('quote-lookup-notice'),
-                    padding: const EdgeInsets.all(8),
-                    margin: const EdgeInsets.only(bottom: 8),
-                    color: Theme.of(context).colorScheme.errorContainer,
-                    child: Text('${notice.message} ${notice.action}'),
-                  ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: SuggestionKeys(
-                        onMove: (step) {
-                          if (pending.isEmpty) return;
-                          setState(() => _highlight = (_highlight + step).clamp(0, pending.length - 1));
-                        },
-                        onClose: () => Navigator.of(context).pop(),
-                        child: TextField(
-                          key: const Key('quote-key'),
-                          controller: _key,
-                          autofocus: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Plaquinha, código do cupom, vendedor ou cliente',
-                            helperText: 'A lista filtra enquanto digita; Enter puxa o marcado.',
-                          ),
-                          onChanged: (_) => setState(() => _highlight = 0),
-                          onSubmitted: (_) => _submit(),
+          title: 'Puxar orçamento',
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (notice != null)
+                Container(
+                  key: const Key('quote-lookup-notice'),
+                  padding: const EdgeInsets.all(8),
+                  margin: const EdgeInsets.only(bottom: 8),
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  child: Text('${notice.message} ${notice.action}'),
+                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: SuggestionKeys(
+                      onMove: (step) {
+                        if (pending.isEmpty) return;
+                        setState(() => _highlight = (_highlight + step).clamp(0, pending.length - 1));
+                      },
+                      onClose: () => Navigator.of(context).pop(),
+                      child: TextField(
+                        key: const Key('quote-key'),
+                        controller: _key,
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Plaquinha, código do cupom, vendedor ou cliente',
+                          helperText: 'A lista filtra enquanto digita; Enter puxa o marcado.',
                         ),
+                        onChanged: (_) => setState(() => _highlight = 0),
+                        onSubmitted: (_) => _submit(),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      key: const Key('quote-load'),
-                      onPressed: controller.busy ? null : _submit,
-                      child: const Text('Puxar'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _selected.isEmpty
-                            ? 'Para juntar orçamentos numa venda, marque dois ou mais na lista.'
-                            : 'Marcados: ${_selected.join(', ')}. O cliente é o do primeiro marcado que tiver cliente.',
-                        key: const Key('quote-merge-hint'),
-                      ),
-                    ),
-                    OutlinedButton(
-                      key: const Key('quote-merge'),
-                      onPressed: controller.busy || _selected.length < 2 ? null : _merge,
-                      child: Text('Juntar selecionados (${_selected.length})'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text('Pendentes da loja', style: Theme.of(context).textTheme.titleSmall),
-                if (_loading) const Padding(padding: EdgeInsets.all(8), child: LinearProgressIndicator()),
-                if (!_loading && _pending != null && pending.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: Text(_key.text.trim().isEmpty ? 'Nenhum orçamento aberto.' : 'Nenhum pendente combina com o que foi digitado.'),
                   ),
-                if (!_loading && _pending == null)
-                  const Padding(padding: EdgeInsets.all(8), child: Text('Sem a lista agora: busque pela plaquinha ou pelo cupom.')),
-                if (pending.isNotEmpty)
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 320),
-                    child: ListView(
-                      shrinkWrap: true,
-                      children: [
-                        for (final (index, quote) in pending.indexed)
-                          ListTile(
-                            key: Key('quote-${quote['code']}'),
-                            selected: index == _highlight,
-                            selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
-                            leading: Text(quote['card_number'] == null ? '—' : '${quote['card_number']}',
-                                style: Theme.of(context).textTheme.titleLarge),
-                            title: Text('${quote['code']} · ${formatCents(((quote['total'] as num) * 100).round())}'),
-                            subtitle: Text([
-                              'Vendedor: ${quote['seller_name']}',
-                              if (quote['customer_name'] != null) 'Cliente: ${quote['customer_name']}',
-                              '${quote['item_count']} ${quote['item_count'] == 1 ? 'item' : 'itens'}',
-                              _time(quote['quoted_at'] as String?),
-                            ].join(' · ')),
-                            onTap: controller.busy ? null : () => _load(quote['code'] as String),
-                            trailing: Checkbox(
-                              key: Key('quote-pick-${quote['code']}'),
-                              value: _selected.contains(quote['code']),
-                              onChanged: controller.busy
-                                  ? null
-                                  : (value) => setState(() {
-                                      final code = quote['code'] as String;
-                                      if (value ?? false) {
-                                        if (!_selected.contains(code)) _selected.add(code);
-                                      } else {
-                                        _selected.remove(code);
-                                      }
-                                    }),
-                            ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    key: const Key('quote-load'),
+                    onPressed: controller.busy ? null : _submit,
+                    child: const Text('Puxar'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _selected.isEmpty
+                          ? 'Para juntar orçamentos numa venda, marque dois ou mais na lista.'
+                          : 'Marcados: ${_selected.join(', ')}. O cliente é o do primeiro marcado que tiver cliente.',
+                      key: const Key('quote-merge-hint'),
+                    ),
+                  ),
+                  OutlinedButton(
+                    key: const Key('quote-merge'),
+                    onPressed: controller.busy || _selected.length < 2 ? null : _merge,
+                    child: Text('Juntar selecionados (${_selected.length})'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text('Pendentes da loja', style: Theme.of(context).textTheme.titleSmall),
+              if (_loading) const Padding(padding: EdgeInsets.all(8), child: LinearProgressIndicator()),
+              if (!_loading && _pending != null && pending.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Text(_key.text.trim().isEmpty ? 'Nenhum orçamento aberto.' : 'Nenhum pendente combina com o que foi digitado.'),
+                ),
+              if (!_loading && _pending == null)
+                const Padding(padding: EdgeInsets.all(8), child: Text('Sem a lista agora: busque pela plaquinha ou pelo cupom.')),
+              if (pending.isNotEmpty)
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 320),
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [
+                      for (final (index, quote) in pending.indexed)
+                        ListTile(
+                          key: Key('quote-${quote['code']}'),
+                          selected: index == _highlight,
+                          selectedTileColor: Theme.of(context).colorScheme.secondaryContainer,
+                          leading: Text(quote['card_number'] == null ? '—' : '${quote['card_number']}',
+                              style: Theme.of(context).textTheme.titleLarge),
+                          title: Text('${quote['code']} · ${formatCents(((quote['total'] as num) * 100).round())}'),
+                          subtitle: Text([
+                            'Vendedor: ${quote['seller_name']}',
+                            if (quote['customer_name'] != null) 'Cliente: ${quote['customer_name']}',
+                            '${quote['item_count']} ${quote['item_count'] == 1 ? 'item' : 'itens'}',
+                            _time(quote['quoted_at'] as String?),
+                          ].join(' · ')),
+                          onTap: controller.busy ? null : () => _load(quote['code'] as String),
+                          trailing: Checkbox(
+                            key: Key('quote-pick-${quote['code']}'),
+                            value: _selected.contains(quote['code']),
+                            onChanged: controller.busy
+                                ? null
+                                : (value) => setState(() {
+                                    final code = quote['code'] as String;
+                                    if (value ?? false) {
+                                      if (!_selected.contains(code)) _selected.add(code);
+                                    } else {
+                                      _selected.remove(code);
+                                    }
+                                  }),
                           ),
-                      ],
-                    ),
+                        ),
+                    ],
                   ),
-              ],
-            ),
+                ),
+            ],
           ),
           actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Fechar'))],
         );
