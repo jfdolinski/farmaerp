@@ -146,6 +146,33 @@ describe('notas de compra contra o banco real', () => {
     expect(codeOf(await call('post', `/admin/purchase-invoices/${id}/reverse`).send({ reason: 'de novo' }).expect(409))).toBe('FA939');
   });
 
+  it('altera o fracionamento da nota lançada e cancela; o operador não faz nenhum dos dois', async () => {
+    const nfe = buildNfe({ destCnpj: CENTRO_CNPJ, items: [{ code: `P-${randomInt(1e9)}`, ean: testGtin(), quantity: '2.0000', value: '20.00', description: 'ITEM PARA CANCELAR' }] });
+    const id = ((await send(nfe.xml).expect(201)).body as Json).id as string;
+    const [item] = ((await call('get', `/admin/purchase-invoices/${id}`).expect(200)).body as Json).items as Json[];
+    await call('post', `/admin/purchase-invoice-items/${item.id}/duplicate`).send({ sourceProductId: DIPIRONA }).expect(201);
+    await call('post', `/admin/purchase-invoices/${id}/post`).expect(200);
+
+    expect(codeOf(await call('post', `/admin/purchase-invoice-items/${item.id}/fraction`).send({ fraction: '5', reason: 'x' }).expect(422))).toBe('FA005');
+    expect(codeOf(await call('post', `/admin/purchase-invoice-items/${item.id}/fraction`).send({ fraction: 5 }).expect(422))).toBe('FA302');
+    expect(codeOf(await call('post', `/admin/purchase-invoice-items/${item.id}/fraction`, OPERATOR).send({ fraction: 5, reason: 'x' }).expect(403))).toBe('FA002');
+    await call('post', `/admin/purchase-invoice-items/${item.id}/fraction`).send({ fraction: 5, reason: 'Caixa com 5' }).expect(200);
+    const changed = (await call('get', `/admin/purchase-invoices/${id}`).expect(200)).body as Json;
+    expect(changed).toMatchObject({ can_cancel: true, can_negative_stock: true, cancel_reason: null, cancelled_by_name: null });
+    expect(changed.items[0]).toMatchObject({ fraction: '5.000', stock_quantity: '10.000' });
+    expect(changed.items[0].posting).toMatchObject({ fraction: '5.000', stock_quantity: '10.000', unit_cost: '2.000000' });
+    expect(changed.audit[0]).toMatchObject({ kind: 'fraction_changed', detail: expect.objectContaining({ from: 1, to: 5 }) });
+
+    expect(codeOf(await call('post', `/admin/purchase-invoices/${id}/cancel`, OPERATOR).send({ reason: 'x' }).expect(403))).toBe('FA002');
+    expect(codeOf(await call('post', `/admin/purchase-invoices/${id}/cancel`).send({}).expect(422))).toBe('FA302');
+    await call('post', `/admin/purchase-invoices/${id}/cancel`).send({ reason: 'Mercadoria não veio' }).expect(200);
+    const cancelled = (await call('get', `/admin/purchase-invoices/${id}`).expect(200)).body as Json;
+    expect(cancelled).toMatchObject({ status: 'cancelled', cancel_reason: 'Mercadoria não veio', cancelled_by_name: expect.any(String), cancelled_at: null });
+    expect(cancelled.events.map((event: Json) => event.kind)).toEqual(['posted', 'cancelled']);
+    expect(codeOf(await call('post', `/admin/purchase-invoices/${id}/cancel`).send({ reason: 'de novo' }).expect(409))).toBe('FA764');
+    expect(codeOf(await call('post', `/admin/purchase-invoices/${randomUUID()}/cancel`).send({ reason: 'x' }).expect(404))).toBe('FA006');
+  });
+
   it('identificadores e filtros inválidos', async () => {
     await call('get', '/admin/purchase-invoices?status=x').expect(422);
     await call('get', '/admin/purchase-invoices?status=posted').expect(200);

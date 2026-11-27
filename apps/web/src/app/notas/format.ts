@@ -4,7 +4,7 @@ export const STATUS_LABELS: Record<string, string> = {
   review: "Em conferência",
   not_postable: "Não vai para o estoque",
   posted: "Lançada no estoque",
-  cancelled: "Cancelada pelo emitente",
+  cancelled: "Cancelada",
 };
 
 /** Confirmação pela Sefaz: o resumo da assinatura bate com o que a Sefaz autorizou. */

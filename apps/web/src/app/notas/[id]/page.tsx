@@ -19,7 +19,7 @@ import {
   STATUS_LABELS,
   CONFIRMATION_LABELS,
 } from "../format";
-import { BatchForm, DiscardForm, ItemActions, PostForm, ReleaseCostForm, ReverseForm } from "../ui";
+import { BatchForm, CancelForm, DiscardForm, FractionForm, ItemActions, PostForm, ReleaseCostForm, ReverseForm } from "../ui";
 import {
   AuditEntry,
   AuditSection,
@@ -49,7 +49,7 @@ interface Posting {
 }
 
 interface InvoiceEvent {
-  kind: "posted" | "reversed";
+  kind: "posted" | "reversed" | "cancelled";
   reason: string | null;
   created_at: string;
   user_name: string | null;
@@ -112,6 +112,10 @@ interface InvoiceDetail {
   can_manage: boolean;
   can_post: boolean;
   can_override_cost: boolean;
+  can_cancel: boolean;
+  can_negative_stock: boolean;
+  cancel_reason: string | null;
+  cancelled_by_name: string | null;
   source: string;
   confirmation: string;
   confirmation_required: boolean;
@@ -222,12 +226,17 @@ async function InvoiceContent({ params }: { params: Params }) {
           <ul className={`${styles.hint} ${styles.bullets}`}>
             {invoice.events.map((event) => (
               <li key={`${event.kind}-${event.created_at}`}>
-                {event.kind === "posted" ? "Lançada" : "Estornada"} por {event.user_name ?? "usuário"} em{" "}
+                {EVENT_LABELS[event.kind]} por {event.user_name ?? "usuário"} em{" "}
                 {dateTimeText(event.created_at)}
                 {event.reason && `: ${event.reason}`}
               </li>
             ))}
           </ul>
+        )}
+        {invoice.cancelled_by_name && (
+          <p className={styles.warning} role="status">
+            Cancelada por {invoice.cancelled_by_name}: {invoice.cancel_reason}. A nota fica guardada e o mesmo XML não entra de novo.
+          </p>
         )}
         {invoice.cancelled_at && (
           <p className={styles.warning} role="alert">
@@ -330,8 +339,8 @@ async function InvoiceContent({ params }: { params: Params }) {
               </p>
             )}
             <ItemTaxes det={itemContent(invoice.content, item.item_number)} />
-            {item.posting && <CostLine posting={item.posting} />}
-            {item.posting && <BatchLine item={item} />}
+            {item.posting && invoice.status !== "cancelled" && <CostLine posting={item.posting} />}
+            {item.posting && invoice.status !== "cancelled" && <BatchLine item={item} />}
             {reviewing && item.posting?.batch_required && (
               <BatchForm
                 itemId={item.id}
@@ -343,6 +352,16 @@ async function InvoiceContent({ params }: { params: Params }) {
             )}
             {invoice.status === "review" && invoice.can_override_cost && item.posting?.cost_status === "locked" && (
               <ReleaseCostForm itemId={item.id} invoiceId={invoice.id} />
+            )}
+            {invoice.status === "posted" && invoice.can_post && item.product_id && item.fraction && (
+              <FractionForm
+                itemId={item.id}
+                invoiceId={invoice.id}
+                unit={item.unit}
+                quantity={item.quantity}
+                fraction={item.fraction}
+                canNegative={invoice.can_negative_stock}
+              />
             )}
             {reviewing && <ItemActions item={item} invoiceId={invoice.id} />}
           </div>
@@ -373,11 +392,17 @@ async function InvoiceContent({ params }: { params: Params }) {
 
       {invoice.status === "posted" && invoice.can_post && (
         <section className={styles.card}>
-          <ReverseForm invoiceId={invoice.id} />
+          <ReverseForm invoiceId={invoice.id} canNegative={invoice.can_negative_stock} />
         </section>
       )}
 
-      {invoice.can_manage && invoice.status !== "posted" && (
+      {invoice.can_cancel && invoice.status !== "cancelled" && (
+        <section className={styles.card}>
+          <CancelForm invoiceId={invoice.id} posted={invoice.status === "posted"} canNegative={invoice.can_negative_stock} />
+        </section>
+      )}
+
+      {invoice.can_manage && invoice.status !== "posted" && !invoice.cancelled_by_name && (
         <section className={styles.card}>
           <DiscardForm invoiceId={invoice.id} />
         </section>
@@ -385,6 +410,12 @@ async function InvoiceContent({ params }: { params: Params }) {
     </>
   );
 }
+
+const EVENT_LABELS: Record<InvoiceEvent["kind"], string> = {
+  posted: "Lançada",
+  reversed: "Estornada",
+  cancelled: "Cancelada",
+};
 
 const BATCH_PROBLEMS: Record<string, string> = {
   missing: "Este produto exige lote nesta filial: informe os lotes do item.",

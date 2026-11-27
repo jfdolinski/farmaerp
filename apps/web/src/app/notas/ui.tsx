@@ -8,6 +8,8 @@ import type { CatalogRow } from "../produtos/catalog-results";
 import { keepValues } from "../produtos/ui";
 import styles from "../terminais/page.module.css";
 import {
+  cancelInvoice,
+  changeItemFraction,
   discardInvoice,
   giveAwareness,
   importXml,
@@ -348,7 +350,7 @@ export function PostForm({ invoiceId, blockers }: { invoiceId: string; blockers:
   );
 }
 
-export function ReverseForm({ invoiceId }: { invoiceId: string }) {
+export function ReverseForm({ invoiceId, canNegative }: { invoiceId: string; canNegative: boolean }) {
   const [state, action, pending] = useActionState<ItemFormState, FormData>(reverseInvoice, {});
   return (
     <details className={styles.reason}>
@@ -360,12 +362,103 @@ export function ReverseForm({ invoiceId }: { invoiceId: string }) {
           <input name="reason" required maxLength={500} size={40} />
         </label>
         <p className={styles.hint}>
-          Tira do estoque tudo o que esta nota pôs e refaz o custo médio. Se parte do que entrou já foi vendida ou
-          baixada, o estorno não é possível. A nota volta para a conferência.
+          Tira do estoque tudo o que esta nota pôs e refaz o custo médio. A nota volta para a conferência.{" "}
+          <NegativeHint canNegative={canNegative} />
         </p>
         <div>
           <button type="submit" className={styles.danger} disabled={pending}>
             Estornar
+          </button>
+        </div>
+        <Notice state={state} />
+      </form>
+    </details>
+  );
+}
+
+/** O que acontece quando parte do que a nota pôs no estoque já saiu. */
+function NegativeHint({ canNegative }: { canNegative: boolean }) {
+  return canNegative
+    ? "Se parte do que entrou já foi vendida ou baixada, o estoque fica negativo e o seu nome fica registrado."
+    : "Se parte do que entrou já foi vendida ou baixada, só quem pode deixar o estoque negativo consegue fazer isso.";
+}
+
+/** Cancela a nota. Lançada, sai do estoque; a nota fica guardada como cancelada e não volta para a conferência. */
+export function CancelForm({ invoiceId, posted, canNegative }: { invoiceId: string; posted: boolean; canNegative: boolean }) {
+  const [state, action, pending] = useActionState<ItemFormState, FormData>(cancelInvoice, {});
+  return (
+    <details className={styles.reason}>
+      <summary>Cancelar esta nota</summary>
+      <form action={action} onSubmit={keepValues(action)} className={styles.stack}>
+        <input type="hidden" name="id" value={invoiceId} />
+        <label>
+          Motivo
+          <input name="reason" required maxLength={500} size={40} />
+        </label>
+        <p className={styles.hint}>
+          {posted
+            ? "Tira do estoque tudo o que esta nota pôs e refaz o custo médio. "
+            : "A nota deixa de poder ser lançada. "}
+          A nota continua na lista como cancelada, com o motivo, e o mesmo XML não entra de novo.{" "}
+          {posted && <NegativeHint canNegative={canNegative} />}
+        </p>
+        <div>
+          <button type="submit" className={styles.danger} disabled={pending}>
+            Cancelar nota
+          </button>
+        </div>
+        <Notice state={state} />
+      </form>
+    </details>
+  );
+}
+
+/** Novo fracionamento de um item da nota lançada: o estoque, o custo e o vínculo com o fornecedor acompanham. */
+export function FractionForm({
+  itemId,
+  invoiceId,
+  unit,
+  quantity,
+  fraction,
+  canNegative,
+}: {
+  itemId: string;
+  invoiceId: string;
+  unit: string;
+  quantity: string;
+  fraction: string;
+  canNegative: boolean;
+}) {
+  const [state, action, pending] = useActionState<ItemFormState, FormData>(changeItemFraction, {});
+  const [value, setValue] = useState("");
+  const parsed = Number(value.replace(",", "."));
+  const preview = value !== "" && Number.isFinite(parsed) && parsed > 0 ? Math.round(Number(quantity) * parsed * 1000) / 1000 : null;
+  return (
+    <details className={styles.reason}>
+      <summary>Alterar fracionamento</summary>
+      <form action={action} onSubmit={keepValues(action)} className={styles.stack}>
+        <input type="hidden" name="itemId" value={itemId} />
+        <input type="hidden" name="invoiceId" value={invoiceId} />
+        <label>
+          Unidades por {unit} (hoje {fraction.replace(".", ",").replace(/,?0+$/, "")})
+          <input name="fraction" required inputMode="decimal" size={10} value={value} onChange={(event) => setValue(event.target.value)} />
+        </label>
+        {preview !== null && (
+          <p className={styles.hint} role="status">
+            O item passa a pôr {String(preview).replace(".", ",")} unidades no estoque.
+          </p>
+        )}
+        <label>
+          Motivo
+          <input name="reason" required maxLength={500} size={40} />
+        </label>
+        <p className={styles.hint}>
+          A diferença entra ou sai do estoque nos mesmos lotes, o custo do item e o custo médio são refeitos, e as
+          próximas notas deste fornecedor já vêm com o novo fracionamento. <NegativeHint canNegative={canNegative} />
+        </p>
+        <div>
+          <button type="submit" disabled={pending}>
+            Alterar fracionamento
           </button>
         </div>
         <Notice state={state} />

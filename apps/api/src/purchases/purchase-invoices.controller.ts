@@ -126,13 +126,17 @@ export class PurchaseInvoicesController {
                 i.operation_type, i.purpose, i.products_total, i.discount_total, i.freight_total, i.insurance_total,
                 i.other_total, i.ipi_total, i.st_total, i.invoice_total, i.status, i.not_postable_reason, i.created_at,
                 i.source, i.confirmation, i.confirmation_required, i.confirmed_at, i.confirmation_message, i.cancelled_at,
+                i.cancel_reason, cu.name AS cancelled_by_name,
                 u.name AS author, app.has_permission('purchases.manage', i.branch_id) AS can_manage,
                 app.has_permission('purchases.post', i.branch_id) AS can_post,
+                app.has_permission('purchases.cancel', i.branch_id) AS can_cancel,
+                app.has_permission('purchases.negative_stock', i.branch_id) AS can_negative_stock,
                 app.has_permission('purchases.cost_override', i.branch_id) AS can_override_cost
            FROM v_purchase_invoice i
            JOIN v_branch b ON b.id = i.branch_id
            LEFT JOIN v_supplier s ON s.id = i.supplier_id
            LEFT JOIN v_user_account u ON u.id = i.updated_by
+           LEFT JOIN v_user_account cu ON cu.id = i.cancelled_by
           WHERE i.id = $1`,
         [invoiceId],
       );
@@ -193,6 +197,33 @@ export class PurchaseInvoicesController {
     const reason = optionalText(asBody(rawBody), 'reason', 500);
     await this.database.withContext((client) =>
       client.query('SELECT app.reverse_purchase_invoice($1, $2)', [invoiceId, reason]),
+    );
+    return { status: 'ok' };
+  }
+
+  /** Cancela a nota: lançada, sai do estoque; fica guardada como cancelada. */
+  @Post('purchase-invoices/:id/cancel')
+  @HttpCode(200)
+  async cancel(@Param('id') id: string, @RequestBody() rawBody: unknown) {
+    const invoiceId = requireUuid(id);
+    const reason = optionalText(asBody(rawBody), 'reason', 500);
+    await this.database.withContext((client) =>
+      client.query('SELECT app.cancel_purchase_invoice($1, $2)', [invoiceId, reason]),
+    );
+    return { status: 'ok' };
+  }
+
+  /** Novo fracionamento de um item da nota lançada: o banco acerta estoque, custo e vínculo. */
+  @Post('purchase-invoice-items/:id/fraction')
+  @HttpCode(200)
+  async changeFraction(@Param('id') id: string, @RequestBody() rawBody: unknown) {
+    const itemId = requireUuid(id);
+    const body = asBody(rawBody);
+    const fraction = body.fraction;
+    if (typeof fraction !== 'number' || !Number.isFinite(fraction)) throw new AppError('FA005');
+    const reason = optionalText(body, 'reason', 500);
+    await this.database.withContext((client) =>
+      client.query('SELECT app.change_purchase_item_fraction($1, $2, $3)', [itemId, fraction, reason]),
     );
     return { status: 'ok' };
   }

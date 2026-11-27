@@ -595,14 +595,22 @@ describe('estorno', () => {
     });
   });
 
-  it('se parte do que entrou já saiu, recusa', async () => {
+  it('se parte do que entrou já saiu, só quem pode deixar negativo estorna', async () => {
     await asUser(a.admin.id, async (client) => {
       const prod = await product(client);
       const id = await invoiceFor(client, prod, { quantity: '10', productsValue: '100.00' });
       await post(client, id);
       await loss(client, prod, 1);
-      await expectCode(client, () => reverse(client, id), 'FA801');
+      await client.query(`SELECT set_config('app.user_id', $1, true)`, [manager.id]);
+      await expectCode(client, () => reverse(client, id), 'FA763');
       expect(await statusOf(client, id)).toBe('posted');
+      await client.query(`SELECT set_config('app.user_id', $1, true)`, [a.admin.id]);
+      await reverse(client, id);
+      expect(await stockOf(client, prod.id)).toBe('-1.000');
+      const { rows } = await client.query(
+        'SELECT negative_allowed_by FROM v_stock_movement WHERE product_id = $1 AND reversal_of IS NOT NULL', [prod.id],
+      );
+      expect(rows).toEqual([{ negative_allowed_by: a.admin.id }]);
     });
   });
 

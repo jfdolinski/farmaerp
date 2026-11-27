@@ -95,7 +95,7 @@ async function InvoicesContent({ searchParams }: { searchParams: SearchParams })
               <option value="review">Em conferência</option>
               <option value="posted">Lançada no estoque</option>
               <option value="not_postable">Não vai para o estoque</option>
-              <option value="cancelled">Cancelada pelo emitente</option>
+              <option value="cancelled">Cancelada</option>
             </select>
           </label>
           <button type="submit">Filtrar</button>

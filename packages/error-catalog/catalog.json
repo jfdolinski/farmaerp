@@ -585,7 +585,8 @@
       "purchase_invoice_discard_reason_check",
       "purchase_invoice_item_cost_release_reason_check",
       "purchase_invoice_event_reason_check",
-      "supervisor_release_reason_check"
+      "supervisor_release_reason_check",
+      "purchase_invoice_cancel_reason_check"
     ]
   },
   "FA303": {
@@ -1701,7 +1702,9 @@
       "purchase_invoice_installment_amount_check",
       "purchase_invoice_installment_line_key",
       "purchase_invoice_audit_kind_check",
-      "purchase_invoice_audit_detail_check"
+      "purchase_invoice_audit_detail_check",
+      "purchase_invoice_cancelled_by_check",
+      "purchase_invoice_item_posted_fraction_check"
     ]
   },
   "FA932": {
@@ -3708,6 +3711,30 @@
     "message": "Esta pessoa não pode ser o vendedor padrão deste terminal.",
     "action": "Escolha alguém ativo que venda ou faça orçamentos na filial do terminal.",
     "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA763": {
+    "message": "Esta operação deixa o estoque negativo, e você não tem permissão para isso.",
+    "action": "Peça a quem pode deixar o estoque negativo em notas de entrada para fazer a operação.",
+    "httpStatus": 403,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA764": {
+    "message": "Esta nota já está cancelada.",
+    "action": "Atualize a página para ver a situação atual da nota.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA765": {
+    "message": "O fracionamento informado é igual ao que já está na nota.",
+    "action": "Informe um fracionamento diferente ou feche sem alterar.",
+    "httpStatus": 409,
     "severity": "warning",
     "retryable": false,
     "dbConstraints": []
