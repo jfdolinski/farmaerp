@@ -565,6 +565,10 @@ const _migrations = <String>[
   DROP TABLE nfce_document;
   ALTER TABLE nfce_document_new RENAME TO nfce_document;
   ''',
+  // Curva ABC do cliente na filial do terminal (vem com os dados do cliente).
+  '''
+  ALTER TABLE customer ADD COLUMN abc_curve TEXT CHECK (abc_curve IN ('A', 'B', 'C'));
+  ''',
 ];
 
 /// NFC-e do caixa, para guardar, imprimir o DANFE e subir à central.
@@ -1510,7 +1514,7 @@ class LocalDatabase {
     const columns = [
       'code', 'person_type', 'name', 'trade_name', 'document', 'birth_date', 'phone', 'email', 'postal_code',
       'street', 'street_number', 'complement', 'district', 'city', 'city_code', 'state', 'agreements',
-      'customer_group_id', 'credit',
+      'customer_group_id', 'credit', 'abc_curve',
     ];
     final search = normalizeSearch('${data['name'] ?? ''} ${data['trade_name'] ?? ''}');
     _db.execute(

@@ -679,6 +679,7 @@ SELECT * FROM app.resolve_product_rule('commission', produto, filial);
 - **Recálculo por curva** (`app.abc_recalculate`): na vez da curva, entram os clientes que agora se encaixam nela e saem, para a curva certa, os que estavam nela e não se encaixam mais. `customer_abc` guarda a curva de agora; `customer_abc_event`, cada mudança. A mudança desce para os caixas junto com o cliente (`abc_curve` em `app.pdv_customer_data`, da filial do terminal).
 - **Rotina** (`AbcService`, de hora em hora; `ABC_WORKER=off` desliga): `app.abc_run_due` roda as curvas vencidas em todas as filiais (filial sem parâmetros calcula as três na primeira vez).
 - **Retaguarda:** `/clientes/curva-abc` (parâmetros por filial com `customers.manage`, "Recalcular agora", contagem e lista por curva com busca) e a curva de cada filial no cadastro do cliente. API `admin/abc` (`settings`, `settings/:branchId`, `recalculate/:branchId`, `customers`, `customers/:id`). Parâmetros inválidos: FA761.
+- **No PDV (banco local v19):** o cartão do cliente no caixa e no orçamento mostra "Curva A" (da filial do terminal), guardada com o cliente (coluna `abc_curve`), também sem internet.
 
 **Orçamento igual ao caixa, estoque negativo e orçamentos juntados (parte C do lote de 26/11, migration 0072)**
 

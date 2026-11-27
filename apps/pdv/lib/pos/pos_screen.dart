@@ -953,6 +953,7 @@ class _TotalsPanel extends StatelessWidget {
                 subtitle: Text(
                   [
                     'Código ${cart.customer!.code}',
+                    if (cart.customer!.abcCurve != null) 'Curva ${cart.customer!.abcCurve}',
                     ?cart.customer!.documentMasked,
                     if (cart.customer!.agreements.isNotEmpty)
                       'Convênio: ${cart.customer!.agreements.map((a) => a['name']).join(', ')}',

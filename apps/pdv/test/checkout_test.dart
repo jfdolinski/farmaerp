@@ -490,4 +490,42 @@ void main() {
       expect(controller.linesNeedingStockRelease, isEmpty);
     });
   });
+
+  testWidgets('parte D: o cartão do cliente mostra a curva ABC da filial, no caixa e no orçamento', (tester) async {
+    await tester.runAsync(ready);
+    await tester.binding.setSurfaceSize(const Size(1400, 900));
+    // Sem curva na filial: o cartão não mostra curva.
+    api.customerData[customerId] = {'code': 7, 'person_type': 'individual', 'name': 'Cliente Demonstração', 'document': '11144477735', 'abc_curve': null};
+    await tester.runAsync(() => controller.selectCustomer(customerId));
+    await tester.pumpWidget(MaterialApp(home: PosScreen(controller: controller)));
+    expect(findTextContaining('Curva '), findsNothing);
+    api.customerData[customerId] = {'code': 7, 'person_type': 'individual', 'name': 'Cliente Demonstração', 'document': '11144477735', 'abc_curve': 'A'};
+    await tester.runAsync(() => controller.selectCustomer(customerId));
+    expect(controller.cart.customer?.abcCurve, 'A');
+    await tester.binding.setSurfaceSize(const Size(1400, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(home: PosScreen(controller: controller)));
+    expect(findTextContaining('Curva A'), findsOneWidget);
+
+    database.close();
+    database = seeded(profile: 'quote');
+    controller = PosController(
+      database: database,
+      auth: PosAuth(database: database, clock: () => now),
+      printer: () => printer,
+      terminalNumber: () => 1,
+      customers: CustomerService(api: api, database: database, accessToken: () async => 't'),
+      clock: () => now,
+    );
+    api.customerData[customerId] = {'code': 7, 'person_type': 'individual', 'name': 'Cliente Demonstração', 'document': '11144477735', 'abc_curve': 'B'};
+    await tester.runAsync(() => controller.identifySeller('6'));
+    await tester.runAsync(() => controller.selectCustomer(customerId));
+    await tester.pumpWidget(MaterialApp(home: PosScreen(controller: controller)));
+    expect(findTextContaining('Curva B'), findsOneWidget);
+    // Sem curva na filial: não mostra.
+    api.customerData[customerId] = {'code': 7, 'person_type': 'individual', 'name': 'Cliente Demonstração', 'document': '11144477735', 'abc_curve': null};
+    await tester.runAsync(() => controller.selectCustomer(customerId));
+    await tester.pump();
+    expect(findTextContaining('Curva '), findsNothing);
+  });
 }

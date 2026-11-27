@@ -743,6 +743,7 @@ class PosController extends ChangeNotifier {
             groupId: customer['customer_group_id'] as String?,
             birthDate: customer['birth_date'] as String?,
             credit: CreditAccount.fromJson(customer['credit']),
+            abcCurve: customer['abc_curve'] as String?,
           );
           reprice();
         } on ApiException {
@@ -1719,6 +1720,7 @@ class PosController extends ChangeNotifier {
         groupId: data['customer_group_id'] as String?,
         birthDate: data['birth_date'] as String?,
         credit: CreditAccount.fromJson(data['credit']),
+        abcCurve: data['abc_curve'] as String?,
       );
       // Cliente novo: o cashback do anterior não vale; reservas dele são liberadas.
       _releaseCashback(cart.payments.where((payment) => payment.method == PaymentMethod.cashback));

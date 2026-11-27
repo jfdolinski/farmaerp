@@ -42,6 +42,17 @@ void main() {
     expect(raw.select('PRAGMA foreign_keys').first.columnAt(0), 1);
   });
 
+  test('versão 18 com cliente atualiza para a 19: o cliente continua e ganha a curva ABC', () {
+    final raw = LocalDatabase.migratedInMemory(18);
+    raw.execute("INSERT INTO customer (id, code, person_type, name, document, agreements, search_text, saved_at) VALUES (randomblob(16), 7, 'individual', 'Cliente', '11144477735', '[]', 'cliente', '2026-11-27T10:00:00Z')");
+    final database = LocalDatabase.fromDatabase(raw);
+    addTearDown(database.close);
+    expect(database.schemaVersion, 19);
+    expect(raw.select('SELECT name, abc_curve FROM customer').first, {'name': 'Cliente', 'abc_curve': null});
+    raw.execute("UPDATE customer SET abc_curve = 'A'");
+    expect(() => raw.execute("UPDATE customer SET abc_curve = 'D'"), throwsA(anything));
+  });
+
   test('versão 17 com NFC-e atualiza para a 18 sem perder as notas, e a nota pode ficar cancelada', () {
     final raw = LocalDatabase.migratedInMemory(17);
     const now = '2026-11-26T10:00:00Z';
@@ -54,7 +65,7 @@ void main() {
     );
     final database = LocalDatabase.fromDatabase(raw);
     addTearDown(database.close);
-    expect(database.schemaVersion, 18);
+    expect(database.schemaVersion, 19);
     expect(raw.select('SELECT number, status, protocol FROM nfce_document').first, {'number': 42, 'status': 'authorized', 'protocol': '135260000000123'});
     raw.execute("UPDATE nfce_document SET status = 'canceled'");
     expect(raw.select('SELECT status FROM nfce_document').first['status'], 'canceled');
