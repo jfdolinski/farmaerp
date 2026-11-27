@@ -20,7 +20,8 @@ import {
   requireText,
   requireUuid,
 } from '../common/parse.js';
-import { DatabaseService } from '../database.service.js';
+import { CatalogSyncService } from '../catalog/catalog-sync.service.js';
+import { DatabaseService, DbClient } from '../database.service.js';
 import { catalogImages, withMainImage } from './catalog-images.js';
 import { AppError } from '../observability/app-error.js';
 
@@ -142,6 +143,7 @@ const barcodeOptions = (body: Body) => ({
 export class ProductsController {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(CatalogSyncService) private readonly catalogSync: CatalogSyncService,
   ) {}
 
   private call(sql: string, params: unknown[]) {
@@ -422,17 +424,23 @@ export class ProductsController {
    * auditoria dele: `search` é a busca manual; `lookup`, a automática pelo código de barras.
    */
   @Get('catalog')
-  catalog(@Query('q') query?: string, @Query('productId') productId?: string, @Query('kind') kind?: string) {
+  async catalog(@Query('q') query?: string, @Query('productId') productId?: string, @Query('kind') kind?: string) {
     if (query !== undefined && (typeof query !== 'string' || query.length > 200)) {
       throw new AppError('FA005');
     }
     const product = productId === undefined ? null : requireUuid(productId);
     const searchType = product ? searchKind(kind ?? 'search') : null;
+    const search = (client: DbClient) =>
+      client.query<{ id: string; barcodes: string[] }>('SELECT * FROM app.search_catalog($1)', [query ?? '']).then((r) => r.rows);
+    // Código de barras que a cópia do Catálogo não tem: consulta o Catálogo na hora (fora da
+    // transação da busca) e procura de novo. Só quem está logado chega aqui.
+    const code = query?.trim() ?? '';
+    if (/^\d{8,14}$/.test(code) && this.catalogSync.configured) {
+      const found = await this.database.withContext(async (client) => (await search(client)).length > 0);
+      if (!found) await this.catalogSync.lookup(code);
+    }
     return this.database.withContext(async (client) => {
-      const { rows } = await client.query<{ id: string; barcodes: string[] }>(
-        'SELECT * FROM app.search_catalog($1)',
-        [query ?? ''],
-      );
+      const rows = await search(client);
       if (product && searchType && query?.trim()) {
         // Na automática, o item achado é o que tem exatamente este código.
         const found = searchType === 'lookup' ? rows.filter((row) => row.barcodes.includes(query.trim())) : rows;

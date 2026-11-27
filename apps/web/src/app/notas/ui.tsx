@@ -249,6 +249,8 @@ export function ItemActions({ item, invoiceId }: { item: ItemRow; invoiceId: str
                   </span>
                   {row.product_id ? (
                     <span className={styles.hint}>Já cadastrado na loja: use Ligar a um produto.</span>
+                  ) : row.pending ? (
+                    <span className={styles.hint}>Pendente no Catálogo: aguarde o cadastro ser completado lá.</span>
                   ) : (
                     <details>
                       <summary>Cadastrar com este item</summary>

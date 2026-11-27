@@ -8,6 +8,7 @@ import { CreateTenantForm, IssuerDecision, type PendingIssuer } from "./ui";
 import styles from "../terminais/page.module.css";
 import { activeTab, TabItem, Tabs } from "../shell/tabs";
 import { LoginImageForm } from "./login-image";
+import { CatalogSyncPanel, type CatalogSyncStatus } from "./catalog-sync";
 import { type ImportRow, RUNNING } from "../importacoes/labels";
 import { ImportList } from "../importacoes/list";
 import { AutoRefresh, ImportUploader } from "../importacoes/ui";
@@ -66,6 +67,7 @@ async function PlatformContent({ searchParams }: { searchParams: SearchParams })
     { id: "nova", label: "Nova empresa" },
     { id: "entrada", label: "Tela de entrada" },
     { id: "importacao", label: "Importação de XML" },
+    { id: "catalogo", label: "Catálogo" },
   ];
   const params = await searchParams;
   const tab = activeTab(tabs, params.aba);
@@ -80,6 +82,7 @@ async function PlatformContent({ searchParams }: { searchParams: SearchParams })
     : null;
   const importRows = imports?.ok ? imports.data : [];
   const loginImage = tab === "entrada" ? await apiFetch<{ sha256: string | null }>("/public/login-image/info") : null;
+  const catalogSync = tab === "catalogo" ? await apiFetch<CatalogSyncStatus>("/platform/catalog-sync") : null;
 
   return (
     <>
@@ -221,6 +224,15 @@ async function PlatformContent({ searchParams }: { searchParams: SearchParams })
               </>
             )}
           </>
+        )}
+        {tab === "catalogo" && catalogSync && (
+          catalogSync.ok ? (
+            <CatalogSyncPanel status={catalogSync.data} />
+          ) : (
+            <section className={styles.card}>
+              <ErrorNotice error={catalogSync.error} />
+            </section>
+          )
         )}
         {tab === "entrada" && loginImage && (
           <section className={styles.card}>

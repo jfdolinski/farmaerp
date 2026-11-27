@@ -49,6 +49,8 @@ import { SalesController } from './sales/sales.controller.js';
 import { ImportedSalesController } from './sales/imported-sales.controller.js';
 import { ImportedNotesController } from './purchases/imported-notes.controller.js';
 import { StockCountsController } from './stock/stock-counts.controller.js';
+import { CatalogKeysController, CatalogSyncController } from './catalog/catalog-sync.controller.js';
+import { CatalogSyncService } from './catalog/catalog-sync.service.js';
 import { CentralNfeController } from './fiscal/central-nfe.controller.js';
 import { CentralNfeService } from './fiscal/central-nfe.service.js';
 import { FiscalDocumentsController } from './fiscal/fiscal-documents.controller.js';
@@ -104,6 +106,8 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     StockCountsController,
     FiscalDocumentsController,
     CentralNfeController,
+    CatalogSyncController,
+    CatalogKeysController,
     TerminalFiscalController,
     ControlledController,
     SngpcController,
@@ -134,6 +138,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     PurchaseContentService,
     ImportsService,
     NfceActionsService,
+    CatalogSyncService,
     CentralNfeService,
     SessionGuard,
     TerminalGuard,
