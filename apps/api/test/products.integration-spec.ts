@@ -101,7 +101,7 @@ describe('produtos contra o banco real', () => {
     it('cria, busca e abre o produto', async () => {
       const displayName = name();
       const barcode = gtin();
-      const { id } = await newProduct({ displayName, barcode, fractionQuantity: 2.5 });
+      const { id } = await newProduct({ displayName, barcode, fractionQuantity: 2.5, unit: 'fr' });
 
       const found = (await call('get', `/admin/products?q=${encodeURIComponent(displayName)}`).expect(200)).body as Json[];
       expect(found.map((row) => row.id)).toEqual([id]);
@@ -109,6 +109,9 @@ describe('produtos contra o banco real', () => {
       const product = await detail(id);
       expect(product.display_name).toBe(displayName);
       expect(Number(product.fraction_quantity)).toBe(2.5);
+      expect(product.unit).toBe('FR');
+      const wrong = await call('post', '/admin/products').send({ displayName: name(), barcode: gtin(), unit: 'XX' }).expect(422);
+      expect((wrong.body as Json).code).toBe('FA766');
       expect(product.barcodes).toHaveLength(1);
       expect(product.barcodes[0]).toMatchObject({ code: barcode, is_primary: true });
       expect(Number(product.barcodes[0].effective_fraction)).toBe(2.5);
@@ -256,7 +259,8 @@ describe('produtos contra o banco real', () => {
 
       const newName = name();
       await call('patch', `/admin/product-categories/${leaf}`).send({ name: newName }).expect(200);
-      const { categories } = (await call('get', '/admin/product-structure').expect(200)).body as { categories: Json[] };
+      const { categories, units } = (await call('get', '/admin/product-structure').expect(200)).body as { categories: Json[]; units: Json[] };
+      expect(units).toContainEqual({ code: 'KG', name: 'Quilograma', fractional: true });
       expect(categories.find((row) => row.id === leaf)).toMatchObject({ name: newName, level: 3, parent_id: category });
 
       const blocked = await call('post', `/admin/product-categories/${department}/delete`).expect(409);
@@ -464,7 +468,9 @@ describe('produtos contra o banco real', () => {
       const response = await call('get', `/admin/products/${SEED_PRODUCT}`, OPERATOR).expect(404);
       expect(codeOf(response)).toBe('FA006');
       const structure = (await call('get', '/admin/product-structure', OPERATOR).expect(200)).body as Json;
-      expect(structure).toEqual({ categories: [], groups: [], channels: [] });
+      // As unidades de medida são uma lista fixa, a mesma para todos.
+      expect(structure).toMatchObject({ categories: [], groups: [], channels: [] });
+      expect(structure.units).toHaveLength(16);
     });
   });
 });

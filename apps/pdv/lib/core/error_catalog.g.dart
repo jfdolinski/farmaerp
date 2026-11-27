@@ -850,6 +850,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Informe um fracionamento diferente ou feche sem alterar.',
     retryable: false,
   ),
+  'FA766': ErrorCatalogEntry(
+    code: 'FA766',
+    message: 'Esta unidade de medida não existe.',
+    action: 'Escolha uma unidade da lista.',
+    retryable: false,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',

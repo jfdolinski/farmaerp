@@ -59,7 +59,7 @@ PullItem product(String id, int code, String name, String barcode, {List<Map<Str
   id: id,
   data: {
     'code': code, 'name': name, 'status': 'active', 'price': 12.9, 'fraction_quantity': 1, 'batch_required': false,
-    'ncm': '30049099', 'cest': '1300100',
+    'ncm': '30049099', 'cest': '1300100', 'unit': 'FR',
     'barcodes': [{'id': id.replaceFirst('7000', '7001'), 'code': barcode, 'is_primary': true, 'fraction_quantity': null}],
     'taxes': taxes,
   },
@@ -171,6 +171,9 @@ void main() {
     final sent = transport.calls.single;
     expect(sent.$1.host, 'homologacao.nfce.fazenda.sp.gov.br');
     expect(sent.$2, contains('<vNF>12.90</vNF>'));
+    // A unidade do produto vai na nota.
+    expect(sent.$2, contains('<uCom>FR</uCom>'));
+    expect(sent.$2, contains('<uTrib>FR</uTrib>'));
     expect(sent.$2, contains('<tPag>01</tPag><vPag>20.00</vPag>'));
     expect(sent.$2, contains('<vTroco>7.10</vTroco>'));
 

@@ -19,7 +19,7 @@ const ALL = [
   'terminals.approve', 'terminals.block', 'terminals.request', 'terminals.revoke', 'terminals.view',
   'users.biometrics', 'users.manage', 'users.release_login', 'users.reset_password', 'users.view',
 ];
-const MANAGER = ['controlled.view', 'credit.manage', 'credit.view', 'customers.manage', 'customers.view', 'fiscal.certificate', 'health_professionals.manage', 'pdv.customer_create', 'pdv.prescriber_create', 'pdv.quote_clear', 'pdv.sale_cancel', 'pdv.self_service_cancel', 'products.view', 'purchases.cancel', 'purchases.manage', 'purchases.post', 'purchases.view', 'releases.view', 'sales.quote', 'sales.return', 'sales.sell', 'sales.view', 'sales.zero_stock_release', 'stock.batch_override', 'stock.loss', 'stock.transfer', 'stock.view', 'sync.resolve', 'sync.view', 'terminals.block', 'terminals.request', 'terminals.view', 'users.biometrics', 'users.release_login', 'users.reset_password', 'users.view'];
+const MANAGER = ['controlled.view', 'credit.manage', 'credit.view', 'customers.manage', 'customers.view', 'fiscal.certificate', 'health_professionals.manage', 'pdv.customer_create', 'pdv.prescriber_create', 'pdv.quote_clear', 'pdv.sale_cancel', 'pdv.self_service_cancel', 'products.view', 'purchases.manage', 'purchases.post', 'purchases.view', 'releases.view', 'sales.quote', 'sales.return', 'sales.sell', 'sales.view', 'sales.zero_stock_release', 'stock.batch_override', 'stock.loss', 'stock.transfer', 'stock.view', 'sync.resolve', 'sync.view', 'terminals.block', 'terminals.request', 'terminals.view', 'users.biometrics', 'users.release_login', 'users.reset_password', 'users.view'];
 
 const has = async (client, code, branchId = null) =>
   (await client.query('SELECT app.has_permission($1, $2) AS ok', [code, branchId])).rows[0].ok;

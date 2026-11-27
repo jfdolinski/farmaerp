@@ -569,6 +569,11 @@ const _migrations = <String>[
   '''
   ALTER TABLE customer ADD COLUMN abc_curve TEXT CHECK (abc_curve IN ('A', 'B', 'C'));
   ''',
+  // Unidade de medida do produto (UN, CX, KG...), que vai na NFC-e. Quem já tem produto fica com UN,
+  // o que a NFC-e já levava; a central manda a unidade certa na próxima mudança do produto.
+  '''
+  ALTER TABLE product ADD COLUMN unit TEXT NOT NULL DEFAULT 'UN' CHECK (length(unit) BETWEEN 1 AND 6);
+  ''',
 ];
 
 /// NFC-e do caixa, para guardar, imprimir o DANFE e subir à central.
@@ -1195,12 +1200,18 @@ class LocalDatabase {
     }
   }
 
+  static String _unit(Object? value) {
+    final text = value is String ? value.trim().toUpperCase() : '';
+    return RegExp(r'^[A-Z]{1,6}$').hasMatch(text) ? text : 'UN';
+  }
+
   void _upsertProduct(Uint8List id, Map<String, dynamic> data, int generation) {
     _db.execute(
       'INSERT INTO product (id, code, name, manufacturer, active_ingredient, controlled_class, ms_registration, '
       'ncm, cest, status, price_cents, fraction_milli, batch_required, seen_generation, max_discount_bp, max_discount_until, '
-      'discount_subject, cashback_bp) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET '
+      'discount_subject, cashback_bp, unit) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO UPDATE SET '
+      'unit = excluded.unit, '
       'max_discount_bp = excluded.max_discount_bp, max_discount_until = excluded.max_discount_until, '
       'cashback_bp = excluded.cashback_bp, '
       'discount_subject = excluded.discount_subject, '
@@ -1228,6 +1239,8 @@ class LocalDatabase {
         data['max_discount_until'],
         data['discount_subject'] is Map ? jsonEncode(data['discount_subject']) : null,
         data['cashback'] == null ? null : ((data['cashback'] as num) * 100).round(),
+        // Central antiga (sem a unidade) ou sigla fora do tamanho: UN, como a NFC-e já levava.
+        _unit(data['unit']),
       ],
     );
     _db.execute('DELETE FROM product_search WHERE product_id = ?', [id]);
@@ -1721,6 +1734,7 @@ class LocalDatabase {
     return {
       'code': row['code'],
       'name': row['name'],
+      'unit': row['unit'],
       'active_ingredient': row['active_ingredient'],
       'manufacturer': row['manufacturer'],
       'controlled_class': row['controlled_class'],
@@ -1936,9 +1950,9 @@ class LocalDatabase {
 
   /// Dados fiscais do produto para a nota: NCM, CEST, GTIN do código principal e a tributação
   /// em vigor no dia (a mais recente que já começou).
-  ({String? ncm, String? cest, String? gtin, Map<String, dynamic>? tax})? nfceProductData(String productId, DateTime day) {
+  ({String? ncm, String? cest, String? gtin, String unit, Map<String, dynamic>? tax})? nfceProductData(String productId, DateTime day) {
     final id = uuidBytes(productId);
-    final rows = _db.select('SELECT ncm, cest FROM product WHERE id = ?', [id]);
+    final rows = _db.select('SELECT ncm, cest, unit FROM product WHERE id = ?', [id]);
     if (rows.isEmpty) return null;
     String two(int value) => value.toString().padLeft(2, '0');
     final today = '${day.year}-${two(day.month)}-${two(day.day)}';
@@ -1954,6 +1968,7 @@ class LocalDatabase {
     return (
       ncm: rows.first['ncm'] as String?,
       cest: rows.first['cest'] as String?,
+      unit: rows.first['unit'] as String,
       // Só GTIN de verdade (8, 12, 13 ou 14 dígitos); código interno vai como "SEM GTIN".
       gtin: gtin != null && RegExp(r'^(\d{8}|\d{12,14})$').hasMatch(gtin) ? gtin : null,
       tax: tax.isEmpty ? null : (jsonDecode(tax.first['data'] as String) as Map).cast<String, dynamic>(),

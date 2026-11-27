@@ -41,6 +41,14 @@ export interface ProductStructure {
   categories: CategoryRow[];
   groups: GroupRow[];
   channels: ChannelRow[];
+  units: UnitRow[];
+}
+
+/** Unidade de medida da lista fixa do banco. */
+export interface UnitRow {
+  code: string;
+  name: string;
+  fractional: boolean;
 }
 
 export interface ProductValues {
@@ -55,6 +63,7 @@ export interface ProductValues {
   uses_pmc?: boolean;
   online_sale_blocked?: boolean;
   fraction_quantity?: string | number;
+  unit?: string;
 }
 
 export interface BarcodeRow {
@@ -211,6 +220,16 @@ function ProductFields({
         />
       </div>
       <div className={styles.inline}>
+        <label>
+          Unidade
+          <select name="unit" defaultValue={values.unit ?? "UN"} disabled={disabled}>
+            {structure.units.map((unit) => (
+              <option key={unit.code} value={unit.code}>
+                {unit.code} · {unit.name}
+              </option>
+            ))}
+          </select>
+        </label>
         <label>
           Fracionamento
           <input

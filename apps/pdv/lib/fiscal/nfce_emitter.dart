@@ -196,6 +196,7 @@ class NfceEmitter {
       description: line.product.name,
       ncm: ncm,
       cest: data.cest,
+      unit: data.unit,
       quantityMilli: line.quantityMilli,
       unitPriceCents: line.unitPriceCents,
       grossCents: line.grossCents,
