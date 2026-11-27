@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Suspense } from "react";
 import { apiFetch, can, redirectIfNeeded, requireUser } from "@/lib/api";
 import { AppHeader } from "../app-header";
 import { ErrorNotice } from "../error-notice";
 import styles from "../terminais/page.module.css";
-import { count, fileSize, type ImportRow, moment, RUNNING, STATUS_LABELS } from "./labels";
+import { type ImportRow, RUNNING } from "./labels";
+import { ImportList } from "./list";
 import { AutoRefresh, ImportUploader } from "./ui";
 
 export const metadata: Metadata = { title: "Importação de notas · FarmaERP" };
@@ -58,44 +58,7 @@ async function ImportsContent() {
         <h2>Arquivos enviados</h2>
         {!result.ok && <ErrorNotice error={result.error} />}
         {result.ok && rows.length === 0 && <p className={styles.hint}>Nenhum arquivo enviado ainda.</p>}
-        {rows.length > 0 && (
-          <div className={styles.tableWrap}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Arquivo</th>
-                  <th>Enviado em</th>
-                  <th>Situação</th>
-                  <th>Importadas</th>
-                  <th>Repetidas</th>
-                  <th>Ignoradas</th>
-                  <th>Com problema</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.id}>
-                    <td>
-                      {row.file_name}
-                      <br />
-                      <small>{fileSize(row.size_bytes)}</small>
-                    </td>
-                    <td>{moment(row.created_at)}</td>
-                    <td>{STATUS_LABELS[row.status] ?? row.status}</td>
-                    <td>{count(row.totals?.imported)}</td>
-                    <td>{count(row.totals?.duplicate)}</td>
-                    <td>{count(row.totals?.ignored)}</td>
-                    <td>{count(row.totals?.failed)}</td>
-                    <td>
-                      <Link href={`/importacoes/${row.id}`}>Ver relatório</Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {rows.length > 0 && <ImportList rows={rows} base="/importacoes" />}
       </section>
     </>
   );

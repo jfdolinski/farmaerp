@@ -8,6 +8,9 @@ import { CreateTenantForm, IssuerDecision, type PendingIssuer } from "./ui";
 import styles from "../terminais/page.module.css";
 import { activeTab, TabItem, Tabs } from "../shell/tabs";
 import { LoginImageForm } from "./login-image";
+import { type ImportRow, RUNNING } from "../importacoes/labels";
+import { ImportList } from "../importacoes/list";
+import { AutoRefresh, ImportUploader } from "../importacoes/ui";
 
 export const metadata: Metadata = { title: "Plataforma · FarmaERP" };
 
@@ -25,7 +28,7 @@ const dateText = (value: string) => new Date(value).toLocaleDateString("pt-BR", 
 const rootText = (root: string) => `${root.slice(0, 2)}.${root.slice(2, 5)}.${root.slice(5, 8)}`;
 const formatCnpj = (value: string) => value.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
 
-type SearchParams = Promise<{ aba?: string | string[] }>;
+type SearchParams = Promise<{ aba?: string | string[]; cliente?: string | string[] }>;
 
 export default function PlatformPage({ searchParams }: { searchParams: SearchParams }) {
   return (
@@ -62,10 +65,21 @@ async function PlatformContent({ searchParams }: { searchParams: SearchParams })
     { id: "cnpjs", label: "CNPJs aguardando", count: waiting, attention: waiting > 0 },
     { id: "nova", label: "Nova empresa" },
     { id: "entrada", label: "Tela de entrada" },
+    { id: "importacao", label: "Importação de XML" },
   ];
-  const tab = activeTab(tabs, (await searchParams).aba);
-  const loginImage =
-    tab === "entrada" ? await apiFetch<{ sha256: string | null }>("/public/login-image/info") : null;
+  const params = await searchParams;
+  const tab = activeTab(tabs, params.aba);
+  // Importação de XML: o cliente escolhido na lista.
+  const clients = result.ok ? result.data : [];
+  const chosen =
+    tab === "importacao"
+      ? clients.find((row) => typeof params.cliente === "string" && row.group_id === params.cliente)
+      : undefined;
+  const imports = chosen
+    ? await apiFetch<ImportRow[]>(`/platform/imports?groupId=${encodeURIComponent(chosen.group_id)}`)
+    : null;
+  const importRows = imports?.ok ? imports.data : [];
+  const loginImage = tab === "entrada" ? await apiFetch<{ sha256: string | null }>("/public/login-image/info") : null;
 
   return (
     <>
@@ -156,6 +170,57 @@ async function PlatformContent({ searchParams }: { searchParams: SearchParams })
             </p>
             <CreateTenantForm />
           </section>
+        )}
+        {tab === "importacao" && (
+          <>
+            {importRows.some((row) => RUNNING.has(row.status)) && <AutoRefresh />}
+            <section className={styles.card}>
+              <h2>Importação de XML para um cliente</h2>
+              <p className={styles.hint}>
+                Escolha o cliente e envie o .zip com os XML do sistema anterior. As notas entram no cliente escolhido,
+                com o mesmo processamento e o mesmo relatório da importação feita por ele: NFC-e e NF-e autorizadas,
+                cada uma na data dela; filiais pelo CNPJ do emitente, produtos pelo código do sistema anterior e
+                clientes pelo CPF ou CNPJ. Enviar o mesmo arquivo de novo é seguro: notas repetidas são ignoradas. CNPJs
+                que o cliente ainda não tem aparecem em CNPJs aguardando.
+              </p>
+              <form action="/plataforma" className={styles.inline}>
+                <input type="hidden" name="aba" value="importacao" />
+                <label>
+                  Cliente
+                  <select name="cliente" defaultValue={chosen?.group_id ?? ""} required>
+                    <option value="" disabled>
+                      Escolha o cliente
+                    </option>
+                    {clients.map((row) => (
+                      <option key={row.group_id} value={row.group_id}>
+                        {row.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button type="submit">Escolher</button>
+              </form>
+              {clients.length === 0 && (
+                <p className={styles.hint}>Nenhum cliente cadastrado. Cadastre em Nova empresa.</p>
+              )}
+            </section>
+            {chosen && (
+              <>
+                <section className={styles.card}>
+                  <h2>Enviar arquivo de {chosen.name}</h2>
+                  <ImportUploader key={chosen.group_id} groupId={chosen.group_id} />
+                </section>
+                <section className={styles.card}>
+                  <h2>Arquivos enviados para {chosen.name}</h2>
+                  {imports && !imports.ok && <ErrorNotice error={imports.error} />}
+                  {imports?.ok && importRows.length === 0 && (
+                    <p className={styles.hint}>Nenhum arquivo enviado para este cliente.</p>
+                  )}
+                  {importRows.length > 0 && <ImportList rows={importRows} base="/plataforma/importacao" />}
+                </section>
+              </>
+            )}
+          </>
         )}
         {tab === "entrada" && loginImage && (
           <section className={styles.card}>
