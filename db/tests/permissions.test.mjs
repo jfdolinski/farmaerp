@@ -13,7 +13,7 @@ beforeAll(async () => {
 afterAll(closePools);
 
 const ALL = [
-  'agreements.manage', 'audit.view', 'branches.view_all', 'controlled.dispense', 'controlled.view', 'credit.manage', 'credit.policy', 'credit.view', 'customers.manage', 'customers.view', 'fiscal.cancel', 'fiscal.certificate', 'fiscal.manage', 'fiscal.view', 'fiscal.void', 'health_professionals.manage', 'imports.manage', 'pdv.customer_create', 'pdv.prescriber_create', 'pdv.quote_clear', 'pdv.sale_cancel', 'pdv.self_service_cancel', 'products.manage', 'products.price', 'products.reactivate',
+  'agreements.manage', 'audit.view', 'branches.view_all', 'controlled.dispense', 'controlled.view', 'credit.manage', 'credit.policy', 'credit.view', 'customers.manage', 'customers.view', 'fiscal.cancel', 'fiscal.certificate', 'fiscal.manage', 'fiscal.nfe_issue', 'fiscal.view', 'fiscal.void', 'health_professionals.manage', 'imports.manage', 'pdv.customer_create', 'pdv.prescriber_create', 'pdv.quote_clear', 'pdv.sale_cancel', 'pdv.self_service_cancel', 'products.manage', 'products.price', 'products.reactivate',
   'products.status', 'products.view', 'purchases.cancel', 'purchases.cost_override', 'purchases.manage', 'purchases.negative_stock', 'purchases.post', 'purchases.return', 'purchases.view', 'releases.view', 'roles.assign', 'roles.manage', 'rules.manage', 'rules.view', 'sales.discount_override', 'sales.quote', 'sales.return', 'sales.sell', 'sales.view', 'sales.zero_stock_release',
   'sngpc.manage', 'stock.adjust', 'stock.batch', 'stock.batch_override', 'stock.loss', 'stock.opening', 'stock.transfer', 'stock.view', 'structure.manage', 'sync.resolve', 'sync.view',
   'terminals.approve', 'terminals.block', 'terminals.request', 'terminals.revoke', 'terminals.view',

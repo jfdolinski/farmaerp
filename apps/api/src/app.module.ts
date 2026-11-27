@@ -48,6 +48,8 @@ import { SalesController } from './sales/sales.controller.js';
 import { ImportedSalesController } from './sales/imported-sales.controller.js';
 import { ImportedNotesController } from './purchases/imported-notes.controller.js';
 import { StockCountsController } from './stock/stock-counts.controller.js';
+import { CentralNfeController } from './fiscal/central-nfe.controller.js';
+import { CentralNfeService } from './fiscal/central-nfe.service.js';
 import { FiscalDocumentsController } from './fiscal/fiscal-documents.controller.js';
 import { TerminalFiscalController } from './terminals/terminal-fiscal.controller.js';
 import { NfceActionsService } from './fiscal/nfce-actions.service.js';
@@ -99,6 +101,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     ImportedNotesController,
     StockCountsController,
     FiscalDocumentsController,
+    CentralNfeController,
     TerminalFiscalController,
     ControlledController,
     SngpcController,
@@ -128,6 +131,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     PurchaseContentService,
     ImportsService,
     NfceActionsService,
+    CentralNfeService,
     SessionGuard,
     TerminalGuard,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
