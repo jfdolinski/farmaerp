@@ -296,6 +296,31 @@ void main() {
       expect(cosine(result!, vector(1)), closeTo(1, 1e-6));
     });
 
+    test('a câmera fica ligada entre as leituras; desliga se falhar ou se pedirem para não manter', () async {
+      var opened = 0;
+      final kept = FaceService(camera: () { opened += 1; return FakeCamera(); }, engine: () async => FakeEngine(goodRead(vector(1))));
+      expect(await kept.start(), isTrue);
+      final first = kept.camera as FakeCamera;
+      await kept.closeCamera();
+      expect(first.closed, isFalse);
+      expect(await kept.start(), isTrue);
+      expect(kept.camera, same(first));
+      expect(opened, 1);
+      // Câmera que falhou desliga de verdade; a próxima leitura liga de novo.
+      await kept.cameraLost();
+      expect(first.closed, isTrue);
+      expect(kept.camera, isNull);
+      expect(await kept.start(), isTrue);
+      expect(opened, 2);
+
+      final light = FaceService(camera: FakeCamera.new, engine: () async => FakeEngine(goodRead(vector(1))), keepCameraOn: false);
+      await light.start();
+      final cam = light.camera as FakeCamera;
+      await light.closeCamera();
+      expect(cam.closed, isTrue);
+      expect(light.camera, isNull);
+    });
+
     test('um quadro perdido no meio da leitura não derruba a leitura', () async {
       final reader = FaceReader();
       final result = await readFace(
@@ -387,7 +412,9 @@ void main() {
       expect(find.byKey(const Key('face-login')), findsOneWidget);
       await pumpUntil(tester, () => controller.operator != null);
       expect(controller.operator?.id, faceId);
-      expect(camera.closed, isTrue);
+      // A câmera fica ligada para a próxima leitura.
+      expect(camera.closed, isFalse);
+      expect(face.camera, same(camera));
       controller.logout();
       await tester.pump();
       await tester.tap(find.byKey(const Key('face-other-way')));
