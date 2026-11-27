@@ -10,6 +10,7 @@ import '../core/local_logger.dart';
 import '../customers/customer_service.dart';
 import '../face/face_math.dart' show templateBytes;
 import '../face/face_service.dart';
+import '../fiscal/danfe_a4.dart';
 import '../fiscal/nfce_emitter.dart';
 import '../local/local_database.dart';
 import '../terminal/terminal_api.dart';
@@ -18,6 +19,7 @@ import 'cash.dart';
 import 'controlled.dart';
 import 'credit.dart';
 import 'credit_engine.dart';
+import 'danfe_printer.dart';
 import 'discount.dart';
 import 'discount_engine.dart';
 import 'money.dart';
@@ -83,6 +85,7 @@ class PosController extends ChangeNotifier {
     this.cashbackReserve,
     this.cashbackRelease,
     this.cancelNfce,
+    this.danfePrinter,
     this.syncNow,
     this.logger,
     DateTime Function()? clock,
@@ -114,6 +117,36 @@ class PosController extends ChangeNotifier {
   final Future<void> Function(String reservationId)? cashbackRelease;
   /// Pede à central o cancelamento da NFC-e (id da nota, motivo, supervisor). Com internet.
   final Future<Map<String, dynamic>> Function(String documentId, String reason, String supervisorId)? cancelNfce;
+
+  /// Impressão do DANFE A4 da NF-e de venda (null: o caixa não imprime A4).
+  final DanfePrinter? danfePrinter;
+
+  /// Último DANFE guardado (para a tela oferecer abrir de novo).
+  String? lastDanfePath;
+
+  /// A NF-e de venda (modelo 55) pode ser escolhida: o caixa emite nota, tem série 55 e o cliente da
+  /// venda é PJ com cadastro completo.
+  bool get nfeAvailable {
+    final customer = cart.customer;
+    if (nfce?.enabled != true || customer == null || database.nextFiscalNumber('55') == null) return false;
+    return nfeRecipientOf(database.customerById(customer.id)) != null;
+  }
+
+  /// Troca o documento da venda entre NFC-e (65) e NF-e (55). A NF-e só quando disponível.
+  void setFiscalModel(String model) {
+    if (model == '55' && !nfeAvailable) return _fail('FA784');
+    cart.fiscalModel = model == '55' ? '55' : '65';
+    notice = null;
+    notifyListeners();
+  }
+
+  /// Documento que já vem marcado para o cliente escolhido: NF-e para o contribuinte do ICMS (com
+  /// IE), quando disponível; senão NFC-e.
+  String _defaultFiscalModel() {
+    final customer = cart.customer;
+    if (customer == null || !nfeAvailable) return '65';
+    return nfeRecipientOf(database.customerById(customer.id))?.ieIndicator == 1 ? '55' : '65';
+  }
   /// Sincroniza agora (manda a fila para a central).
   final Future<void> Function()? syncNow;
 
@@ -1750,6 +1783,7 @@ class PosController extends ChangeNotifier {
         credit: CreditAccount.fromJson(data['credit']),
         abcCurve: data['abc_curve'] as String?,
       );
+      cart.fiscalModel = _defaultFiscalModel();
       // Cliente novo: o cashback do anterior não vale; reservas dele são liberadas.
       _releaseCashback(cart.payments.where((payment) => payment.method == PaymentMethod.cashback));
       cart.payments.removeWhere((payment) => payment.method == PaymentMethod.cashback);
@@ -1765,6 +1799,7 @@ class PosController extends ChangeNotifier {
 
   void clearCustomer() {
     cart.customer = null;
+    cart.fiscalModel = '65';
     saleCashback = null;
     _releaseCashback(cart.payments.where((payment) => payment.method == PaymentMethod.cashback));
     cart.payments.removeWhere((payment) =>
@@ -1945,11 +1980,31 @@ class PosController extends ChangeNotifier {
         terminalNumber: terminalNumber() ?? 0,
         now: now,
       );
-      database.saveSale(draft.payload, code: draft.code, itemRows: draft.itemRows, now: now);
-      // NFC-e: emitida direto na Sefaz depois de a venda estar guardada. O que der errado vira
-      // aviso, e a venda fica com a nota pendente.
-      final emitted = await nfce?.emit(saleId: draft.payload['id']! as String, cart: cart);
-      final document = emitted?.nfce;
+      final saleId = draft.payload['id']! as String;
+      final LocalNfce? document;
+      String? noticeCode;
+      if (cart.fiscalModel == '55') {
+        // NF-e de venda: emitida antes de gravar. Sem comunicação com a Sefaz ou recusada, a venda
+        // continua aberta: o operador tenta de novo ou troca para NFC-e.
+        final emitter = nfce;
+        if (emitter == null || !nfeAvailable) throw const PosException('FA784');
+        final outcome = await emitter.emitNfe(saleId: saleId, cart: cart);
+        if (outcome.blocked) {
+          notice = ErrorDisplay.fromCode(outcome.blockCode!);
+          if (outcome.blockCode == 'FA782' && outcome.detail != null) notice = notice!.withDetail('Sefaz: ${outcome.detail}');
+          return;
+        }
+        database.saveSale(draft.payload, code: draft.code, itemRows: draft.itemRows, now: now);
+        document = outcome.nfe;
+        noticeCode = outcome.noticeCode;
+      } else {
+        database.saveSale(draft.payload, code: draft.code, itemRows: draft.itemRows, now: now);
+        // NFC-e: emitida direto na Sefaz depois de a venda estar guardada. O que der errado vira
+        // aviso, e a venda fica com a nota pendente.
+        final emitted = await nfce?.emit(saleId: saleId, cart: cart);
+        document = emitted?.nfce;
+        noticeCode = emitted?.noticeCode;
+      }
       if (document != null) database.saveNfce(document, now: now);
       final lines = buildReceipt(
         fiscal: database.fiscal,
@@ -1969,7 +2024,7 @@ class PosController extends ChangeNotifier {
         totalCents: cart.totalCents,
         changeCents: cart.changeCents,
         lines: lines,
-        saleId: draft.payload['id']! as String,
+        saleId: saleId,
       );
       lastSaleCanceled = false;
       logger?.info('Venda concluída', fields: {'sale_code': draft.code, 'items': cart.lines.length});
@@ -1977,11 +2032,12 @@ class PosController extends ChangeNotifier {
       _lockForNextSeller();
       paying = false;
       info = document?.authorized ?? false
-          ? 'Venda ${draft.code} concluída. NFC-e ${document!.number} autorizada.'
+          ? 'Venda ${draft.code} concluída. ${document!.isNfe ? 'NF-e' : 'NFC-e'} ${document.number} autorizada.'
           : 'Venda ${draft.code} concluída.';
-      if (emitted?.noticeCode != null) notice = ErrorDisplay.fromCode(emitted!.noticeCode!);
+      if (noticeCode != null) notice = ErrorDisplay.fromCode(noticeCode);
       onSaleSaved?.call();
       await _print(lastSale!);
+      if (document != null && document.isNfe && document.authorized) await printDanfe(document);
     } on PosException catch (error) {
       notice = ErrorDisplay.fromCode(error.code);
     } finally {
@@ -2215,6 +2271,21 @@ class PosController extends ChangeNotifier {
     } finally {
       busy = false;
       notifyListeners();
+    }
+  }
+
+  /// DANFE A4 da NF-e autorizada: guarda o PDF e manda à impressora padrão pelo programa de PDF do
+  /// Windows; se não der, abre o PDF para imprimir à mão. Falha não desfaz a venda.
+  Future<void> printDanfe(LocalNfce nfe) async {
+    final printer = danfePrinter;
+    if (printer == null) return;
+    try {
+      final printed = await printer.print(nfe.accessKey, await buildDanfeA4(nfe.xml));
+      lastDanfePath = printed.file.path;
+      if (printed.result != DanfeResult.printed) notice = ErrorDisplay.fromCode('FA783');
+    } catch (error, stack) {
+      logger?.error('Falha ao gerar ou imprimir o DANFE', errorCode: 'FA783', error: error, stackTrace: stack, fields: {'number': nfe.number});
+      notice = ErrorDisplay.fromCode('FA783');
     }
   }
 

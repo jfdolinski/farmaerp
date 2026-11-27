@@ -21,6 +21,7 @@ import 'fiscal/nfce_emitter.dart';
 import 'fiscal/nfce_retransmitter.dart';
 import 'fiscal/sefaz.dart';
 import 'local/local_database.dart';
+import 'pos/danfe_printer.dart';
 import 'pos/display_settings.dart';
 import 'pos/pdv_home.dart';
 import 'pos/pos_auth.dart';
@@ -152,12 +153,15 @@ Future<void> main() async {
   final nfceCredentials = NfceCredentialService(api: api, database: database, store: store, logger: logger);
   final sefaz = SefazClient();
   late final TerminalController controller;
+  // A NF-e de venda que ficou pendente e foi autorizada depois tem o DANFE impresso pelo caixa.
+  PosController? posRef;
   final nfceRetransmitter = NfceRetransmitter(
     database: database,
     credentials: nfceCredentials,
     sefaz: sefaz,
     terminalId: () => controller.terminalId,
     logger: logger,
+    onNfeAuthorized: (nfe) async => posRef?.printDanfe(nfe),
   );
 
   controller = terminal = TerminalController(
@@ -195,6 +199,10 @@ Future<void> main() async {
     database: database,
     auth: PosAuth(database: database, logger: logger),
     printer: () => configuredPrinter(database, pdfDirectory),
+    // DANFE A4 da NF-e de venda: cópia em Documentos\FarmaERP\danfe e impressão pelo Windows.
+    danfePrinter: WindowsDanfePrinter(
+      Directory('${documents.path}${Platform.pathSeparator}FarmaERP${Platform.pathSeparator}danfe'),
+    ),
     terminalNumber: () => controller.terminalNumber,
     // A venda sobe logo, sem esperar o próximo sinal de vida.
     onSaleSaved: () => unawaited(controller.tick()),
@@ -226,6 +234,7 @@ Future<void> main() async {
     findQuote: (key) async => api.quote(accessToken: await controller.accessToken(), key: key),
     logger: logger,
   );
+  posRef = pos;
   // Rosto: por enquanto só no Windows (no Linux, PIN e liberação do gerente).
   final face = Platform.isWindows ? FaceService(camera: LiteFaceCamera.new, engine: OnnxFaceEngine.open) : null;
   pos.face = face;

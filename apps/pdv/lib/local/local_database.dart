@@ -580,13 +580,48 @@ const _migrations = <String>[
   ALTER TABLE customer ADD COLUMN state_registration TEXT;
   ALTER TABLE customer ADD COLUMN ie_indicator INTEGER CHECK (ie_indicator IN (1, 2, 9));
   ''',
+  // NF-e de venda (modelo 55) guardada com a NFC-e: a tabela ganha o modelo, e a numeração passa a
+  // ser única por modelo e série (a série 1 da NF-e e a da NFC-e são numerações diferentes). A NF-e
+  // não tem QR Code nem endereço de consulta (ficam vazios).
+  '''
+  CREATE TABLE nfce_document_new (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    sale_id BLOB NOT NULL UNIQUE CHECK (length(sale_id) = 16),
+    model TEXT NOT NULL DEFAULT '65' CHECK (model IN ('55', '65')),
+    series INTEGER NOT NULL,
+    number INTEGER NOT NULL,
+    access_key TEXT NOT NULL UNIQUE,
+    environment INTEGER NOT NULL CHECK (environment IN (1, 2)),
+    emission_type INTEGER NOT NULL CHECK (emission_type IN (1, 9)),
+    status TEXT NOT NULL CHECK (status IN ('authorized', 'rejected', 'pending', 'contingency', 'canceled')),
+    protocol TEXT,
+    status_code TEXT,
+    reason TEXT,
+    xml TEXT NOT NULL,
+    qr_code TEXT NOT NULL,
+    consult_url TEXT NOT NULL,
+    emitted_at TEXT NOT NULL,
+    authorized_at TEXT,
+    attempts INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL,
+    UNIQUE (model, series, number),
+    CHECK (model = '65' OR emission_type = 1)
+  ) STRICT;
+  INSERT INTO nfce_document_new (id, sale_id, series, number, access_key, environment, emission_type, status, protocol,
+    status_code, reason, xml, qr_code, consult_url, emitted_at, authorized_at, attempts, updated_at)
+  SELECT id, sale_id, series, number, access_key, environment, emission_type, status, protocol, status_code, reason, xml,
+    qr_code, consult_url, emitted_at, authorized_at, attempts, updated_at FROM nfce_document;
+  DROP TABLE nfce_document;
+  ALTER TABLE nfce_document_new RENAME TO nfce_document;
+  ''',
 ];
 
-/// NFC-e do caixa, para guardar, imprimir o DANFE e subir à central.
+/// NFC-e (ou NF-e de venda, modelo 55) do caixa, para guardar, imprimir o DANFE e subir à central.
 class LocalNfce {
   const LocalNfce({
     required this.id,
     required this.saleId,
+    this.model = '65',
     required this.series,
     required this.number,
     required this.accessKey,
@@ -605,11 +640,16 @@ class LocalNfce {
 
   final String id;
   final String saleId;
+
+  /// 65 NFC-e (cupom), 55 NF-e de venda (DANFE A4).
+  final String model;
   final int series;
   final int number;
   final String accessKey;
   final int environment;
   final int emissionType;
+
+  bool get isNfe => model == '55';
 
   /// authorized, rejected, pending ou contingency.
   final String status;
@@ -628,6 +668,7 @@ class LocalNfce {
       LocalNfce(
         id: id,
         saleId: saleId,
+        model: model,
         series: series,
         number: number,
         accessKey: accessKey,
@@ -650,6 +691,7 @@ class LocalNfce {
   /// O que sobe para a central (item "nfce" da outbox).
   Map<String, Object?> toPayload() => {
     'id': id,
+    'model': model,
     'sale_id': saleId,
     'series': series,
     'number': number,
@@ -1853,10 +1895,14 @@ class LocalDatabase {
 
   /// Série e próximo número da NFC-e deste caixa: depois do maior entre o inicial, o que a
   /// central conhece e o que este caixa já usou. Null sem série do modelo 65.
-  ({int series, int number})? nextNfceNumber() {
+  ({int series, int number})? nextNfceNumber() => nextFiscalNumber('65');
+
+  /// Série e próximo número do modelo (65 NFC-e, 55 NF-e) neste caixa. Null sem série do modelo.
+  ({int series, int number})? nextFiscalNumber(String model) {
     final rows = _db.select(
-      "SELECT series, initial_number, central_last_used_number, local_last_used_number FROM fiscal_series "
-      "WHERE model = '65' AND active = 1 LIMIT 1",
+      'SELECT series, initial_number, central_last_used_number, local_last_used_number FROM fiscal_series '
+      'WHERE model = ? AND active = 1 LIMIT 1',
+      [model],
     );
     if (rows.isEmpty) return null;
     final row = rows.first;
@@ -1872,19 +1918,19 @@ class LocalDatabase {
   void saveNfce(LocalNfce nfce, {required DateTime now}) => _transaction(() {
     final stamp = now.toUtc().toIso8601String();
     _db.execute(
-      'INSERT INTO nfce_document (id, sale_id, series, number, access_key, environment, emission_type, status, protocol, '
+      'INSERT INTO nfce_document (id, sale_id, model, series, number, access_key, environment, emission_type, status, protocol, '
       'status_code, reason, xml, qr_code, consult_url, emitted_at, authorized_at, updated_at) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
-        uuidBytes(nfce.id), uuidBytes(nfce.saleId), nfce.series, nfce.number, nfce.accessKey, nfce.environment,
+        uuidBytes(nfce.id), uuidBytes(nfce.saleId), nfce.model, nfce.series, nfce.number, nfce.accessKey, nfce.environment,
         nfce.emissionType, nfce.status, nfce.protocol, nfce.statusCode, nfce.reason, nfce.xml, nfce.qrCode,
         nfce.consultUrl, nfce.emittedAt.toUtc().toIso8601String(), nfce.authorizedAt?.toUtc().toIso8601String(), stamp,
       ],
     );
     _db.execute(
-      "UPDATE fiscal_series SET local_last_used_number = max(COALESCE(local_last_used_number, 0), ?) "
-      "WHERE model = '65' AND series = ?",
-      [nfce.number, nfce.series],
+      'UPDATE fiscal_series SET local_last_used_number = max(COALESCE(local_last_used_number, 0), ?) '
+      'WHERE model = ? AND series = ?',
+      [nfce.number, nfce.model, nfce.series],
     );
     enqueue('nfce', nfce.toPayload(), now: now);
   });
@@ -1937,6 +1983,7 @@ class LocalDatabase {
     return LocalNfce(
       id: uuidText(row['id'] as List<int>),
       saleId: saleId,
+      model: row['model'] as String,
       series: row['series'] as int,
       number: row['number'] as int,
       accessKey: row['access_key'] as String,

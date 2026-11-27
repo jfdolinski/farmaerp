@@ -982,6 +982,36 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Cancelamento, reenvio e consulta da NF-e modelo 55 pela central chegam numa próxima versão. Até lá, use o portal da Sefaz.',
     retryable: false,
   ),
+  'FA781': ErrorCatalogEntry(
+    code: 'FA781',
+    message: 'A NF-e precisa de comunicação com a Sefaz, e o caixa não conseguiu falar com ela.',
+    action: 'Confira a internet do caixa e tente de novo, ou troque para NFC-e. A venda continua aberta.',
+    retryable: true,
+  ),
+  'FA782': ErrorCatalogEntry(
+    code: 'FA782',
+    message: 'A Sefaz recusou a NF-e.',
+    action: 'Corrija o que a Sefaz apontou (cadastro do cliente ou do produto) e tente de novo, ou troque para NFC-e. A venda continua aberta.',
+    retryable: false,
+  ),
+  'FA783': ErrorCatalogEntry(
+    code: 'FA783',
+    message: 'O DANFE da NF-e não foi impresso.',
+    action: 'O PDF foi aberto (ou guardado na pasta do caixa) para imprimir à mão. A venda está concluída.',
+    retryable: false,
+  ),
+  'FA784': ErrorCatalogEntry(
+    code: 'FA784',
+    message: 'A NF-e não está disponível para esta venda.',
+    action: 'A NF-e é para cliente pessoa jurídica com CNPJ e endereço completo (com o código do município) e precisa da série 55 do caixa. Complete o cadastro ou emita NFC-e.',
+    retryable: false,
+  ),
+  'FA785': ErrorCatalogEntry(
+    code: 'FA785',
+    message: 'A NF-e foi enviada, mas a Sefaz não respondeu a tempo.',
+    action: 'A venda está concluída. O caixa consulta a Sefaz sozinho e imprime o DANFE quando a nota for autorizada.',
+    retryable: true,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',

@@ -49,6 +49,31 @@ void main() {
     expect(authorizationUrl('BA', 2), isNull);
   });
 
+  test('NF-e modelo 55: endereços próprios de autorização e consulta; SC na SVRS; UF fora fica sem', () {
+    expect(authorizationUrl('SP', 2, model: '55').toString(), 'https://homologacao.nfe.fazenda.sp.gov.br/ws/nfeautorizacao4.asmx');
+    expect(authorizationUrl('SP', 1, model: '55').toString(), 'https://nfe.fazenda.sp.gov.br/ws/nfeautorizacao4.asmx');
+    expect(consultUrl('SP', 2, model: '55').toString(), 'https://homologacao.nfe.fazenda.sp.gov.br/ws/nfeconsultaprotocolo4.asmx');
+    expect(authorizationUrl('SC', 2, model: '55')?.host, 'nfe-homologacao.svrs.rs.gov.br');
+    expect(authorizationUrl('RS', 2, model: '55')?.host, 'nfe-homologacao.sefazrs.rs.gov.br');
+    expect(consultUrl('MG', 1, model: '55')?.host, 'nfe.fazenda.mg.gov.br');
+    expect(authorizationUrl('BA', 2, model: '55'), isNull);
+    // O padrão continua sendo a NFC-e.
+    expect(authorizationUrl('SP', 2)?.host, 'homologacao.nfce.fazenda.sp.gov.br');
+  });
+
+  test('sem chegar à Sefaz (sem conexão, TLS, UF sem serviço) é "não enviado"; tempo esgotado depois de enviar pode ter chegado', () async {
+    Future<SefazUnavailable> attempt(Object error, {String uf = 'SP'}) async => await SefazClient(transport: FakeTransport(() => throw error))
+        .authorize(signedNfe: signedNfe, uf: uf, environment: 2, credentials: credentials, model: '55') as SefazUnavailable;
+    expect((await attempt(const SefazNotReached('Sem conexão com a Sefaz: x'))).sent, isFalse);
+    expect((await attempt(const HandshakeException('tls'))).sent, isFalse);
+    expect((await attempt(TimeoutException('lento'))).sent, isTrue);
+    expect((await attempt(const SocketException('caiu no meio'))).sent, isTrue);
+    expect((await attempt(TimeoutException('x'), uf: 'BA')).sent, isFalse);
+    final consult = await SefazClient(transport: FakeTransport(() => throw const SefazNotReached('x')))
+        .consult(accessKey: '1', signedNfe: signedNfe, uf: 'SP', environment: 2, credentials: credentials, model: '55');
+    expect((consult as SefazUnavailable).sent, isFalse);
+  });
+
   test('envelope: lote síncrono com a nota assinada, sem a declaração do XML', () {
     final envelope = authorizationEnvelope(signedNfe, batchId: '123');
     expect(envelope, contains('<idLote>123</idLote><indSinc>1</indSinc><NFe xmlns='));

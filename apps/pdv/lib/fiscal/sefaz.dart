@@ -27,9 +27,28 @@ const _authorization = <String, (String homologation, String production)>{
   'MG': ('https://hnfce.fazenda.mg.gov.br/nfce/services/NFeAutorizacao4', 'https://nfce.fazenda.mg.gov.br/nfce/services/NFeAutorizacao4'),
 };
 
-/// Endereço da autorização na UF e no ambiente (1 produção, 2 homologação). Null se não atendida.
-Uri? authorizationUrl(String uf, int environment) {
-  final urls = _authorization[uf];
+/// Serviço de autorização da NF-e modelo 55 (NFeAutorizacao4) por UF: outros endereços, o mesmo
+/// envelope. SC usa a SVRS. Os mesmos da central (nfe-sefaz.ts).
+///
+/// CONFERIR com o portal de cada UF antes de produção.
+const _nfeAuthorization = <String, (String homologation, String production)>{
+  'SP': ('https://homologacao.nfe.fazenda.sp.gov.br/ws/nfeautorizacao4.asmx', 'https://nfe.fazenda.sp.gov.br/ws/nfeautorizacao4.asmx'),
+  'PR': ('https://homologacao.nfe.sefa.pr.gov.br/nfe/NFeAutorizacao4', 'https://nfe.sefa.pr.gov.br/nfe/NFeAutorizacao4'),
+  'MG': ('https://hnfe.fazenda.mg.gov.br/nfe2/services/NFeAutorizacao4', 'https://nfe.fazenda.mg.gov.br/nfe2/services/NFeAutorizacao4'),
+  'RS': (
+    'https://nfe-homologacao.sefazrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
+    'https://nfe.sefazrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
+  ),
+  'SC': (
+    'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
+    'https://nfe.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
+  ),
+};
+
+/// Endereço da autorização na UF, no ambiente (1 produção, 2 homologação) e no modelo (65 NFC-e,
+/// 55 NF-e). Null se não atendida.
+Uri? authorizationUrl(String uf, int environment, {String model = '65'}) {
+  final urls = (model == '55' ? _nfeAuthorization : _authorization)[uf];
   if (urls == null) return null;
   return Uri.parse(environment == 1 ? urls.$2 : urls.$1);
 }
@@ -65,10 +84,13 @@ class SefazRejected extends SefazResult {
 }
 
 /// Sem resposta útil (sem internet, tempo esgotado, serviço parado): a nota fica pendente.
+/// [sent] diz se o pedido pode ter chegado à Sefaz: sem conexão (ou sem endereço), não chegou; com o
+/// tempo esgotado depois de enviar, pode ter chegado (é preciso consultar antes de enviar de novo).
 class SefazUnavailable extends SefazResult {
-  const SefazUnavailable(this.reason);
+  const SefazUnavailable(this.reason, {this.sent = true});
 
   final String reason;
+  final bool sent;
 }
 
 /// A mesma nota já está na Sefaz (204): a resposta da primeira vez se perdeu. Consultar.
@@ -103,9 +125,20 @@ const _consult = <String, (String homologation, String production)>{
   'MG': ('https://hnfce.fazenda.mg.gov.br/nfce/services/NFeConsultaProtocolo4', 'https://nfce.fazenda.mg.gov.br/nfce/services/NFeConsultaProtocolo4'),
 };
 
-/// Endereço da consulta na UF e no ambiente. Null se não atendida.
-Uri? consultUrl(String uf, int environment) {
-  final urls = _consult[uf];
+/// Consulta da NF-e modelo 55 (NFeConsultaProtocolo4) por UF. SC usa a SVRS.
+///
+/// CONFERIR com o portal de cada UF antes de produção.
+const _nfeConsult = <String, (String homologation, String production)>{
+  'SP': ('https://homologacao.nfe.fazenda.sp.gov.br/ws/nfeconsultaprotocolo4.asmx', 'https://nfe.fazenda.sp.gov.br/ws/nfeconsultaprotocolo4.asmx'),
+  'PR': ('https://homologacao.nfe.sefa.pr.gov.br/nfe/NFeConsultaProtocolo4', 'https://nfe.sefa.pr.gov.br/nfe/NFeConsultaProtocolo4'),
+  'MG': ('https://hnfe.fazenda.mg.gov.br/nfe2/services/NFeConsultaProtocolo4', 'https://nfe.fazenda.mg.gov.br/nfe2/services/NFeConsultaProtocolo4'),
+  'RS': ('https://nfe-homologacao.sefazrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx', 'https://nfe.sefazrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx'),
+  'SC': ('https://nfe-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx', 'https://nfe.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx'),
+};
+
+/// Endereço da consulta na UF, no ambiente e no modelo. Null se não atendida.
+Uri? consultUrl(String uf, int environment, {String model = '65'}) {
+  final urls = (model == '55' ? _nfeConsult : _consult)[uf];
   if (urls == null) return null;
   return Uri.parse(environment == 1 ? urls.$2 : urls.$1);
 }
@@ -157,7 +190,19 @@ String? _cut(String response, String name) {
   return response.substring(start, start + end.end).replaceAllMapped(RegExp(r'(</?)\w+:'), (match) => match[1]!);
 }
 
-/// Leva o envelope até a Sefaz com o certificado do caixa no TLS. Separado para os testes.
+/// O pedido não chegou a sair: sem conexão, sem resposta ao conectar ou falha no TLS. Diferente do
+/// tempo esgotado depois de enviar, quando a Sefaz pode ter recebido a nota.
+class SefazNotReached implements Exception {
+  const SefazNotReached(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// Leva o envelope até a Sefaz com o certificado do caixa no TLS. Separado para os testes. Falha
+/// antes de enviar o pedido vira [SefazNotReached].
 abstract class SefazTransport {
   Future<String> post(Uri url, String body, {required NfceCredentials credentials, required Duration timeout});
 }
@@ -170,7 +215,16 @@ class HttpSefazTransport implements SefazTransport {
       ..usePrivateKeyBytes(utf8.encode(credentials.privateKeyPem));
     final client = HttpClient(context: context)..connectionTimeout = timeout;
     try {
-      final request = await client.postUrl(url).timeout(timeout);
+      final HttpClientRequest request;
+      try {
+        request = await client.postUrl(url).timeout(timeout);
+      } on TimeoutException {
+        throw const SefazNotReached('A Sefaz não respondeu ao conectar.');
+      } on SocketException catch (error) {
+        throw SefazNotReached('Sem conexão com a Sefaz: ${error.message}');
+      } on HandshakeException catch (error) {
+        throw SefazNotReached('Falha no TLS com a Sefaz: ${error.message}');
+      }
       request.headers.set(HttpHeaders.contentTypeHeader, 'application/soap+xml; charset=utf-8');
       request.add(utf8.encode(body));
       final response = await request.close().timeout(timeout);
@@ -254,9 +308,10 @@ class SefazClient {
     required String uf,
     required int environment,
     required NfceCredentials credentials,
+    String model = '65',
   }) async {
-    final url = authorizationUrl(uf, environment);
-    if (url == null) return SefazUnavailable('UF $uf sem serviço de autorização configurado.');
+    final url = authorizationUrl(uf, environment, model: model);
+    if (url == null) return SefazUnavailable('UF $uf sem serviço de autorização configurado.', sent: false);
     final batchId = List.generate(15, (_) => _random.nextInt(10)).join();
     try {
       final response = await _transport.post(
@@ -266,12 +321,14 @@ class SefazClient {
         timeout: timeout,
       );
       return parseAuthorization(response, signedNfe: signedNfe);
+    } on SefazNotReached catch (error) {
+      return SefazUnavailable(error.message, sent: false);
     } on TimeoutException {
       return const SefazUnavailable('A Sefaz não respondeu a tempo.');
     } on SocketException catch (error) {
       return SefazUnavailable('Sem conexão com a Sefaz: ${error.message}');
     } on HandshakeException catch (error) {
-      return SefazUnavailable('Falha no TLS com a Sefaz: ${error.message}');
+      return SefazUnavailable('Falha no TLS com a Sefaz: ${error.message}', sent: false);
     } on HttpException catch (error) {
       return SefazUnavailable(error.message);
     }
@@ -284,18 +341,21 @@ class SefazClient {
     required String uf,
     required int environment,
     required NfceCredentials credentials,
+    String model = '65',
   }) async {
-    final url = consultUrl(uf, environment);
-    if (url == null) return SefazUnavailable('UF $uf sem serviço de consulta configurado.');
+    final url = consultUrl(uf, environment, model: model);
+    if (url == null) return SefazUnavailable('UF $uf sem serviço de consulta configurado.', sent: false);
     try {
       final response = await _transport.post(url, consultEnvelope(accessKey, environment: environment), credentials: credentials, timeout: timeout);
       return parseConsult(response, signedNfe: signedNfe);
+    } on SefazNotReached catch (error) {
+      return SefazUnavailable(error.message, sent: false);
     } on TimeoutException {
       return const SefazUnavailable('A Sefaz não respondeu a tempo.');
     } on SocketException catch (error) {
       return SefazUnavailable('Sem conexão com a Sefaz: ${error.message}');
     } on HandshakeException catch (error) {
-      return SefazUnavailable('Falha no TLS com a Sefaz: ${error.message}');
+      return SefazUnavailable('Falha no TLS com a Sefaz: ${error.message}', sent: false);
     } on HttpException catch (error) {
       return SefazUnavailable(error.message);
     }
