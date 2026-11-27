@@ -225,8 +225,8 @@ describe('venda sem estoque com o PDV sem internet', () => {
     const alerts = async (payload) => (await ownerPool.query(
       `SELECT kind, detail FROM sale_alert WHERE sale_id = $1 AND kind = 'offline_zero_stock'`, [payload.id],
     )).rows;
-    expect(await alerts(byManager)).toEqual([{ kind: 'offline_zero_stock', detail: { supervisor_id: manager.id, supervisor_allowed: true, minutes_offline: 95 } }]);
-    expect(await alerts(byOperator)).toEqual([{ kind: 'offline_zero_stock', detail: { supervisor_id: operator.id, supervisor_allowed: false, minutes_offline: 40 } }]);
+    expect(await alerts(byManager)).toEqual([{ kind: 'offline_zero_stock', detail: { supervisor_id: manager.id, supervisor_allowed: true, minutes_offline: 95, stock: null } }]);
+    expect(await alerts(byOperator)).toEqual([{ kind: 'offline_zero_stock', detail: { supervisor_id: operator.id, supervisor_allowed: false, minutes_offline: 40, stock: null } }]);
   });
 
   it('desconto acima da regra liberado por quem pode passar dela não vira alerta', async () => {

@@ -28,7 +28,7 @@ export const ALERT_LABELS: Record<string, string> = {
   negative_stock: "Estoque ficou negativo",
   product_status: "Produto não estava ativo na filial",
   agreement_link: "Convênio sem o cliente vinculado",
-  offline_zero_stock: "Vendido sem estoque com o PDV sem internet",
+  offline_zero_stock: "Vendido com estoque negativo (liberado no PDV)",
   controlled_missing: "Controlado vendido sem os dados da receita",
   controlled_release: "Controlado liberado por quem não tinha a permissão",
   controlled_pending: "Controlado vendido com estoque negativo, pendente de dados para o SNGPC",
@@ -69,8 +69,14 @@ export function alertText(kind: string, detail: Record<string, unknown>): string
       return `${label}: ${percent(detail.percent)} com máximo de ${percent(detail.rule_max)}.`;
     case "discount_above_limit":
       return `${label}: ${percent(detail.percent)}, limite do operador ${percent(detail.operator_limit)}.`;
-    case "offline_zero_stock":
-      return `${label}: ${detail.minutes_offline} min sem sincronizar${detail.supervisor_allowed ? ", autorizado pelo gerente" : ", autorizado por quem não tinha a permissão"}.`;
+    case "offline_zero_stock": {
+      const parts = [
+        detail.stock !== null && detail.stock !== undefined ? `saldo na hora ${Number(detail.stock).toLocaleString("pt-BR")}` : null,
+        detail.minutes_offline !== null && detail.minutes_offline !== undefined ? `${detail.minutes_offline} min sem sincronizar` : null,
+        detail.supervisor_allowed ? "liberado por quem tem a permissão" : "liberado por quem não tinha a permissão",
+      ].filter(Boolean);
+      return `${label}: ${parts.join(", ")}.`;
+    }
     case "quote_status": {
       const reasons: Record<string, string> = {
         converted: "já tinha virado outra venda",

@@ -59,6 +59,9 @@ interface SaleDetail {
     discount_rules: { rule_id: string; name: string; amount: number }[];
     total: number;
     batches: { number: string; quantity: number }[];
+    /** Orçamentos juntados no caixa: cada item com o vendedor e o orçamento de origem. */
+    seller_name?: string | null;
+    quote_code?: string | null;
   }[];
   payments: {
     method: string;
@@ -204,6 +207,13 @@ function SaleView({ sale }: { sale: SaleDetail }) {
                     {item.batches.length > 0 && (
                       <small className={styles.hint}>
                         Lotes: {item.batches.map((batch) => `${batch.number} (${quantityText(batch.quantity)})`).join(", ")}
+                      </small>
+                    )}
+                    {item.seller_name && (item.seller_name !== sale.seller_name || item.quote_code) && (
+                      <small className={styles.hint}>
+                        {" "}
+                        Vendedor: {item.seller_name}
+                        {item.quote_code && ` · orçamento ${item.quote_code}`}
                       </small>
                     )}
                   </td>

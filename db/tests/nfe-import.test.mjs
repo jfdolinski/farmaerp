@@ -151,7 +151,7 @@ describe('compra recebida', () => {
     // Bonificação (5910) entra no estoque, sem custo.
     expect(Number(await costOf(productId, a.branch1.id))).toBe(11);
     expect(await costOf(items[1].product_id, a.branch1.id)).toBeNull();
-    const movement = (await ownerPool.query('SELECT movement_type, occurred_at FROM stock_movement WHERE product_id = $1', [productId])).rows[0];
+    const movement = (await ownerPool.query('SELECT movement_type, occurred_at FROM stock_movement WHERE product_id = $1 AND imported_stock_item_id IS NOT NULL ORDER BY occurred_at LIMIT 1', [productId])).rows[0];
     expect(movement.movement_type).toBe('import');
     expect(movement.occurred_at.toISOString()).toBe('2026-05-10T13:00:00.000Z');
     // Fora do SNGPC.
