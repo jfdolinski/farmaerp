@@ -5,7 +5,7 @@ import { asOwner, closePools, connectionConfig, ownerPool } from './helpers.mjs'
 afterAll(closePools);
 
 const EXPECTED_TABLES = [
-  'abc_curve_setting', 'agreement', 'agreement_invoice', 'agreement_invoice_item', 'app_release', 'auth_event', 'biometric_consent', 'branch', 'branch_certificate', 'branch_company_event',
+  'abc_curve_setting', 'agreement', 'agreement_invoice', 'agreement_invoice_item', 'app_release', 'auth_event', 'biometric_consent', 'branch', 'branch_catalog_key', 'branch_certificate', 'branch_company_event',
   'branch_csc', 'branch_dfe_sync', 'branch_group', 'cash_alert', 'cash_movement', 'cash_session', 'cash_session_count', 'cashback_allocation', 'cashback_entry', 'cashback_policy',
   'catalog_manufacturer', 'catalog_product', 'catalog_product_barcode', 'catalog_product_image', 'catalog_product_pmc', 'catalog_product_tax', 'catalog_sync_run', 'central_nfe', 'central_nfe_series', 'code_counter',
   'company', 'controlled_dispensing', 'credit_account', 'credit_account_event', 'credit_allocation', 'credit_installment', 'credit_payment', 'credit_policy', 'customer', 'customer_abc',

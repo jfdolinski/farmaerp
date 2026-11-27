@@ -10,6 +10,7 @@ import { type CatalogSyncState, runCatalogSync } from "./actions";
 export interface CatalogSyncRun {
   id: string;
   trigger: "schedule" | "manual";
+  branch: string;
   status: "running" | "unchanged" | "updated" | "failed";
   startedAt: string;
   finishedAt: string | null;
@@ -26,6 +27,9 @@ export interface CatalogSyncStatus {
   pending: number;
   removed: number;
   imagesDue: number;
+  branches: number;
+  branchesWithKey: number;
+  withoutKey: string[];
   runs: CatalogSyncRun[];
 }
 
@@ -51,13 +55,14 @@ export function CatalogSyncPanel({ status }: { status: CatalogSyncStatus }) {
         <h2>Cópia do Catálogo</h2>
         {!status.configured ? (
           <p className={styles.warning}>
-            A ligação com o Catálogo não está configurada. Informe o endereço e a chave nas variáveis da API (CATALOG_URL
-            e CATALOG_API_KEY) e publique de novo.
+            A ligação com o Catálogo não está configurada. Informe o endereço do Catálogo na variável CATALOG_URL da API e
+            publique de novo.
           </p>
         ) : (
           <p className={styles.hint}>
-            A central copia o Catálogo de hora em hora; o código de barras que ainda não está na cópia é consultado na
-            hora. {lastGood ? `Última cópia boa: ${when(lastGood.startedAt)}.` : "Ainda não houve cópia."}
+            De hora em hora, cada filial com chave verifica o Catálogo com a própria chave (os dados do produto ficam
+            gravados uma vez só); o código de barras que ainda não está na cópia é consultado na hora, com a chave da filial
+            de quem cadastra. {lastGood ? `Última verificação boa: ${when(lastGood.startedAt)}.` : "Ainda não houve cópia."}
           </p>
         )}
         <dl className={own.facts}>
@@ -77,7 +82,19 @@ export function CatalogSyncPanel({ status }: { status: CatalogSyncStatus }) {
             <dt>Imagens a trazer</dt>
             <dd>{number(status.imagesDue)}</dd>
           </div>
+          <div>
+            <dt>Filiais com chave</dt>
+            <dd>
+              {number(status.branchesWithKey)} de {number(status.branches)}
+            </dd>
+          </div>
         </dl>
+        {status.withoutKey.length > 0 && (
+          <p className={styles.warning}>
+            Filiais sem chave do Catálogo (cadastram em Fiscal, na aba Catálogo): {status.withoutKey.join(", ")}
+            {status.branches - status.branchesWithKey > status.withoutKey.length ? " e outras." : "."}
+          </p>
+        )}
         {status.configured && (
           <form action={action}>
             <button type="submit" disabled={pending || running}>
@@ -89,7 +106,7 @@ export function CatalogSyncPanel({ status }: { status: CatalogSyncStatus }) {
         <ErrorNotice error={state.error} />
       </section>
       <section className={styles.card}>
-        <h2>Últimas cópias</h2>
+        <h2>Últimas verificações</h2>
         {status.runs.length === 0 ? (
           <p className={styles.hint}>Nenhuma cópia ainda.</p>
         ) : (
@@ -98,6 +115,7 @@ export function CatalogSyncPanel({ status }: { status: CatalogSyncStatus }) {
               <thead>
                 <tr>
                   <th>Início</th>
+                  <th>Filial</th>
                   <th>Origem</th>
                   <th>Situação</th>
                   <th>Itens</th>
@@ -110,6 +128,7 @@ export function CatalogSyncPanel({ status }: { status: CatalogSyncStatus }) {
                 {status.runs.map((run) => (
                   <tr key={run.id}>
                     <td>{when(run.startedAt)}</td>
+                    <td>{run.branch}</td>
                     <td>{run.trigger === "manual" ? "Atualizar agora" : "Automática"}</td>
                     <td>
                       <span className={run.status === "failed" ? styles.warning : undefined}>{STATUS[run.status]}</span>

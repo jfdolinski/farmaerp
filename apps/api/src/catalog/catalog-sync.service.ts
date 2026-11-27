@@ -1,7 +1,9 @@
 import { Inject, Injectable, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { DatabaseService } from '../database.service.js';
+import { open, seal } from '../fiscal/secret-box.js';
+import { AppError } from '../observability/app-error.js';
 import { AppLogger } from '../observability/app-logger.js';
-import { CatalogClient, catalogConfig, CatalogUnavailable, MappedItem, mapItem } from './catalog-client.js';
+import { CATALOG_KEY, CatalogClient, CatalogUnavailable, catalogUrl, Fetcher, MappedItem, mapItem } from './catalog-client.js';
 import { PreparedImage, prepareImage } from './catalog-images.js';
 
 const WORKER = { worker: 'catalog' };
@@ -10,39 +12,48 @@ const SYNC_EVERY_MS = 60 * 60_000;
 const IMAGES_EVERY_MS = 5 * 60_000;
 const FIRST_SYNC_MS = 60_000;
 
-type SyncResult = 'busy' | 'unchanged' | 'updated' | 'failed';
+type SyncResult = 'busy' | 'unchanged' | 'updated' | 'failed' | 'no_key';
+
+/** A chave de uma filial só abre com o contexto dela: copiada para outra filial no banco, não abre. */
+const keyContext = (branchId: string) => `catalog:${branchId}`;
 
 /**
- * Cópia do Catálogo externo para o Catálogo do FarmaERP: o catálogo completo de hora em hora (com a
- * ETag, para não baixar de novo o que não mudou), só os itens que mudaram vão ao banco, e as imagens
- * dos itens vinculados vêm aos poucos. O código de barras que a cópia não tem é consultado na hora.
- * Sem CATALOG_URL e CATALOG_API_KEY, fica desligada. CATALOG_WORKER=off desliga só a rotina.
+ * Cópia do Catálogo externo para o Catálogo do FarmaERP. Cada filial é uma empresa no Catálogo,
+ * com a própria chave: de hora em hora, cada filial com chave faz a própria verificação (com a
+ * ETag; os dados são os mesmos para todas e ficam gravados uma vez só, e só os itens que mudaram vão
+ * ao banco). As imagens dos itens vinculados vêm aos poucos. O código de barras que a cópia não tem
+ * é consultado na hora, com a chave da filial principal do usuário. Sem CATALOG_URL, fica
+ * desligada; CATALOG_WORKER=off desliga só a rotina.
  */
 @Injectable()
 export class CatalogSyncService implements OnApplicationBootstrap, OnModuleDestroy {
   private timers: NodeJS.Timeout[] = [];
-  private client: CatalogClient | null;
+  private url: string | null = catalogUrl();
+  private fetcher: Fetcher = fetch;
   private imagesRunning = false;
 
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(AppLogger) private readonly logger: AppLogger,
-  ) {
-    const config = catalogConfig();
-    this.client = config ? new CatalogClient(config) : null;
-  }
+  ) {}
 
-  /** Para os testes: outro endereço ou outro cliente HTTP. */
-  useClient(client: CatalogClient | null): void {
-    this.client = client;
+  /** Para os testes: outro endereço (ou nenhum) e outro cliente HTTP. */
+  useCatalog(url: string | null, fetcher: Fetcher = fetch): void {
+    this.url = url;
+    this.fetcher = fetcher;
   }
 
   get configured(): boolean {
-    return this.client !== null;
+    return this.url !== null;
+  }
+
+  private client(key: string): CatalogClient {
+    if (!this.url) throw new AppError('FA228');
+    return new CatalogClient({ url: this.url, key }, this.fetcher);
   }
 
   onApplicationBootstrap(): void {
-    if (process.env.CATALOG_WORKER === 'off' || !this.client) return;
+    if (process.env.CATALOG_WORKER === 'off' || !this.url) return;
     const later = (fn: () => Promise<unknown>, ms: number, repeat: boolean) => {
       const timer = repeat ? setInterval(() => void fn(), ms) : setTimeout(() => void fn(), ms);
       timer.unref();
@@ -56,6 +67,32 @@ export class CatalogSyncService implements OnApplicationBootstrap, OnModuleDestr
   onModuleDestroy(): void {
     for (const timer of this.timers) clearTimeout(timer);
   }
+
+  // ===== Chave da filial =====
+
+  /**
+   * Confere a chave no Catálogo e guarda cifrada. A permissão é conferida antes de tudo: quem não
+   * pode trocar a chave da filial não chega a falar com o Catálogo.
+   */
+  async setBranchKey(branchId: string, key: string): Promise<{ keyPrefix: string }> {
+    if (!CATALOG_KEY.test(key)) throw new AppError('FA231');
+    await this.database.withContext((db) => db.query("SELECT app.require_branch_permission('fiscal.certificate', $1)", [branchId]));
+    let verdict: Awaited<ReturnType<CatalogClient['verify']>>;
+    try {
+      verdict = await this.client(key).verify();
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new AppError('FA230', { cause: error });
+    }
+    if (verdict !== 'ok') throw new AppError('FA229');
+    const keyPrefix = key.slice(0, 8);
+    await this.database.withContext((db) =>
+      db.query('SELECT app.set_branch_catalog_key($1, $2, $3)', [branchId, seal(Buffer.from(key, 'utf8'), keyContext(branchId)), keyPrefix]),
+    );
+    return { keyPrefix };
+  }
+
+  // ===== Cópia =====
 
   private async apply(items: MappedItem[]): Promise<{ changed: number; failures: { sourceKey: string; reason: string }[] }> {
     let changed = 0;
@@ -75,14 +112,27 @@ export class CatalogSyncService implements OnApplicationBootstrap, OnModuleDestr
     return { changed, failures };
   }
 
-  /** Uma cópia completa. Outra em andamento: não começa ('busy'). */
+  /** Verificação de todas as filiais com chave, uma depois da outra. */
   async sync(trigger: 'schedule' | 'manual'): Promise<SyncResult> {
-    const client = this.client;
-    if (!client) return 'failed';
+    if (!this.url) return 'failed';
+    const keys = await this.database.withContext(
+      async (db) => (await db.query<{ branch_id: string; encrypted_key: Buffer }>('SELECT * FROM app.catalog_branch_keys()')).rows,
+      WORKER,
+    );
+    if (keys.length === 0) return 'no_key';
+    const results: SyncResult[] = [];
+    for (const key of keys) results.push(await this.syncBranch(trigger, key.branch_id, key.encrypted_key));
+    for (const result of ['updated', 'unchanged', 'failed', 'busy'] as const) {
+      if (results.includes(result)) return result;
+    }
+    return 'failed';
+  }
+
+  private async syncBranch(trigger: 'schedule' | 'manual', branchId: string, encrypted: Buffer): Promise<SyncResult> {
     const start = await this.database.withContext(async (db) => {
       const { rows } = await db.query<{ s: { runId: string; etag: string | null; hashes: Record<string, string> } | null }>(
-        'SELECT app.catalog_sync_start($1) AS s',
-        [trigger],
+        'SELECT app.catalog_sync_start($1, $2) AS s',
+        [trigger, branchId],
       );
       return rows[0].s;
     }, WORKER);
@@ -93,6 +143,13 @@ export class CatalogSyncService implements OnApplicationBootstrap, OnModuleDestr
         WORKER,
       );
     try {
+      let key: string;
+      try {
+        key = open(encrypted, keyContext(branchId)).toString('utf8');
+      } catch {
+        throw new CatalogUnavailable('A chave desta filial não abre. Cadastre a chave de novo em Fiscal, na aba Catálogo.');
+      }
+      const client = this.client(key);
       const response = await client.catalog(start.etag);
       if (response.unchanged) {
         await finish({ status: 'unchanged', etag: start.etag, items: 0, changed: 0, failed: 0 }, null);
@@ -111,21 +168,21 @@ export class CatalogSyncService implements OnApplicationBootstrap, OnModuleDestr
       const refused = new Set(failures.map((f) => f.sourceKey));
       const seen = mapped.map((item) => item.sourceKey).filter((key) => !refused.has(key) || start.hashes[key] !== undefined);
       await finish({ status: 'updated', etag: response.etag, items: mapped.length, changed, failed: failures.length, message }, seen);
-      this.logger.pino.info({ context: 'CatalogSyncService', items: mapped.length, changed, failed: failures.length }, 'Cópia do Catálogo concluída');
+      this.logger.pino.info({ context: 'CatalogSyncService', branchId, items: mapped.length, changed, failed: failures.length }, 'Cópia do Catálogo concluída');
       return 'updated';
     } catch (error) {
       const message = error instanceof CatalogUnavailable ? error.message : 'Erro ao gravar a cópia do Catálogo.';
-      this.logger.pino.warn({ context: 'CatalogSyncService', err: error }, 'Cópia do Catálogo falhou');
+      this.logger.pino.warn({ context: 'CatalogSyncService', branchId, err: error }, 'Cópia do Catálogo falhou');
       await finish({ status: 'failed', message }, null).catch(() => undefined);
       return 'failed';
     }
   }
 
-  /** Traz as imagens de um lote de itens vinculados. Devolve quantos itens ficaram em dia. */
+  /** Traz as imagens de um lote de itens vinculados (os arquivos não pedem chave). Devolve quantos ficaram em dia. */
   async syncImages(limit = 50): Promise<number> {
-    const client = this.client;
-    if (!client || this.imagesRunning) return 0;
+    if (!this.url || this.imagesRunning) return 0;
     this.imagesRunning = true;
+    const client = this.client('');
     let done = 0;
     try {
       const due = await this.database.withContext(
@@ -156,13 +213,18 @@ export class CatalogSyncService implements OnApplicationBootstrap, OnModuleDestr
   }
 
   /**
-   * Código de barras que a cópia não tem: consulta o Catálogo e grava o item (pendente, se o
-   * Catálogo acabou de criar o cadastro provisório). Sem resposta, a busca segue sem ele.
+   * Código de barras que a cópia não tem: consulta o Catálogo com a chave da filial principal de
+   * quem está cadastrando (no contexto da requisição) e grava o item (pendente, se o Catálogo
+   * acabou de criar o cadastro provisório). Sem chave ou sem resposta, a busca segue sem ele.
    */
   async lookup(code: string): Promise<boolean> {
-    const client = this.client;
-    if (!client) return false;
+    if (!this.url) return false;
     try {
+      const keys = await this.database.withContext(
+        async (db) => (await db.query<{ branch_id: string; encrypted_key: Buffer }>('SELECT * FROM app.user_catalog_key()')).rows,
+      );
+      if (keys.length === 0) return false;
+      const client = this.client(open(keys[0].encrypted_key, keyContext(keys[0].branch_id)).toString('utf8'));
       const external = await client.barcode(code);
       const mapped = external && external.active !== false ? mapItem(external, client.baseUrl) : null;
       if (!mapped) return false;

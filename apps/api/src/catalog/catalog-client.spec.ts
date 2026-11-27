@@ -1,14 +1,21 @@
-import { CatalogClient, catalogConfig, CatalogUnavailable, mapItem } from './catalog-client.js';
+import { CATALOG_KEY, CatalogClient, CatalogUnavailable, catalogUrl, mapItem } from './catalog-client.js';
 
 const BASE = 'https://catalogo.test';
 
 describe('configuração do Catálogo', () => {
-  it('precisa do endereço e da chave; tira a barra do fim', () => {
-    expect(catalogConfig({ CATALOG_URL: 'https://catalogo.test/', CATALOG_API_KEY: ' cat_x ' })).toEqual({ url: BASE, key: 'cat_x' });
-    expect(catalogConfig({ CATALOG_URL: BASE })).toBeNull();
-    expect(catalogConfig({ CATALOG_API_KEY: 'cat_x' })).toBeNull();
-    expect(catalogConfig({ CATALOG_URL: 'catalogo.test', CATALOG_API_KEY: 'cat_x' })).toBeNull();
-    expect(catalogConfig({ CATALOG_URL: 'https://catalogo.test/api', CATALOG_API_KEY: 'cat_x' })).toBeNull();
+  it('precisa do endereço; tira a barra do fim; recusa o que não é endereço', () => {
+    expect(catalogUrl({ CATALOG_URL: 'https://catalogo.test/' })).toBe(BASE);
+    expect(catalogUrl({})).toBeNull();
+    expect(catalogUrl({ CATALOG_URL: 'catalogo.test' })).toBeNull();
+    expect(catalogUrl({ CATALOG_URL: 'https://catalogo.test/api' })).toBeNull();
+  });
+
+  it('a chave começa com cat_ e tem ao menos 8 caracteres depois', () => {
+    expect(CATALOG_KEY.test('cat_abcdefgh')).toBe(true);
+    expect(CATALOG_KEY.test('cat_a1b2-c3_d4e5')).toBe(true);
+    expect(CATALOG_KEY.test('cat_abc')).toBe(false);
+    expect(CATALOG_KEY.test('xyz_abcdefgh')).toBe(false);
+    expect(CATALOG_KEY.test('cat_abc defgh')).toBe(false);
   });
 });
 
@@ -91,6 +98,14 @@ describe('cliente HTTP do Catálogo', () => {
     const error = await offline.barcode('7891058002916').catch((e: Error) => e);
     expect(error).toBeInstanceOf(CatalogUnavailable);
     expect((error as Error).message).not.toContain('cat_segredo');
+  });
+
+  it('conferência da chave: 401 recusada, 403 suspensa, sem rede lança', async () => {
+    expect(await client(() => Response.json([])).verify()).toBe('ok');
+    expect(calls[0]).toMatchObject({ url: `${BASE}/api/v1/categories`, headers: { 'X-Api-Key': 'cat_segredo' } });
+    expect(await client(() => new Response('x', { status: 401 })).verify()).toBe('refused');
+    expect(await client(() => new Response('x', { status: 403 })).verify()).toBe('suspended');
+    await expect(client(() => new Response('x', { status: 500 })).verify()).rejects.toBeInstanceOf(CatalogUnavailable);
   });
 
   it('código de barras: 404 é null; o código vai codificado', async () => {

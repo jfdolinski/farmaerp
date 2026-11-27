@@ -270,19 +270,14 @@ Desligado, a rotina monta as remessas e espera; nada sai da VPS.
 
 ## Ligar o Catálogo externo
 
-O Catálogo do FarmaERP é uma cópia do serviço catalogo-produtos. A API copia o catálogo completo de hora em hora e consulta na hora o código de barras que a cópia ainda não tem.
+O Catálogo do FarmaERP é uma cópia do serviço catalogo-produtos. Cada filial é uma empresa no Catálogo, com a própria chave: de hora em hora, cada filial com chave verifica o Catálogo (os dados do produto ficam gravados uma vez só), e o código de barras que a cópia ainda não tem é consultado na hora com a chave da filial de quem cadastra.
 
-1. No Catálogo, em **Empresas**, cadastre a empresa do FarmaERP (uma por ambiente) e gere a chave de acesso. Ela aparece uma vez só: copie na hora.
-2. No serviço `api`, em **Ambiente**, inclua:
+1. No serviço `api`, em **Ambiente**, inclua `CATALOG_URL` com o endereço do Catálogo, sem barra no fim (por exemplo `https://catalogo.b6nhiy.easypanel.host`), e implante a API.
+2. No Catálogo, em **Empresas**, cadastre cada filial (pelo CNPJ dela) e gere a chave de acesso. Ela aparece uma vez só: copie na hora.
+3. Na retaguarda, em **Fiscal**, aba **Catálogo**, cole a chave de cada filial (quem cuida do certificado da filial). A chave é conferida no Catálogo antes de ser salva e fica cifrada com a `FISCAL_ENCRYPTION_KEY`; a tela mostra só o começo dela.
+4. A primeira verificação começa até 1 hora depois (ou na hora, pelo botão **Atualizar agora** em `/plataforma`, aba **Catálogo**, que também mostra as filiais sem chave).
 
-| Nome | Valor |
-|---|---|
-| `CATALOG_URL` | Endereço do Catálogo, sem barra no fim (por exemplo `https://catalogo.b6nhiy.easypanel.host`) |
-| `CATALOG_API_KEY` | A chave `cat_...` gerada no passo 1 |
-
-3. Implante a API. A primeira cópia começa 1 minuto depois; a situação fica em `/plataforma`, na aba **Catálogo**, que também tem o botão **Atualizar agora**.
-
-Sem as duas variáveis, a ligação fica desligada e a aba avisa. Cada chamada com a chave conta na cobrança do Catálogo: a cópia horária só baixa de novo quando o catálogo mudou (ETag), e as imagens vêm só dos itens vinculados a algum produto. `CATALOG_WORKER=off` desliga só a rotina horária.
+Sem `CATALOG_URL`, a ligação fica desligada e as telas avisam. Cada chamada com a chave conta na cobrança da filial no Catálogo: a verificação horária só baixa de novo quando o catálogo mudou (ETag), e as imagens (que não pedem chave) vêm só dos itens vinculados a algum produto. Trocar a `FISCAL_ENCRYPTION_KEY` obriga a cadastrar as chaves de novo. `CATALOG_WORKER=off` desliga só a rotina horária.
 
 ## Antes de publicar a produção
 

@@ -7,6 +7,10 @@
 -- (cadastro provisório) aparece na busca, mas não pode ser vinculado. As imagens só são trazidas
 -- para os itens vinculados a algum produto, para o banco não guardar as fotos do catálogo inteiro.
 -- Só a rotina do Catálogo (app.worker = 'catalog') grava; a Plataforma acompanha.
+-- Cada filial é uma empresa no Catálogo, com a própria chave (cifrada pela API, como o
+-- certificado): a verificação horária é feita com a chave de cada filial (os dados do produto são
+-- iguais para todas e ficam gravados uma vez só; a primeira filial que vê a mudança grava), e a
+-- consulta na hora usa a chave da filial principal do usuário. Filial sem chave não consulta.
 
 ALTER TABLE catalog_product
   ADD COLUMN external_pending boolean NOT NULL DEFAULT false,
@@ -19,8 +23,35 @@ ALTER TABLE catalog_product
   ),
   ADD COLUMN external_images_done text[];
 
+-- Chave da filial no Catálogo, cifrada pela API (AES-GCM com a FISCAL_ENCRYPTION_KEY). Só o
+-- começo fica aberto, para a tela mostrar qual chave está cadastrada.
+CREATE TABLE branch_catalog_key (
+  id uuid PRIMARY KEY DEFAULT uuidv7(),
+  economic_group_id uuid NOT NULL REFERENCES economic_group (id),
+  branch_id uuid NOT NULL REFERENCES branch (id),
+  encrypted_key bytea NOT NULL CONSTRAINT branch_catalog_key_encrypted_check CHECK (octet_length(encrypted_key) BETWEEN 30 AND 1024),
+  key_prefix text NOT NULL CONSTRAINT branch_catalog_key_prefix_check CHECK (key_prefix ~ '^cat_[A-Za-z0-9_-]{1,8}$'),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  deleted_at timestamptz,
+  version bigint NOT NULL DEFAULT 1,
+  updated_by uuid,
+  trace_id uuid
+);
+CREATE UNIQUE INDEX branch_catalog_key_branch_key ON branch_catalog_key (branch_id) WHERE deleted_at IS NULL;
+CREATE INDEX branch_catalog_key_economic_group_id_idx ON branch_catalog_key (economic_group_id);
+CALL app.apply_table_standard('public.branch_catalog_key');
+CREATE TRIGGER block_immutable_columns BEFORE UPDATE ON branch_catalog_key
+  FOR EACH ROW EXECUTE FUNCTION app.block_immutable_columns('economic_group_id', 'branch_id', 'encrypted_key', 'key_prefix');
+-- A aplicação lê e grava só pelas funções abaixo.
+CREATE POLICY branch_catalog_key_select ON branch_catalog_key FOR SELECT TO farmaerp_app USING (false);
+CREATE VIEW v_branch_catalog_key WITH (security_invoker = true) AS SELECT * FROM branch_catalog_key WHERE deleted_at IS NULL;
+GRANT SELECT ON branch_catalog_key, v_branch_catalog_key TO farmaerp_app;
+
 CREATE TABLE catalog_sync_run (
   id uuid PRIMARY KEY DEFAULT uuidv7(),
+  -- Filial cuja chave foi usada.
+  branch_id uuid NOT NULL REFERENCES branch (id),
   trigger text NOT NULL CONSTRAINT catalog_sync_run_trigger_check CHECK (trigger IN ('schedule', 'manual')),
   status text NOT NULL DEFAULT 'running' CONSTRAINT catalog_sync_run_status_check CHECK (status IN ('running', 'unchanged', 'updated', 'failed')),
   started_at timestamptz NOT NULL DEFAULT now(),
@@ -40,9 +71,10 @@ CREATE TABLE catalog_sync_run (
   CONSTRAINT catalog_sync_run_finished_check CHECK ((status = 'running') = (finished_at IS NULL))
 );
 CREATE INDEX catalog_sync_run_started_idx ON catalog_sync_run (started_at DESC);
+CREATE INDEX catalog_sync_run_branch_idx ON catalog_sync_run (branch_id);
 CALL app.apply_table_standard('public.catalog_sync_run');
 CREATE TRIGGER block_immutable_columns BEFORE UPDATE ON catalog_sync_run
-  FOR EACH ROW EXECUTE FUNCTION app.block_immutable_columns('trigger', 'deleted_at');
+  FOR EACH ROW EXECUTE FUNCTION app.block_immutable_columns('trigger', 'branch_id', 'deleted_at');
 -- A aplicação lê e grava só pelas funções abaixo.
 CREATE POLICY catalog_sync_run_select ON catalog_sync_run FOR SELECT TO farmaerp_app USING (false);
 CREATE VIEW v_catalog_sync_run WITH (security_invoker = true) AS SELECT * FROM catalog_sync_run WHERE deleted_at IS NULL;
@@ -60,9 +92,87 @@ BEGIN
 END;
 $$;
 
--- Começa uma cópia. Devolve a ETag da última cópia boa (para o catálogo responder 304 se nada
--- mudou), ou nada se já há uma cópia em andamento (de menos de 30 minutos).
-CREATE FUNCTION app.catalog_sync_start(p_trigger text) RETURNS jsonb
+-- ===== Chave do Catálogo por filial =====
+
+-- Cadastra (ou troca) a chave da filial: quem cuida do certificado da filial.
+CREATE FUNCTION app.set_branch_catalog_key(p_branch_id uuid, p_encrypted bytea, p_prefix text) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  target public.branch := app.require_branch_permission('fiscal.certificate', p_branch_id);
+BEGIN
+  UPDATE public.branch_catalog_key k SET deleted_at = pg_catalog.clock_timestamp()
+   WHERE k.branch_id = target.id AND k.deleted_at IS NULL;
+  INSERT INTO public.branch_catalog_key (economic_group_id, branch_id, encrypted_key, key_prefix)
+  VALUES (app.current_user_group(), target.id, p_encrypted, p_prefix);
+END;
+$$;
+
+CREATE FUNCTION app.clear_branch_catalog_key(p_branch_id uuid) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  target public.branch := app.require_branch_permission('fiscal.certificate', p_branch_id);
+BEGIN
+  UPDATE public.branch_catalog_key k SET deleted_at = pg_catalog.clock_timestamp()
+   WHERE k.branch_id = target.id AND k.deleted_at IS NULL;
+END;
+$$;
+
+-- Filiais que o usuário vê no fiscal, com a chave cadastrada (só o começo) e se ele pode trocar.
+CREATE FUNCTION app.branch_catalog_keys() RETURNS TABLE (
+  branch_id uuid, branch_name text, company_name text, key_prefix text, key_updated_at timestamptz, can_manage boolean
+)
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT b.id, b.name, COALESCE(c.trade_name, c.legal_name), k.key_prefix, k.created_at,
+         app.has_permission('fiscal.certificate', b.id)
+    FROM public.branch b
+    JOIN public.company c ON c.id = b.company_id
+    LEFT JOIN public.branch_catalog_key k ON k.branch_id = b.id AND k.deleted_at IS NULL
+   -- A permissão já é só da filial do grupo do usuário.
+   WHERE b.deleted_at IS NULL AND app.has_permission('fiscal.view', b.id)
+   ORDER BY COALESCE(c.trade_name, c.legal_name), b.name, b.id
+$$;
+
+-- Chaves de todas as filiais, para a verificação horária (só a rotina).
+CREATE FUNCTION app.catalog_branch_keys() RETURNS TABLE (branch_id uuid, encrypted_key bytea)
+LANGUAGE plpgsql STABLE SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  PERFORM app.require_catalog_worker();
+  RETURN QUERY
+    SELECT k.branch_id, k.encrypted_key FROM public.branch_catalog_key k
+      JOIN public.branch b ON b.id = k.branch_id AND b.deleted_at IS NULL
+     WHERE k.deleted_at IS NULL
+     ORDER BY k.created_at, k.id;
+END;
+$$;
+
+-- Chave da filial principal do usuário (a primeira das filiais dele que tem chave), para a
+-- consulta na hora. Sem nenhuma, nada.
+CREATE FUNCTION app.user_catalog_key() RETURNS TABLE (branch_id uuid, encrypted_key bytea)
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT k.branch_id, k.encrypted_key FROM public.branch_catalog_key k
+    JOIN public.branch b ON b.id = k.branch_id AND b.deleted_at IS NULL
+   -- Sem usuário, não há filial permitida.
+   WHERE k.deleted_at IS NULL AND k.branch_id = ANY (app.allowed_branch_ids())
+   ORDER BY b.created_at, b.id
+   LIMIT 1
+$$;
+
+-- ===== Cópia =====
+
+-- Começa a verificação de uma filial. Devolve a ETag da última cópia boa (de qualquer filial: os
+-- dados são os mesmos, e o catálogo responde 304 se nada mudou), ou nada se já há uma cópia em
+-- andamento (de menos de 30 minutos). A filial precisa ter chave.
+CREATE FUNCTION app.catalog_sync_start(p_trigger text, p_branch_id uuid) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = ''
 AS $$
@@ -77,7 +187,10 @@ BEGIN
   IF EXISTS (SELECT 1 FROM public.catalog_sync_run WHERE status = 'running') THEN
     RETURN NULL;
   END IF;
-  INSERT INTO public.catalog_sync_run (trigger) VALUES (p_trigger) RETURNING id INTO run_id;
+  IF NOT EXISTS (SELECT 1 FROM public.branch_catalog_key k WHERE k.branch_id = p_branch_id AND k.deleted_at IS NULL) THEN
+    RAISE EXCEPTION 'A ligação com o Catálogo não está configurada.' USING ERRCODE = 'FA228', DETAIL = 'Filial sem chave do Catálogo.';
+  END IF;
+  INSERT INTO public.catalog_sync_run (trigger, branch_id) VALUES (p_trigger, p_branch_id) RETURNING id INTO run_id;
   RETURN pg_catalog.jsonb_build_object(
     'runId', run_id,
     'etag', (SELECT r.etag FROM public.catalog_sync_run r WHERE r.status IN ('updated', 'unchanged') AND r.etag IS NOT NULL
@@ -248,12 +361,27 @@ BEGIN
                    WHERE cp.source_key LIKE 'catalogo:%' AND cp.deleted_at IS NULL AND cp.external_removed_at IS NULL
                      AND cp.external_image_urls IS NOT NULL AND cp.external_images_done IS DISTINCT FROM cp.external_image_urls
                      AND EXISTS (SELECT 1 FROM public.product p WHERE p.catalog_product_id = cp.id AND p.deleted_at IS NULL)),
+    'branches', (SELECT pg_catalog.count(*) FROM public.branch b WHERE b.deleted_at IS NULL),
+    'branchesWithKey', (SELECT pg_catalog.count(*) FROM public.branch_catalog_key k
+                         JOIN public.branch b ON b.id = k.branch_id AND b.deleted_at IS NULL WHERE k.deleted_at IS NULL),
+    -- Até 20 filiais sem chave, com o cliente, para a Plataforma avisar.
+    'withoutKey', COALESCE((
+      SELECT pg_catalog.jsonb_agg(x.label ORDER BY x.label) FROM (
+        SELECT g.name || ' · ' || b.name AS label FROM public.branch b
+          JOIN public.company c ON c.id = b.company_id JOIN public.economic_group g ON g.id = c.economic_group_id
+         WHERE b.deleted_at IS NULL
+           AND NOT EXISTS (SELECT 1 FROM public.branch_catalog_key k WHERE k.branch_id = b.id AND k.deleted_at IS NULL)
+         ORDER BY 1 LIMIT 20) x
+    ), '[]'::jsonb),
     'runs', COALESCE((
       SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
-               'id', r.id, 'trigger', r.trigger, 'status', r.status, 'startedAt', r.started_at, 'finishedAt', r.finished_at,
+               'id', r.id, 'trigger', r.trigger, 'status', r.status, 'branch', r.branch_label, 'startedAt', r.started_at, 'finishedAt', r.finished_at,
                'items', r.items, 'changed', r.changed, 'failed', r.failed, 'removed', r.removed, 'message', r.message)
                ORDER BY r.started_at DESC)
-        FROM (SELECT * FROM public.catalog_sync_run ORDER BY started_at DESC LIMIT 10) r
+        FROM (SELECT run.*, g.name || ' · ' || b.name AS branch_label FROM public.catalog_sync_run run
+                JOIN public.branch b ON b.id = run.branch_id JOIN public.company c ON c.id = b.company_id
+                JOIN public.economic_group g ON g.id = c.economic_group_id
+               ORDER BY run.started_at DESC LIMIT 10) r
     ), '[]'::jsonb)
   );
 END;
@@ -322,9 +450,13 @@ AS $$
    LIMIT LEAST(GREATEST(COALESCE(p_limit, 20), 1), 50)
 $$;
 
-REVOKE ALL ON FUNCTION app.require_catalog_worker(), app.catalog_sync_start(text), app.catalog_sync_apply(jsonb),
+REVOKE ALL ON FUNCTION app.set_branch_catalog_key(uuid, bytea, text), app.clear_branch_catalog_key(uuid), app.branch_catalog_keys(),
+  app.catalog_branch_keys(), app.user_catalog_key() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app.set_branch_catalog_key(uuid, bytea, text), app.clear_branch_catalog_key(uuid), app.branch_catalog_keys(),
+  app.catalog_branch_keys(), app.user_catalog_key() TO farmaerp_app;
+REVOKE ALL ON FUNCTION app.require_catalog_worker(), app.catalog_sync_start(text, uuid), app.catalog_sync_apply(jsonb),
   app.catalog_sync_finish(uuid, jsonb, text[]), app.catalog_images_due(integer), app.catalog_sync_images(text, text[], jsonb),
   app.catalog_sync_status(), app.guard_catalog_link(), app.search_catalog(text, integer) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION app.catalog_sync_start(text), app.catalog_sync_apply(jsonb), app.catalog_sync_finish(uuid, jsonb, text[]),
+GRANT EXECUTE ON FUNCTION app.catalog_sync_start(text, uuid), app.catalog_sync_apply(jsonb), app.catalog_sync_finish(uuid, jsonb, text[]),
   app.catalog_images_due(integer), app.catalog_sync_images(text, text[], jsonb), app.catalog_sync_status(),
   app.search_catalog(text, integer) TO farmaerp_app;

@@ -1,4 +1,4 @@
-import { randomInt } from 'node:crypto';
+import { randomBytes, randomInt } from 'node:crypto';
 import sharp from 'sharp';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { appPool, closePools, createFixtures, hasCode, ownerPool, setUser } from './helpers.mjs';
@@ -27,6 +27,19 @@ async function run(setup, sql, params = []) {
 const asWorker = (sql, params, worker = 'catalog') =>
   run((c) => c.query("SELECT set_config('app.user_id', '', true), set_config('app.worker', $1, true)", [worker]), sql, params);
 const asUser = (user, sql, params) => run((c) => setUser(c, user.id), sql, params);
+/** Usuário com as permissões dadas, só na filial dada. */
+async function userAt(codes, branch) {
+  const role = (await ownerPool.query('INSERT INTO role (economic_group_id, name) VALUES ($1, $2) RETURNING id', [a.group.id, `Perfil ${randomInt(1e9)}`])).rows[0].id;
+  await ownerPool.query('INSERT INTO role_permission (role_id, permission_id) SELECT $1, id FROM permission WHERE code = ANY ($2)', [role, codes]);
+  const user = (await ownerPool.query('INSERT INTO user_account (economic_group_id, name) VALUES ($1, $2) RETURNING *', [a.group.id, `Usuário ${randomInt(1e9)}`])).rows[0];
+  await ownerPool.query('INSERT INTO user_role (user_id, role_id) VALUES ($1, $2)', [user.id, role]);
+  await ownerPool.query('INSERT INTO user_branch (user_id, branch_id) VALUES ($1, $2)', [user.id, branch.id]);
+  return user;
+}
+const setKey = (user, branch, prefix = 'cat_abc12') =>
+  asUser(user, 'SELECT app.set_branch_catalog_key($1, $2, $3)', [branch.id, randomBytes(48), prefix]);
+const start = (trigger, branch = a.branch1) =>
+  asWorker('SELECT app.catalog_sync_start($1, $2) AS s', [trigger, branch.id]).then((r) => r[0].s);
 const apply = (items) => asWorker('SELECT app.catalog_sync_apply($1::jsonb) AS r', [JSON.stringify(items)]).then((r) => r[0].r);
 
 /** GTIN-13 com dígito certo, ao acaso. */
@@ -51,13 +64,55 @@ beforeAll(async () => {
   ({ a } = await createFixtures());
   platform = (await ownerPool.query('INSERT INTO user_account (economic_group_id, name) VALUES ($1, $2) RETURNING *', [a.group.id, 'Plataforma'])).rows[0];
   await ownerPool.query('INSERT INTO platform_admin (user_id) VALUES ($1)', [platform.id]);
+  await setKey(a.admin, a.branch1);
 });
 afterAll(closePools);
+
+describe('chave do Catálogo por filial', () => {
+  it('quem cuida do certificado da filial cadastra e troca; a tela mostra só o começo; uma por filial', async () => {
+    await setKey(a.admin, a.branch2, 'cat_primeira');
+    await expect(setKey(a.admin, a.branch2, 'cat_x')).resolves.toBeDefined();
+    const rows = await asUser(a.admin, 'SELECT * FROM app.branch_catalog_keys()');
+    expect(rows.find((r) => r.branch_id === a.branch2.id)).toMatchObject({ key_prefix: 'cat_x', can_manage: true, key_updated_at: expect.any(Date) });
+    expect(rows.find((r) => r.branch_id === a.branchFree.id)).toMatchObject({ key_prefix: null });
+    expect(rows[0]).not.toHaveProperty('encrypted_key');
+    expect((await ownerPool.query('SELECT count(*)::int AS n FROM branch_catalog_key WHERE branch_id = $1 AND deleted_at IS NULL', [a.branch2.id])).rows[0].n).toBe(1);
+    await asUser(a.admin, 'SELECT app.clear_branch_catalog_key($1)', [a.branch2.id]);
+    expect((await asUser(a.admin, 'SELECT * FROM app.branch_catalog_keys()')).find((r) => r.branch_id === a.branch2.id).key_prefix).toBeNull();
+  });
+
+  it('sem a permissão do certificado, de outro grupo ou com chave fora do formato, recusa', async () => {
+    await expect(setKey(a.oneBranchUser, a.branch1)).rejects.toSatisfy(hasCode('FA002'));
+    await expect(asUser(a.oneBranchUser, 'SELECT app.clear_branch_catalog_key($1)', [a.branch1.id])).rejects.toSatisfy(hasCode('FA002'));
+    const other = (await createFixtures()).b;
+    await expect(setKey(other.admin, a.branch1)).rejects.toSatisfy(hasCode('FA006'));
+    await expect(setKey(a.admin, a.branch2, 'abc')).rejects.toSatisfy(hasCode('FA231'));
+    await expect(asUser(a.admin, 'SELECT app.set_branch_catalog_key($1, $2, $3)', [a.branch2.id, Buffer.alloc(5), 'cat_a'])).rejects.toSatisfy(hasCode('FA231'));
+    // Quem não vê o fiscal da filial não vê a filial na lista.
+    expect((await asUser(other.admin, 'SELECT * FROM app.branch_catalog_keys()')).map((r) => r.branch_id)).not.toContain(a.branch1.id);
+    const viewer = await userAt(['fiscal.view'], a.branch1);
+    expect((await asUser(viewer, 'SELECT branch_id, can_manage FROM app.branch_catalog_keys()'))).toEqual([{ branch_id: a.branch1.id, can_manage: false }]);
+    await expect(setKey(viewer, a.branch1)).rejects.toSatisfy(hasCode('FA002'));
+  });
+
+  it('a rotina lê as chaves de todas as filiais; o usuário, só a da filial principal dele', async () => {
+    const keys = await asWorker('SELECT * FROM app.catalog_branch_keys()');
+    const mine = keys.find((k) => k.branch_id === a.branch1.id);
+    expect(mine.encrypted_key).toBeInstanceOf(Buffer);
+    expect((await asUser(a.admin, 'SELECT * FROM app.user_catalog_key()'))).toEqual([{ branch_id: a.branch1.id, encrypted_key: mine.encrypted_key }]);
+    // Usuário só de uma filial sem chave: nada, mesmo com a filial 1 tendo chave.
+    const onlyFree = await userAt(['fiscal.view'], a.branchFree);
+    expect(await asUser(onlyFree, 'SELECT * FROM app.user_catalog_key()')).toEqual([]);
+    expect(await asWorker('SELECT * FROM app.user_catalog_key()')).toEqual([]);
+    // Filial sem chave não começa cópia.
+    await expect(start('manual', a.branchFree)).rejects.toSatisfy(hasCode('FA228'));
+  });
+});
 
 describe('rotina do Catálogo', () => {
   it('só a rotina grava: usuário, outra rotina ou sem nada recebem FA002', async () => {
     for (const sql of [
-      "SELECT app.catalog_sync_start('manual')", "SELECT app.catalog_sync_apply('[]'::jsonb)",
+      "SELECT app.catalog_sync_start('manual', gen_random_uuid())", 'SELECT * FROM app.catalog_branch_keys()', "SELECT app.catalog_sync_apply('[]'::jsonb)",
       'SELECT * FROM app.catalog_images_due(10)', "SELECT app.catalog_sync_images('catalogo:1', '{}', '[]'::jsonb)",
       "SELECT app.catalog_sync_finish(gen_random_uuid(), '{}'::jsonb, NULL)",
     ]) {
@@ -117,11 +172,11 @@ describe('rotina do Catálogo', () => {
     const stayHash = hash();
     await apply([{ sourceKey: stays, name: 'Fica no catálogo', barcodes: [stayCode], hash: stayHash }, { sourceKey: leaves, name: 'Sai do catálogo', barcodes: [leaveCode], hash: hash() }]);
 
-    const started = (await asWorker("SELECT app.catalog_sync_start('manual') AS s"))[0].s;
+    const started = (await start('manual'));
     expect(started.runId).toEqual(expect.any(String));
     expect(started.hashes[stays]).toBe(stayHash);
     // Outra cópia no meio não começa.
-    expect((await asWorker("SELECT app.catalog_sync_start('schedule') AS s"))[0].s).toBeNull();
+    expect((await start('schedule'))).toBeNull();
 
     const everything = (await ownerPool.query("SELECT array_agg(source_key) AS k FROM catalog_product WHERE source_key LIKE 'catalogo:%' AND deleted_at IS NULL AND source_key <> $1", [leaves])).rows[0].k;
     const finished = (await asWorker('SELECT app.catalog_sync_finish($1, $2::jsonb, $3) AS f', [
@@ -137,7 +192,7 @@ describe('rotina do Catálogo', () => {
       .rejects.toSatisfy(hasCode('FA006'));
 
     // A próxima cópia recebe a ETag; o item que voltou ao catálogo volta à busca.
-    const next = (await asWorker("SELECT app.catalog_sync_start('schedule') AS s"))[0].s;
+    const next = (await start('schedule'));
     expect(next.etag).toBe('W/"abc"');
     expect(next.hashes[leaves]).toBeUndefined();
     await apply([{ sourceKey: leaves, name: 'Sai do catálogo', barcodes: [leaveCode], hash: hash() }]);
@@ -148,19 +203,19 @@ describe('rotina do Catálogo', () => {
   });
 
   it('a ETag que vale é a da última cópia boa, não a de uma falha', async () => {
-    const good = (await asWorker("SELECT app.catalog_sync_start('manual') AS s"))[0].s;
+    const good = (await start('manual'));
     await asWorker('SELECT app.catalog_sync_finish($1, $2::jsonb, NULL)', [good.runId, JSON.stringify({ status: 'unchanged', etag: 'W/"boa"', items: 0, changed: 0, failed: 0 })]);
-    const bad = (await asWorker("SELECT app.catalog_sync_start('manual') AS s"))[0].s;
+    const bad = (await start('manual'));
     await asWorker('SELECT app.catalog_sync_finish($1, $2::jsonb, NULL)', [bad.runId, JSON.stringify({ status: 'failed', etag: 'W/"ruim"', message: 'Falhou no meio' })]);
-    const next = (await asWorker("SELECT app.catalog_sync_start('schedule') AS s"))[0].s;
+    const next = (await start('schedule'));
     expect(next.etag).toBe('W/"boa"');
     await asWorker('SELECT app.catalog_sync_finish($1, $2::jsonb, NULL)', [next.runId, JSON.stringify({ status: 'failed', message: 'Teste' })]);
   });
 
   it('cópia que ficou pela metade há mais de 30 minutos vira falha e libera a próxima', async () => {
-    const stuck = (await asWorker("SELECT app.catalog_sync_start('manual') AS s"))[0].s;
+    const stuck = (await start('manual'));
     await ownerPool.query("UPDATE catalog_sync_run SET started_at = now() - interval '31 minutes' WHERE id = $1", [stuck.runId]);
-    const next = (await asWorker("SELECT app.catalog_sync_start('schedule') AS s"))[0].s;
+    const next = (await start('schedule'));
     expect(next.runId).not.toBe(stuck.runId);
     expect((await ownerPool.query('SELECT status, message FROM catalog_sync_run WHERE id = $1', [stuck.runId])).rows[0])
       .toEqual({ status: 'failed', message: 'Interrompida.' });
@@ -217,7 +272,10 @@ describe('rotina do Catálogo', () => {
     const status = (await asUser(platform, 'SELECT app.catalog_sync_status() AS s'))[0].s;
     expect(status).toMatchObject({ items: expect.any(Number), pending: expect.any(Number), removed: expect.any(Number), imagesDue: expect.any(Number) });
     expect(status.runs.length).toBeGreaterThan(0);
-    expect(status.runs[0]).toMatchObject({ trigger: expect.any(String), status: expect.any(String) });
+    expect(status.runs[0]).toMatchObject({ trigger: expect.any(String), status: expect.any(String), branch: expect.stringContaining(' · ') });
+    expect(status.branches).toBeGreaterThanOrEqual(status.branchesWithKey);
+    expect(status.withoutKey.length).toBeGreaterThan(0);
+    expect(status.withoutKey.length).toBeLessThanOrEqual(20);
     await expect(asUser(a.admin, 'SELECT app.catalog_sync_status()')).rejects.toSatisfy(hasCode('FA002'));
   });
 });

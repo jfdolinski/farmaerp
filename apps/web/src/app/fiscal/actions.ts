@@ -152,3 +152,14 @@ export async function resetReturnTax(_previous: FiscalFormState, form: FormData)
   const id = encodeURIComponent(text(form, "branchId"));
   return finish(await apiFetch(`/admin/fiscal/return-tax/${id}/reset`, { method: "POST" }));
 }
+
+/** Chave da filial no Catálogo: a API confere no Catálogo antes de guardar. */
+export async function setCatalogKey(_previous: FiscalFormState, form: FormData): Promise<FiscalFormState> {
+  const id = encodeURIComponent(text(form, "branchId"));
+  return finish(await apiFetch(`/admin/catalog-keys/${id}`, { method: "PUT", body: { key: text(form, "key") } }));
+}
+
+export async function clearCatalogKey(_previous: FiscalFormState, form: FormData): Promise<FiscalFormState> {
+  const id = encodeURIComponent(text(form, "branchId"));
+  return finish(await apiFetch(`/admin/catalog-keys/${id}`, { method: "DELETE" }));
+}

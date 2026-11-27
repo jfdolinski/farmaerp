@@ -295,7 +295,25 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
   'FA228': ErrorCatalogEntry(
     code: 'FA228',
     message: 'A ligação com o Catálogo não está configurada.',
-    action: 'Informe o endereço e a chave do Catálogo nas variáveis da API (CATALOG_URL e CATALOG_API_KEY) e publique de novo.',
+    action: 'Informe o endereço do Catálogo (CATALOG_URL) na API e cadastre a chave de cada filial em Fiscal, na aba Catálogo.',
+    retryable: false,
+  ),
+  'FA229': ErrorCatalogEntry(
+    code: 'FA229',
+    message: 'O Catálogo recusou esta chave.',
+    action: 'Confira a chave gerada para esta filial no Catálogo (Empresas) e se a empresa está ativa lá.',
+    retryable: false,
+  ),
+  'FA230': ErrorCatalogEntry(
+    code: 'FA230',
+    message: 'O Catálogo não respondeu para conferir a chave.',
+    action: 'Tente de novo em alguns minutos.',
+    retryable: true,
+  ),
+  'FA231': ErrorCatalogEntry(
+    code: 'FA231',
+    message: 'A chave do Catálogo é inválida.',
+    action: 'Cole a chave completa, que começa com cat_.',
     retryable: false,
   ),
   'FA301': ErrorCatalogEntry(

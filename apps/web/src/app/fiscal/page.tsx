@@ -7,6 +7,7 @@ import { AppHeader } from "../app-header";
 import { ErrorNotice } from "../error-notice";
 import styles from "../terminais/page.module.css";
 import { activeTab, TabItem, Tabs } from "../shell/tabs";
+import { CatalogKeyForm, type CatalogKeyRow } from "./catalog-keys";
 import { ReturnTaxForm, type ReturnTaxRow } from "./return-tax";
 import {
   CertificateForm,
@@ -34,6 +35,7 @@ const TABS: TabItem[] = [
   { id: "tributacao", label: "Tributação" },
   { id: "series", label: "Séries" },
   { id: "devolucao", label: "NF-e de devolução e transferência" },
+  { id: "catalogo", label: "Catálogo" },
 ];
 
 export default function FiscalPage({ searchParams }: { searchParams: SearchParams }) {
@@ -72,6 +74,8 @@ async function FiscalContent({ searchParams }: { searchParams: SearchParams }) {
     tab === "nfce" ? apiFetch<NfceRow[]>("/admin/fiscal/nfce") : null,
   ]);
   const returnTax = tab === "devolucao" ? await apiFetch<ReturnTaxRow[]>("/admin/fiscal/return-tax") : null;
+  const catalogKeys =
+    tab === "catalogo" ? await apiFetch<{ configured: boolean; branches: CatalogKeyRow[] }>("/admin/catalog-keys") : null;
   const companies = [...new Set(rows.map((row) => row.company_id))];
 
   return (
@@ -104,7 +108,32 @@ async function FiscalContent({ searchParams }: { searchParams: SearchParams }) {
               ))}
           </>
         )}
-        {tab !== "devolucao" &&
+        {catalogKeys && (
+          <>
+            <p className={styles.hint}>
+              Cada filial é uma empresa no Catálogo, com a própria chave: a filial consulta o Catálogo e recebe a
+              tributação da UF dela com essa chave, e as consultas contam na cobrança dela. Gere a chave no Catálogo, em
+              Empresas, e cole aqui; ela é conferida no Catálogo antes de ser salva.
+            </p>
+            {!catalogKeys.ok && <ErrorNotice error={catalogKeys.error} />}
+            {catalogKeys.ok && !catalogKeys.data.configured && (
+              <p className={styles.warning}>
+                A ligação com o Catálogo ainda não está ligada no servidor (falta o endereço do Catálogo na API).
+              </p>
+            )}
+            {catalogKeys.ok &&
+              catalogKeys.data.branches.map((row) => (
+                <section key={row.branch_id} className={styles.card}>
+                  <h2>
+                    {row.branch_name}
+                    <small className={styles.hint}> · {row.company_name}</small>
+                  </h2>
+                  <CatalogKeyForm row={row} />
+                </section>
+              ))}
+          </>
+        )}
+        {tab !== "devolucao" && tab !== "catalogo" &&
           companies.map((companyId) => {
             const branches = rows.filter((row) => row.company_id === companyId);
             return (
@@ -178,7 +207,7 @@ async function FiscalContent({ searchParams }: { searchParams: SearchParams }) {
               </div>
             );
           })}
-        {tab !== "devolucao" && (
+        {tab !== "devolucao" && tab !== "catalogo" && (
           <p className={styles.hint}>
             O arquivo, a senha e o código CSC ficam criptografados no servidor e não voltam para a tela.
           </p>

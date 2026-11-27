@@ -302,7 +302,8 @@
       "purchase_return_tax_setting_id_uuid_v7_check",
       "product_catalog_event_id_uuid_v7_check",
       "login_image_id_uuid_v7_check",
-      "catalog_sync_run_id_uuid_v7_check"
+      "catalog_sync_run_id_uuid_v7_check",
+      "branch_catalog_key_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -615,11 +616,38 @@
   },
   "FA228": {
     "message": "A ligação com o Catálogo não está configurada.",
-    "action": "Informe o endereço e a chave do Catálogo nas variáveis da API (CATALOG_URL e CATALOG_API_KEY) e publique de novo.",
+    "action": "Informe o endereço do Catálogo (CATALOG_URL) na API e cadastre a chave de cada filial em Fiscal, na aba Catálogo.",
     "httpStatus": 409,
     "severity": "warning",
     "retryable": false,
     "dbConstraints": []
+  },
+  "FA229": {
+    "message": "O Catálogo recusou esta chave.",
+    "action": "Confira a chave gerada para esta filial no Catálogo (Empresas) e se a empresa está ativa lá.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA230": {
+    "message": "O Catálogo não respondeu para conferir a chave.",
+    "action": "Tente de novo em alguns minutos.",
+    "httpStatus": 503,
+    "severity": "warning",
+    "retryable": true,
+    "dbConstraints": []
+  },
+  "FA231": {
+    "message": "A chave do Catálogo é inválida.",
+    "action": "Cole a chave completa, que começa com cat_.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "branch_catalog_key_encrypted_check",
+      "branch_catalog_key_prefix_check"
+    ]
   },
   "FA301": {
     "message": "Código não encontrado ou expirado.",

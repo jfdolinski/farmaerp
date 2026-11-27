@@ -1,21 +1,22 @@
 import { createHash } from 'node:crypto';
 
 /**
- * Ligação com o Catálogo externo (catalogo-produtos). O endereço e a chave da empresa vêm do
- * ambiente (CATALOG_URL e CATALOG_API_KEY); sem eles, a ligação fica desligada. A chave nunca vai
- * para o log nem para a URL.
+ * Ligação com o Catálogo externo (catalogo-produtos). O endereço vem do ambiente (CATALOG_URL); a
+ * chave é a de cada filial (cadastrada em Fiscal, cifrada no banco). Sem o endereço, a ligação fica
+ * desligada. A chave nunca vai para o log nem para a URL.
  */
 export interface CatalogConfig {
   url: string;
   key: string;
 }
 
-export function catalogConfig(env: NodeJS.ProcessEnv = process.env): CatalogConfig | null {
+export function catalogUrl(env: NodeJS.ProcessEnv = process.env): string | null {
   const url = env.CATALOG_URL?.trim().replace(/\/+$/, '');
-  const key = env.CATALOG_API_KEY?.trim();
-  if (!url || !key || !/^https?:\/\/[^\s/]+$/.test(url)) return null;
-  return { url, key };
+  return url && /^https?:\/\/[^\s/]+$/.test(url) ? url : null;
 }
+
+/** Formato da chave da empresa no Catálogo. */
+export const CATALOG_KEY = /^cat_[A-Za-z0-9_-]{8,200}$/;
 
 /** Item como sai do Catálogo (só os campos usados aqui). */
 export interface ExternalItem {
@@ -148,6 +149,18 @@ export class CatalogClient {
     const body = record(await response.json().catch(() => null));
     if (!Array.isArray(body.items)) throw offFormat();
     return { unchanged: false, etag: response.headers.get('etag'), items: body.items as ExternalItem[] };
+  }
+
+  /**
+   * Confere a chave numa rota leve do Catálogo (conta uma consulta). Chave recusada: 'refused';
+   * empresa suspensa: 'suspended'; sem resposta: lança CatalogUnavailable.
+   */
+  async verify(): Promise<'ok' | 'refused' | 'suspended'> {
+    const response = await this.call('/api/v1/categories', { headers: this.headers() }, 10_000);
+    if (response.status === 401) return 'refused';
+    if (response.status === 403) return 'suspended';
+    if (!response.ok) throw refused(response.status);
+    return 'ok';
   }
 
   /** Um código de barras. Desconhecido lá vira cadastro pendente; código inválido ou inativo: null. */
