@@ -5,6 +5,7 @@ import 'package:farmaerp_pdv/pos/pos_auth.dart';
 import 'package:farmaerp_pdv/pos/pos_controller.dart';
 import 'package:farmaerp_pdv/pos/pos_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'caps_finders.dart';
@@ -250,6 +251,38 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('cash-movement-dialog')), findsNothing);
       expect(findText('Sangria de R\$ 300,00 registrada.'), findsOneWidget);
+    });
+
+    testWidgets('fechamento só pelo teclado: Enter passa de forma em forma e, no fim, fecha', (tester) async {
+      await tester.runAsync(ready);
+      await pump(tester);
+      await tester.tap(find.byKey(const Key('close-shift')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('count-cash')));
+      await tester.pump();
+      for (final (method, value, next) in [
+        ('cash', '1100', 'credit_card'),
+        ('credit_card', '0', 'debit_card'),
+        ('debit_card', '0', 'pix'),
+      ]) {
+        await tester.enterText(find.byKey(Key('count-$method')), value);
+        await tester.testTextInput.receiveAction(TextInputAction.next);
+        await tester.pump();
+        final editable = tester.widget<EditableText>(find.descendant(of: find.byKey(Key('count-$next')), matching: find.byType(EditableText)));
+        expect(editable.focusNode.hasFocus, isTrue, reason: 'Enter em $method deveria ir para $next');
+      }
+      await tester.enterText(find.byKey(const Key('count-pix')), '0');
+      await tester.testTextInput.receiveAction(TextInputAction.next);
+      await tester.pump();
+      // Observação (opcional): o Enter nela conclui o preenchimento.
+      expect(find.byKey(const Key('close-shift-confirm-text')), findsNothing);
+      await tester.testTextInput.receiveAction(TextInputAction.next);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('close-shift-confirm-text')), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('close-shift-dialog')), findsNothing);
     });
 
     testWidgets('fechamento pede confirmação e não mostra o esperado', (tester) async {

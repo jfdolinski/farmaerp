@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../face/face_widgets.dart';
 import '../ui/caps.dart';
+import '../ui/keys_hint.dart';
 import 'cash_dialogs.dart';
 import 'focus_kit.dart';
 import 'money.dart';
@@ -162,6 +163,8 @@ class _ReturnDialogState extends State<_ReturnDialog> {
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                // Folga entre os campos: o rótulo de cima não encosta no texto.
+                spacing: 10,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (notice != null)
@@ -310,6 +313,7 @@ class _ReturnDialogState extends State<_ReturnDialog> {
             ),
           ),
           actions: [
+            const KeysHint(),
             TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
             FilledButton(
               key: const Key('return-confirm'),

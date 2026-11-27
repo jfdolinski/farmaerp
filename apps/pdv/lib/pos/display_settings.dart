@@ -2,6 +2,7 @@ import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 
 import '../local/local_database.dart';
 import '../ui/caps.dart';
+import '../ui/pdv_theme.dart';
 
 /// Tipo do terminal, com o nome, o ícone e o tom da cor base: orçamento claro, caixa médio e
 /// autoatendimento forte. Assim a loja reconhece cada terminal de longe, e não só pela cor.
@@ -115,10 +116,13 @@ class DisplaySettings extends ChangeNotifier {
   static ThemeData tinted(ThemeData base, String color, TerminalKind kind) {
     final tone = toneOf(color, kind);
     final scheme = ColorScheme.fromSeed(seedColor: tone);
-    return base.copyWith(
-      colorScheme: scheme,
-      appBarTheme: AppBarTheme(backgroundColor: tone, foregroundColor: onTone(tone)),
-      cardTheme: cardThemeFor(scheme),
+    return pdvDecorate(
+      base.copyWith(
+        colorScheme: scheme,
+        appBarTheme: AppBarTheme(backgroundColor: tone, foregroundColor: onTone(tone)),
+        cardTheme: cardThemeFor(scheme),
+      ),
+      tone,
     );
   }
 
@@ -127,10 +131,10 @@ class DisplaySettings extends ChangeNotifier {
     elevation: 6,
     shadowColor: Colors.black.withValues(alpha: 0.45),
     surfaceTintColor: Colors.transparent,
-    color: scheme.surface,
+    color: PdvColors.surface,
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(12),
-      side: BorderSide(color: scheme.outlineVariant),
+      borderRadius: BorderRadius.circular(PdvShape.panel),
+      side: const BorderSide(color: PdvColors.line),
     ),
   );
 
@@ -144,10 +148,10 @@ class DisplaySettings extends ChangeNotifier {
       appBarTheme: AppBarTheme(backgroundColor: tone, foregroundColor: onTone(tone)),
       cardTheme: cardThemeFor(scheme),
     );
-    if (!bold) return base;
+    if (!bold) return pdvDecorate(base, tone);
     TextStyle? heavy(TextStyle? style) => style?.copyWith(fontWeight: FontWeight.bold);
     final text = base.textTheme;
-    return base.copyWith(
+    return pdvDecorate(base.copyWith(
       textTheme: text.copyWith(
         displayLarge: heavy(text.displayLarge),
         displayMedium: heavy(text.displayMedium),
@@ -165,7 +169,7 @@ class DisplaySettings extends ChangeNotifier {
         labelMedium: heavy(text.labelMedium),
         labelSmall: heavy(text.labelSmall),
       ),
-    );
+    ), tone);
   }
 
   /// Aplica o tamanho escolhido sobre o tamanho do sistema.

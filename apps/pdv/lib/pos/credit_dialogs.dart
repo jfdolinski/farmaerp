@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../face/face_widgets.dart';
 import '../ui/caps.dart';
+import '../ui/keys_hint.dart';
 import 'cash.dart';
 import 'credit.dart';
 import 'focus_kit.dart';
@@ -104,6 +105,8 @@ class _CreditReceiptDialogState extends State<_CreditReceiptDialog> {
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              // Folga entre os campos: o rótulo de cima não encosta no texto.
+              spacing: 10,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _notice(context, controller),
@@ -176,6 +179,7 @@ class _CreditReceiptDialogState extends State<_CreditReceiptDialog> {
           ),
         ),
         actions: [
+          const KeysHint(),
           TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
           if (_customer != null)
             TextButton(
@@ -247,6 +251,8 @@ class _CreditReleaseDialogState extends State<_CreditReleaseDialog> {
         width: 420,
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          // Folga entre os campos: o rótulo de cima não encosta no texto.
+          spacing: 10,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _notice(context, widget.controller),
@@ -299,6 +305,7 @@ class _CreditReleaseDialogState extends State<_CreditReleaseDialog> {
         ),
       ),
       actions: [
+        const KeysHint(),
         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
         FilledButton(
           key: const Key('credit-release-confirm'),
