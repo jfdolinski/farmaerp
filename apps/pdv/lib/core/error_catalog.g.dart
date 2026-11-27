@@ -940,6 +940,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Vincule o produto ao Catálogo ou informe o NCM e tente de novo.',
     retryable: false,
   ),
+  'FA780': ErrorCatalogEntry(
+    code: 'FA780',
+    message: 'Esta operação ainda não está disponível para a NF-e de venda.',
+    action: 'Cancelamento, reenvio e consulta da NF-e modelo 55 pela central chegam numa próxima versão. Até lá, use o portal da Sefaz.',
+    retryable: false,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',
@@ -1898,6 +1904,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     code: 'FA963',
     message: 'Esta venda ou turno já foi recebido com outro registro.',
     action: 'A venda fica nos conflitos de sincronização, na retaguarda. Confira se o terminal repetiu a numeração.',
+    retryable: false,
+  ),
+  'FA964': ErrorCatalogEntry(
+    code: 'FA964',
+    message: 'O indicador de IE não confere com a inscrição estadual.',
+    action: 'Contribuinte precisa da inscrição com número; isento usa ISENTO ou fica sem inscrição.',
     retryable: false,
   ),
   'FA965': ErrorCatalogEntry(

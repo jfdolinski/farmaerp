@@ -42,12 +42,23 @@ void main() {
     expect(raw.select('PRAGMA foreign_keys').first.columnAt(0), 1);
   });
 
+  test('versão 20 com cliente atualiza para a 21: o cliente continua e ganha a inscrição e o indicador de IE', () {
+    final raw = LocalDatabase.migratedInMemory(20);
+    raw.execute("INSERT INTO customer (id, code, person_type, name, document, agreements, search_text, saved_at) VALUES (randomblob(16), 7, 'company', 'Empresa', '11222333000181', '[]', 'empresa', '2026-11-27T10:00:00Z')");
+    final database = LocalDatabase.fromDatabase(raw);
+    addTearDown(database.close);
+    expect(database.schemaVersion, 21);
+    expect(raw.select('SELECT name, state_registration, ie_indicator FROM customer').first, {'name': 'Empresa', 'state_registration': null, 'ie_indicator': null});
+    raw.execute("UPDATE customer SET state_registration = '110042490114', ie_indicator = 1");
+    expect(() => raw.execute('UPDATE customer SET ie_indicator = 3'), throwsA(anything));
+  });
+
   test('versão 18 com cliente atualiza para a 19: o cliente continua e ganha a curva ABC', () {
     final raw = LocalDatabase.migratedInMemory(18);
     raw.execute("INSERT INTO customer (id, code, person_type, name, document, agreements, search_text, saved_at) VALUES (randomblob(16), 7, 'individual', 'Cliente', '11144477735', '[]', 'cliente', '2026-11-27T10:00:00Z')");
     final database = LocalDatabase.fromDatabase(raw);
     addTearDown(database.close);
-    expect(database.schemaVersion, 20);
+    expect(database.schemaVersion, 21);
     expect(raw.select('SELECT name, abc_curve FROM customer').first, {'name': 'Cliente', 'abc_curve': null});
     raw.execute("UPDATE customer SET abc_curve = 'A'");
     expect(() => raw.execute("UPDATE customer SET abc_curve = 'D'"), throwsA(anything));
@@ -65,7 +76,7 @@ void main() {
     );
     final database = LocalDatabase.fromDatabase(raw);
     addTearDown(database.close);
-    expect(database.schemaVersion, 20);
+    expect(database.schemaVersion, 21);
     expect(raw.select('SELECT number, status, protocol FROM nfce_document').first, {'number': 42, 'status': 'authorized', 'protocol': '135260000000123'});
     raw.execute("UPDATE nfce_document SET status = 'canceled'");
     expect(raw.select('SELECT status FROM nfce_document').first['status'], 'canceled');

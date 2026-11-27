@@ -1672,10 +1672,11 @@ class PosController extends ChangeNotifier {
   /// Cadastra o cliente na tela de vendas e já o escolhe para a venda. Devolve o código do erro
   /// (null quando deu certo): sem internet, FA984 (a venda segue sem cliente).
   Future<String?> createCustomer({
-    required String name,
-    required String document,
+    String name = '',
+    String document = '',
     String? phone,
     DateTime? birthDate,
+    CompanyCustomer? company,
     bool cashbackConsent = false,
     bool marketingConsent = false,
     String? authorizedBy,
@@ -1700,6 +1701,7 @@ class PosController extends ChangeNotifier {
         document: document,
         phone: phone,
         birthDate: birthDate == null ? null : '${birthDate.year}-${two(birthDate.month)}-${two(birthDate.day)}',
+        company: company,
         cashbackConsent: cashbackConsent,
         marketingConsent: marketingConsent,
       );
@@ -1713,6 +1715,20 @@ class PosController extends ChangeNotifier {
     }
     await selectCustomer(id);
     return null;
+  }
+
+  /// Busca os dados públicos do CNPJ para o cadastro de pessoa jurídica (com internet). Devolve os
+  /// dados ou o código do erro: sem internet, FA984; CNPJ não encontrado, FA907.
+  Future<({CompanyCustomer? data, String? code})> lookupCnpj(String cnpj, {String? authorizedBy}) async {
+    final service = customers;
+    final responsible = authorizedBy ?? actor?.id;
+    if (service == null || responsible == null) return (data: null, code: 'FA000');
+    if (authorizedBy == null && !can('pdv.customer_create')) return (data: null, code: 'FA002');
+    try {
+      return (data: await service.lookupCnpj(operatorId: responsible, cnpj: cnpj), code: null);
+    } on ApiException catch (error) {
+      return (data: null, code: const {'FA001', 'FA008', 'FA009'}.contains(error.code) ? 'FA984' : error.code);
+    }
   }
 
   Future<void> selectCustomer(String id) async {

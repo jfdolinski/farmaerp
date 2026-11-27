@@ -116,29 +116,40 @@ class CustomerService {
     }
   }
 
-  /// Cadastro na tela de vendas, só com internet (a central confere o CPF repetido). O cliente
-  /// novo fica guardado aqui, como o escolhido na busca. Devolve o id.
+  /// Cadastro na tela de vendas, só com internet (a central confere o CPF ou CNPJ repetido). O
+  /// cliente novo fica guardado aqui, como o escolhido na busca. Pessoa jurídica vem em [company]
+  /// (nome e documento saem dela). Devolve o id.
   Future<String> create({
     required String operatorId,
-    required String name,
-    required String document,
+    String name = '',
+    String document = '',
     String? phone,
     String? birthDate,
+    CompanyCustomer? company,
     bool cashbackConsent = false,
     bool marketingConsent = false,
   }) async {
     final item = await api.createCustomer(accessToken: await accessToken(), data: {
       'operatorId': operatorId,
-      'name': name.trim(),
-      'document': document.trim(),
-      'phone': (phone ?? '').trim().isEmpty ? null : phone!.trim(),
-      'birthDate': birthDate,
+      ...?company?.toJson(),
+      if (company == null) ...{
+        'name': name.trim(),
+        'document': document.trim(),
+        'phone': (phone ?? '').trim().isEmpty ? null : phone!.trim(),
+        'birthDate': birthDate,
+      },
       'consents': {'cashback': cashbackConsent, 'marketing': marketingConsent},
     });
     database.saveCustomer(item);
     // Sem dados pessoais no log.
     logger?.info('Cliente cadastrado no caixa');
     return item.id;
+  }
+
+  /// Dados públicos do CNPJ para preencher o cadastro (com internet). Nada da resposta vai para o log.
+  Future<CompanyCustomer> lookupCnpj({required String operatorId, required String cnpj}) async {
+    final digits = cnpj.replaceAll(RegExp(r'[^0-9A-Za-z]'), '').toUpperCase();
+    return CompanyCustomer.fromLookup(digits, await api.lookupCnpj(accessToken: await accessToken(), operatorId: operatorId, cnpj: digits));
   }
 
   /// Histórico de compras na rede. Só com internet (erro de conexão sobe para quem chamou).
@@ -159,5 +170,85 @@ class CustomerService {
       if (saved == null) rethrow;
       return saved;
     }
+  }
+}
+
+/// Pessoa jurídica cadastrada no caixa, com o que a NF-e exige do destinatário: CNPJ, razão social,
+/// inscrição estadual (ou ISENTO), indicador de IE e endereço completo com o código IBGE.
+class CompanyCustomer {
+  const CompanyCustomer({
+    required this.cnpj,
+    required this.legalName,
+    this.tradeName,
+    this.stateRegistration,
+    this.ieIndicator,
+    this.email,
+    this.phone,
+    this.postalCode,
+    this.street,
+    this.streetNumber,
+    this.complement,
+    this.district,
+    this.city,
+    this.cityCode,
+    this.state,
+  });
+
+  /// O que a consulta do CNPJ trouxe. A inscrição e o indicador não vêm: o operador informa.
+  factory CompanyCustomer.fromLookup(String cnpj, Map<String, dynamic> data) => CompanyCustomer(
+    cnpj: cnpj,
+    legalName: data['legalName'] as String? ?? '',
+    tradeName: data['tradeName'] as String?,
+    email: data['email'] as String?,
+    phone: data['phone'] as String?,
+    postalCode: data['postalCode'] as String?,
+    street: data['street'] as String?,
+    streetNumber: data['streetNumber'] as String?,
+    complement: data['complement'] as String?,
+    district: data['district'] as String?,
+    city: data['city'] as String?,
+    cityCode: data['cityCode'] as String?,
+    state: data['state'] as String?,
+  );
+
+  final String cnpj;
+  final String legalName;
+  final String? tradeName;
+  final String? stateRegistration;
+
+  /// 1 contribuinte, 2 contribuinte isento, 9 não contribuinte; vazio segue a inscrição.
+  final int? ieIndicator;
+  final String? email;
+  final String? phone;
+  final String? postalCode;
+  final String? street;
+  final String? streetNumber;
+  final String? complement;
+  final String? district;
+  final String? city;
+  final String? cityCode;
+  final String? state;
+
+  Map<String, Object?> toJson() {
+    String? clean(String? value) => (value ?? '').trim().isEmpty ? null : value!.trim();
+    String? digits(String? value) => clean(value?.replaceAll(RegExp(r'[^0-9]'), ''));
+    return {
+      'personType': 'company',
+      'document': cnpj.replaceAll(RegExp(r'[^0-9A-Za-z]'), '').toUpperCase(),
+      'name': legalName.trim(),
+      'tradeName': clean(tradeName),
+      'stateRegistration': clean(stateRegistration),
+      'ieIndicator': ieIndicator?.toString(),
+      'email': clean(email),
+      'phone': digits(phone),
+      'postalCode': digits(postalCode),
+      'street': clean(street),
+      'streetNumber': clean(streetNumber),
+      'complement': clean(complement),
+      'district': clean(district),
+      'city': clean(city),
+      'cityCode': digits(cityCode),
+      'state': clean(state)?.toUpperCase(),
+    };
   }
 }

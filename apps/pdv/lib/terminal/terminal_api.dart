@@ -98,6 +98,9 @@ abstract class TerminalApi {
   /// Cadastro do cliente na tela de vendas (com internet). Devolve o cliente como na escolha.
   Future<PullItem> createCustomer({required String accessToken, required Map<String, Object?> data});
 
+  /// Dados públicos do CNPJ, para preencher o cadastro de pessoa jurídica (com internet).
+  Future<Map<String, dynamic>> lookupCnpj({required String accessToken, required String operatorId, required String cnpj});
+
   /// Estoque do produto em cada filial do grupo (com internet).
   Future<List<Map<String, dynamic>>> networkStock({
     required String accessToken,
@@ -481,6 +484,10 @@ class HttpTerminalApi implements TerminalApi {
     final json = await _post('/terminals/customers', data, accessToken: accessToken);
     return PullItem(type: 'customer', id: json['id'] as String, data: json['data'] as Map<String, dynamic>?);
   }
+
+  @override
+  Future<Map<String, dynamic>> lookupCnpj({required String accessToken, required String operatorId, required String cnpj}) =>
+      _post('/terminals/customers/cnpj', {'operatorId': operatorId, 'cnpj': cnpj}, accessToken: accessToken);
 
   @override
   Future<Map<String, dynamic>> customerHistory({required String accessToken, required String id}) async {

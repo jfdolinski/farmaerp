@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' hide Text, TextField, InputDecoration;
 import 'package:flutter/services.dart';
 
 import '../core/document.dart';
+import '../customers/customer_service.dart';
 import '../core/error_display.dart';
 import '../face/face_widgets.dart';
 import '../local/local_database.dart';
@@ -383,10 +384,36 @@ class _CustomerDialogState extends State<_CustomerDialog> {
   String? _createError;
   bool _duplicate = false;
 
+  // Pessoa jurídica: o que a NF-e exige do destinatário. A consulta do CNPJ preenche o que achar.
+  bool _company = false;
+  final _cnpj = TextEditingController();
+  final _legalName = TextEditingController();
+  final _tradeName = TextEditingController();
+  final _stateRegistration = TextEditingController();
+  final _email = TextEditingController();
+  final _postalCode = TextEditingController();
+  final _street = TextEditingController();
+  final _streetNumber = TextEditingController();
+  final _complement = TextEditingController();
+  final _district = TextEditingController();
+  final _city = TextEditingController();
+  final _cityCode = TextEditingController();
+  final _uf = TextEditingController();
+
+  /// 1 contribuinte, 2 isento, 9 não contribuinte; null segue a inscrição.
+  int? _ieIndicator;
+  bool _lookingUp = false;
+  String? _lookupMessage;
+
+  List<TextEditingController> get _companyFields => [
+    _cnpj, _legalName, _tradeName, _stateRegistration, _email, _postalCode, _street, _streetNumber, _complement, _district, _city,
+    _cityCode, _uf,
+  ];
+
   @override
   void dispose() {
     _typing?.cancel();
-    for (final field in [_query, _newName, _newDocument, _newPhone, _newBirth]) {
+    for (final field in [_query, _newName, _newDocument, _newPhone, _newBirth, ..._companyFields]) {
       field.dispose();
     }
     super.dispose();
@@ -409,8 +436,13 @@ class _CustomerDialogState extends State<_CustomerDialog> {
       _creating = true;
       _createError = null;
       _duplicate = false;
-      if (digits.length == 11 && digits.length >= typed.replaceAll(RegExp(r'[\s.\-/]'), '').length) {
+      final onlyDocument = digits.length >= typed.replaceAll(RegExp(r'[\s.\-/]'), '').length;
+      if (digits.length == 11 && onlyDocument) {
         _newDocument.text = digits;
+      } else if (digits.length == 14 && onlyDocument) {
+        // CNPJ digitado na busca: o cadastro já abre como pessoa jurídica.
+        _company = true;
+        _cnpj.text = digits;
       } else if (typed.isNotEmpty && digits.isEmpty) {
         _newName.text = typed;
       }
@@ -434,18 +466,101 @@ class _CustomerDialogState extends State<_CustomerDialog> {
     if (_newBirth.text.trim().isNotEmpty && _birth == null) 'birth': 'Data inválida (dd/mm/aaaa)',
   };
 
+  String _digits(TextEditingController field) => field.text.replaceAll(RegExp(r'[^0-9]'), '');
+
+  /// Campos da pessoa jurídica com problema. O endereço é todo obrigatório (vai na NF-e).
+  Map<String, String> get _companyErrors {
+    final registration = _stateRegistration.text.trim().toUpperCase();
+    final numbered = RegExp(r'^\d+$').hasMatch(_digits(_stateRegistration)) && registration != 'ISENTO';
+    return {
+      if (!isValidCnpj(_cnpj.text)) 'cnpj': 'CNPJ inválido',
+      if (_legalName.text.trim().length < 3) 'legalName': 'Informe a razão social',
+      if (registration.isNotEmpty && registration != 'ISENTO' && _digits(_stateRegistration).isEmpty) 'ie': 'Números ou ISENTO',
+      if (_ieIndicator == 1 && !numbered) 'ie': 'Contribuinte precisa da inscrição com número',
+      if (_ieIndicator == 2 && numbered) 'ie': 'Isento não tem inscrição com número',
+      if (_email.text.trim().isNotEmpty && !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(_email.text.trim())) 'email': 'E-mail inválido',
+      if (_newPhone.text.trim().isNotEmpty && !RegExp(r'^\d{10,11}$').hasMatch(_digits(_newPhone))) 'phone': 'Telefone com DDD (10 ou 11 dígitos)',
+      if (_digits(_postalCode).length != 8) 'postalCode': 'CEP com 8 dígitos',
+      if (_street.text.trim().isEmpty) 'street': 'Informe a rua',
+      if (_streetNumber.text.trim().isEmpty) 'streetNumber': 'Informe o número (ou S/N)',
+      if (_district.text.trim().isEmpty) 'district': 'Informe o bairro',
+      if (_city.text.trim().isEmpty) 'city': 'Informe o município',
+      if (_digits(_cityCode).length != 7) 'cityCode': 'Código IBGE com 7 dígitos',
+      if (!RegExp(r'^[A-Za-z]{2}$').hasMatch(_uf.text.trim())) 'uf': 'UF com 2 letras',
+    };
+  }
+
+  CompanyCustomer get _companyData => CompanyCustomer(
+    cnpj: _cnpj.text,
+    legalName: _legalName.text,
+    tradeName: _tradeName.text,
+    stateRegistration: _stateRegistration.text.trim().toUpperCase() == 'ISENTO' ? 'ISENTO' : _digits(_stateRegistration),
+    ieIndicator: _ieIndicator,
+    email: _email.text,
+    phone: _newPhone.text,
+    postalCode: _postalCode.text,
+    street: _street.text,
+    streetNumber: _streetNumber.text,
+    complement: _complement.text,
+    district: _district.text,
+    city: _city.text,
+    cityCode: _cityCode.text,
+    state: _uf.text,
+  );
+
+  /// Preenche o cadastro pelo CNPJ (com internet). O que vier substitui o que está nos campos.
+  Future<void> _lookup() async {
+    if (!isValidCnpj(_cnpj.text)) {
+      setState(() {
+        _tried = true;
+        _lookupMessage = null;
+      });
+      return;
+    }
+    setState(() {
+      _lookingUp = true;
+      _lookupMessage = null;
+    });
+    final result = await widget.controller.lookupCnpj(_cnpj.text, authorizedBy: _authorizedBy);
+    if (!mounted) return;
+    final data = result.data;
+    setState(() {
+      _lookingUp = false;
+      if (data == null) {
+        final display = ErrorDisplay.fromCode(result.code ?? 'FA000');
+        _lookupMessage = '${display.message} ${display.action} Preencha os campos à mão.';
+        return;
+      }
+      void put(TextEditingController field, String? value) => field.text = value ?? '';
+      put(_legalName, data.legalName);
+      put(_tradeName, data.tradeName);
+      put(_email, data.email);
+      put(_newPhone, data.phone);
+      put(_postalCode, data.postalCode);
+      put(_street, data.street);
+      put(_streetNumber, data.streetNumber);
+      put(_complement, data.complement);
+      put(_district, data.district);
+      put(_city, data.city);
+      put(_cityCode, data.cityCode);
+      put(_uf, data.state);
+      _lookupMessage = 'Dados da Receita preenchidos. Confira e informe a inscrição estadual.';
+    });
+  }
+
   Future<void> _create() async {
     setState(() {
       _tried = true;
       _createError = null;
       _duplicate = false;
     });
-    if (_newErrors.isNotEmpty) return;
+    if (_company ? _companyErrors.isNotEmpty : _newErrors.isNotEmpty) return;
     final code = await widget.controller.createCustomer(
       name: _newName.text,
       document: _newDocument.text.replaceAll(RegExp(r'[^0-9]'), ''),
       phone: _newPhone.text.replaceAll(RegExp(r'[^0-9]'), ''),
-      birthDate: _birth,
+      birthDate: _company ? null : _birth,
+      company: _company ? _companyData : null,
       cashbackConsent: _cashbackConsent,
       marketingConsent: _marketingConsent,
       authorizedBy: _authorizedBy,
@@ -462,17 +577,73 @@ class _CustomerDialogState extends State<_CustomerDialog> {
     });
   }
 
-  /// CPF já cadastrado: volta para a busca pelo CPF.
+  /// CPF ou CNPJ já cadastrado: volta para a busca pelo documento.
   void _searchDuplicate() {
     setState(() {
       _creating = false;
-      _query.text = _newDocument.text.replaceAll(RegExp(r'[^0-9]'), '');
+      _query.text = (_company ? _cnpj : _newDocument).text.replaceAll(RegExp(r'[^0-9A-Za-z]'), '');
     });
     _search();
   }
 
+  /// Campos da pessoa jurídica: CNPJ com a busca dos dados, inscrição e indicador, contato e endereço.
+  List<Widget> _companyForm(
+    Map<String, String> errors,
+    Widget Function(String key, String label, TextEditingController controller, {TextInputType? keyboard, String? hint}) field,
+  ) {
+    Widget pair(Widget first, Widget second, {int flex = 2}) => Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 10,
+      children: [Expanded(flex: flex, child: first), Expanded(child: second)],
+    );
+    return [
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: 10,
+        children: [
+          Expanded(child: field('cnpj', 'CNPJ', _cnpj, keyboard: TextInputType.number)),
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: OutlinedButton(
+              key: const Key('customer-new-lookup'),
+              onPressed: _lookingUp ? null : _lookup,
+              child: Text(_lookingUp ? 'Buscando...' : 'Buscar dados do CNPJ'),
+            ),
+          ),
+        ],
+      ),
+      if (_lookupMessage != null) Text(_lookupMessage!, key: const Key('customer-new-lookup-message')),
+      field('legalName', 'Razão social', _legalName),
+      field('tradeName', 'Nome fantasia (opcional)', _tradeName),
+      pair(
+        field('ie', 'Inscrição estadual', _stateRegistration, hint: 'Números ou ISENTO'),
+        DropdownButtonFormField<int?>(
+          key: const Key('customer-new-ie-indicator'),
+          initialValue: _ieIndicator,
+          decoration: const InputDecoration(labelText: 'Contribuinte do ICMS'),
+          items: const [
+            DropdownMenuItem(value: null, child: Text('Pela inscrição')),
+            DropdownMenuItem(value: 1, child: Text('Contribuinte')),
+            DropdownMenuItem(value: 2, child: Text('Isento')),
+            DropdownMenuItem(value: 9, child: Text('Não contribuinte')),
+          ],
+          onChanged: (value) => setState(() => _ieIndicator = value),
+        ),
+        flex: 1,
+      ),
+      pair(
+        field('email', 'E-mail para a NF-e (opcional)', _email, keyboard: TextInputType.emailAddress),
+        field('phone', 'Telefone com DDD (opcional)', _newPhone, keyboard: TextInputType.phone),
+      ),
+      pair(field('street', 'Rua', _street), field('streetNumber', 'Número', _streetNumber), flex: 3),
+      pair(field('complement', 'Complemento (opcional)', _complement), field('postalCode', 'CEP', _postalCode, keyboard: TextInputType.number)),
+      pair(field('district', 'Bairro', _district), field('uf', 'UF', _uf)),
+      pair(field('city', 'Município', _city), field('cityCode', 'Código IBGE do município', _cityCode, keyboard: TextInputType.number)),
+    ];
+  }
+
   Widget _createForm() {
-    final errors = _tried ? _newErrors : const <String, String>{};
+    final errors = !_tried ? const <String, String>{} : _company ? _companyErrors : _newErrors;
     Widget field(String key, String label, TextEditingController controller, {TextInputType? keyboard, String? hint}) => TextField(
       key: Key('customer-new-$key'),
       controller: controller,
@@ -486,6 +657,20 @@ class _CustomerDialogState extends State<_CustomerDialog> {
       spacing: 10,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        SegmentedButton<bool>(
+          key: const Key('customer-new-kind'),
+          segments: const [
+            ButtonSegment(value: false, label: Text('Pessoa física')),
+            ButtonSegment(value: true, label: Text('Pessoa jurídica')),
+          ],
+          selected: {_company},
+          onSelectionChanged: (value) => setState(() {
+            _company = value.first;
+            _createError = null;
+            _duplicate = false;
+          }),
+        ),
+        if (_company) ..._companyForm(errors, field) else ...[
         field('name', 'Nome completo', _newName),
         field('document', 'CPF', _newDocument, keyboard: TextInputType.number),
         field('phone', 'Telefone com DDD (opcional)', _newPhone, keyboard: TextInputType.phone),
@@ -497,6 +682,7 @@ class _CustomerDialogState extends State<_CustomerDialog> {
           lastDate: DateTime.now(),
           onChanged: (_) => _tried ? setState(() {}) : null,
         ),
+        ],
         CheckboxListTile(
           key: const Key('customer-new-cashback'),
           contentPadding: EdgeInsets.zero,
