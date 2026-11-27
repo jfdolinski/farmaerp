@@ -159,10 +159,11 @@ async function TerminalsContent() {
 
       {canStructure && branches.ok && branches.data.length > 0 && (
         <section className={styles.card}>
-          <h2>Venda sem estoque com o PDV sem internet</h2>
+          <h2>Tempo para o PDV contar como sem internet</h2>
           <p className={styles.hint}>
-            Tempo mínimo sem sincronizar para o PDV aceitar vender um produto com o saldo local zerado, sempre com a
-            autorização do gerente. Cada terminal pode ter uma exceção, na tabela abaixo.
+            A venda com estoque negativo é sempre liberável por quem tem &quot;Vender com estoque negativo&quot;. Depois deste
+            tempo sem sincronizar, a liberação fica registrada também como feita sem internet. Cada terminal pode ter uma
+            exceção, na tabela abaixo.
           </p>
           <ul className={styles.bullets}>
             {branches.data.map((branch) => (

@@ -38,11 +38,13 @@ class CompletedSale {
 
 /// Produto sem estoque esperando a autorização do gerente (PDV sem internet há bastante tempo).
 class PendingZeroStock {
-  const PendingZeroStock({required this.product, required this.quantityMilli, required this.minutesOffline});
+  const PendingZeroStock({required this.product, required this.quantityMilli, this.minutesOffline});
 
   final SaleProduct product;
   final int quantityMilli;
-  final int minutesOffline;
+
+  /// Minutos sem sincronizar, quando o terminal está sem internet há mais que o tempo da filial.
+  final int? minutesOffline;
 }
 
 /// Controlado da venda esperando a receita e a liberação do farmacêutico (pedidas ao finalizar).
@@ -396,31 +398,35 @@ class PosController extends ChangeNotifier {
     _applyFixedSeller();
     if (cart.seller == null) return _fail('FA881');
     try {
-      // No orçamento, controlado e falta de estoque só avisam: a receita e a venda são do caixa.
-      if (quoteMode) {
-        cart.add(product, quantityMilli: quantityMilli, quote: true);
-        results = const [];
-        notice = null;
-        notifyListeners();
-        return;
-      }
       final quantity = product.barcodeFractionMilli == null
           ? quantityMilli
           : (quantityMilli * product.barcodeFractionMilli! / 1000).round();
-      // Por encomenda não tem estoque mesmo: o aviso basta.
-      if (product.status != 'on_order' && product.controlledClass == null && product.priceCents != null &&
-          product.stockMilli - cart.quantityOf(product.id) - quantity < 0) {
-        final minutes = minutesWithoutSync;
-        if (minutes == null || minutes < offlineZeroStockMinutes) {
-          throw const PosException('FA977');
+      // Estoque negativo (por encomenda e controlado têm regra própria): quem tem "Vender com estoque
+      // negativo" segue; quem não tem chama o supervisor. No autoatendimento, sempre o supervisor.
+      if (_stockShort(product, quantity)) {
+        final user = actor;
+        if (!stockReleaseAlwaysAsks && user != null && user.can('sales.zero_stock_release')) {
+          final line = cart.add(product, quantityMilli: quantityMilli, quote: quoteMode, merge: false);
+          line.zeroStockRelease = (
+            supervisorId: user.id,
+            supervisorName: user.name,
+            minutesOffline: _offlineMinutes,
+            stockMilli: product.stockMilli,
+          );
+          reprice();
+          results = const [];
+          notice = null;
+          notifyListeners();
+          return;
         }
-        pendingZeroStock = PendingZeroStock(product: product, quantityMilli: quantityMilli, minutesOffline: minutes);
+        pendingZeroStock = PendingZeroStock(product: product, quantityMilli: quantityMilli, minutesOffline: _offlineMinutes);
         results = const [];
         notice = null;
         notifyListeners();
         return;
       }
-      cart.add(product, quantityMilli: quantityMilli);
+      // No orçamento, o controlado entra sem a receita: ela é do caixa.
+      cart.add(product, quantityMilli: quantityMilli, quote: quoteMode);
       reprice();
       results = const [];
       notice = null;
@@ -439,22 +445,41 @@ class PosController extends ChangeNotifier {
   /// Tempo mínimo sem sincronizar para aceitar a venda sem estoque (filial ou terminal).
   int get offlineZeroStockMinutes => (database.fiscal?['offline_zero_stock_minutes'] as num?)?.toInt() ?? 30;
 
-  /// O gerente autoriza a venda sem estoque com o código e o PIN dele.
+  /// O item deixaria o estoque negativo? Por encomenda, controlado (o lote é conferido na receita) e
+  /// sem preço ficam de fora.
+  bool _stockShort(SaleProduct product, int quantityMilli) =>
+      product.status != 'on_order' && product.controlledClass == null && product.priceCents != null &&
+      product.stockMilli - cart.quantityOf(product.id) - quantityMilli < 0;
+
+  /// Minutos sem sincronizar, só quando passa do tempo da filial (o terminal está sem internet).
+  int? get _offlineMinutes {
+    final minutes = minutesWithoutSync;
+    return minutes != null && minutes >= offlineZeroStockMinutes ? minutes : null;
+  }
+
+  /// No autoatendimento quem está na tela é o cliente: a liberação pede sempre o código e o PIN.
+  bool get stockReleaseAlwaysAsks => screen == 'self_service';
+
+  /// Quem tem "Vender com estoque negativo" libera com o código e o PIN (no caixa ou no orçamento).
   Future<void> approveZeroStock(String code, String pin) async {
     final pending = pendingZeroStock;
-    final current = operator;
-    if (pending == null || current == null || busy) return;
+    if (pending == null || busy) return;
     busy = true;
     notice = null;
     notifyListeners();
     try {
       final supervisor = await auth.verify(code, pin);
       if (!supervisor.can('sales.zero_stock_release')) throw const PosException('FA981');
-      final line = cart.add(pending.product, quantityMilli: pending.quantityMilli);
-      line.zeroStockRelease = (supervisorId: supervisor.id, supervisorName: supervisor.name, minutesOffline: pending.minutesOffline);
+      final line = cart.add(pending.product, quantityMilli: pending.quantityMilli, quote: quoteMode, merge: false);
+      line.zeroStockRelease = (
+        supervisorId: supervisor.id,
+        supervisorName: supervisor.name,
+        minutesOffline: pending.minutesOffline,
+        stockMilli: pending.product.stockMilli,
+      );
       reprice();
       pendingZeroStock = null;
-      logger?.warn('Venda sem estoque autorizada sem internet', fields: {
+      logger?.warn('Venda com estoque negativo liberada', fields: {
         'product_code': pending.product.code,
         'supervisor_code': supervisor.code,
         'minutes_offline': pending.minutesOffline,
@@ -582,7 +607,13 @@ class PosController extends ChangeNotifier {
   /// Puxa o orçamento (plaquinha ou código do cupom) para a venda: vendedor, cliente e itens com o
   /// preço de agora e o desconto do orçamento na mesma fração (com a liberação que veio). Item sem
   /// estoque ou fora deste terminal fica de fora, com aviso; controlado abre a receita, um por vez.
-  Future<bool> loadQuote(String key) async {
+  Future<bool> loadQuote(String key) => loadQuotes([key]);
+
+  /// Puxa um ou mais orçamentos para a mesma venda. Cada item fica com o vendedor e o orçamento de
+  /// origem; o vendedor da venda é o do primeiro, e o cliente, o do primeiro que tiver cliente. Item
+  /// sem estoque: vale a liberação feita no orçamento; sem ela, quem tem a permissão libera ao puxar,
+  /// e os outros esperam a liberação antes do pagamento.
+  Future<bool> loadQuotes(List<String> keys) async {
     final lookup = findQuote;
     final current = operator;
     if (quoteMode || current == null || session == null || busy) return false;
@@ -599,15 +630,25 @@ class PosController extends ChangeNotifier {
     info = null;
     results = const [];
     notifyListeners();
+    final quotes = <Map<String, dynamic>>[];
     try {
-      final data = await lookup(key.trim());
+      final seen = <String>{};
+      for (final key in keys) {
+        final found = await lookup(key.trim());
+        if (seen.add(found['id'] as String)) quotes.add(found);
+      }
+      if (quotes.isEmpty) return false;
       final skipped = <String>[];
       final quoteDiscounts = <CartLine, double>{};
-      final sellerId = data['seller_id'] as String?;
-      cart.seller = sellerId == null ? null : database.userById(sellerId);
-      cart.quoteId = data['id'] as String;
-      cart.quoteCode = data['code'] as String;
+      final first = quotes.first;
+      final firstSeller = first['seller_id'] as String?;
+      cart.seller = firstSeller == null ? null : database.userById(firstSeller);
+      cart.quoteId = first['id'] as String;
+      cart.quoteCode = [for (final quote in quotes) quote['code'] as String].join(', ');
+      final merged = quotes.length > 1;
       final now = _clock();
+      for (final data in quotes) {
+      final seller = data['seller_id'] == null ? null : database.userById(data['seller_id'] as String);
       for (final item in ((data['items'] as List?) ?? const []).cast<Map<String, dynamic>>()) {
         final product = database.saleProductById(item['product_id'] as String);
         final quantity = ((item['quantity'] as num) * 1000).round();
@@ -619,13 +660,33 @@ class PosController extends ChangeNotifier {
           skipped.add('${product.name}, sem preço');
           continue;
         }
-        // Controlado entra sem conferir o estoque aqui: o saldo do lote é conferido na receita.
-        if (product.controlledClass == null && product.status != 'on_order' && product.stockMilli - cart.quantityOf(product.id) - quantity < 0) {
-          skipped.add('${product.name}, sem estoque');
-          continue;
-        }
+        // Sem estoque: a liberação do orçamento vale; sem ela, quem tem a permissão libera agora e os
+        // outros liberam antes de pagar.
+        final short = _stockShort(product, quantity);
+        final quoted = item['zero_stock_release'] as Map<String, dynamic>?;
         final discount = (item['discount'] as num?) ?? 0;
-        final line = cart.add(product, quantityMilli: quantity, merge: discount <= 0);
+        final line = cart.add(product, quantityMilli: quantity, merge: false);
+        line.quoteId = data['id'] as String;
+        line.sellerId = seller?.id ?? data['seller_id'] as String?;
+        if (merged) line.sellerName = seller?.name;
+        if (short && quoted != null) {
+          final supervisorId = quoted['supervisor_id'] as String;
+          line.zeroStockRelease = (
+            supervisorId: supervisorId,
+            supervisorName: database.userById(supervisorId)?.name ?? 'supervisor',
+            minutesOffline: null,
+            stockMilli: quoted['stock'] == null ? null : ((quoted['stock'] as num) * 1000).round(),
+          );
+        } else if (short && !stockReleaseAlwaysAsks && current.can('sales.zero_stock_release')) {
+          line.zeroStockRelease = (
+            supervisorId: current.id,
+            supervisorName: current.name,
+            minutesOffline: _offlineMinutes,
+            stockMilli: product.stockMilli,
+          );
+        } else if (short) {
+          line.needsStockRelease = true;
+        }
         if (discount > 0) {
           // O desconto do orçamento (na mesma fração, com o preço de agora) inclui os automáticos:
           // o manual é o que passa deles.
@@ -642,6 +703,7 @@ class PosController extends ChangeNotifier {
           }
         }
       }
+      }
       reprice();
       for (final entry in quoteDiscounts.entries) {
         final manual = (entry.key.grossCents * entry.value).round() - entry.key.autoDiscountCents;
@@ -655,7 +717,8 @@ class PosController extends ChangeNotifier {
         final rule = current.can('sales.discount_override') ? 10000 : (line.product.maxDiscountAt(now) ?? 10000);
         line.setDiscount((line.grossCents * math.min(limit, rule) / 10000).floor());
       }
-      final customerId = data['customer_id'] as String?;
+      // O cliente do primeiro orçamento (na ordem escolhida) que tiver cliente.
+      final customerId = quotes.map((quote) => quote['customer_id'] as String?).whereType<String>().firstOrNull;
       final service = customers;
       if (customerId != null && service != null) {
         try {
@@ -675,8 +738,11 @@ class PosController extends ChangeNotifier {
           skipped.add('o cliente (identifique de novo)');
         }
       }
-      info = 'Orçamento ${data['code']} carregado.${skipped.isEmpty ? '' : ' Ficou de fora: ${skipped.join('; ')}.'}';
-      logger?.info('Orçamento puxado no caixa', fields: {'quote_code': data['code'], 'skipped': skipped.length});
+      final waiting = linesNeedingStockRelease.length;
+      info = '${merged ? 'Orçamentos' : 'Orçamento'} ${cart.quoteCode} ${merged ? 'carregados' : 'carregado'}.'
+          '${skipped.isEmpty ? '' : ' Ficou de fora: ${skipped.join('; ')}.'}'
+          '${waiting == 0 ? '' : ' $waiting ${waiting == 1 ? 'item sem estoque precisa' : 'itens sem estoque precisam'} de liberação.'}';
+      logger?.info('Orçamento puxado no caixa', fields: {'quotes': quotes.length, 'skipped': skipped.length, 'waiting_release': waiting});
       return true;
     } on ApiException catch (error) {
       cart.clear();
@@ -1704,8 +1770,34 @@ class PosController extends ChangeNotifier {
   }
 
   /// Finalizar: antes do pagamento, a receita (ou a liberação) de cada controlado, um por vez.
+  /// Itens que vieram de orçamento sem estoque e ainda esperam a liberação.
+  List<CartLine> get linesNeedingStockRelease => [for (final line in cart.lines) if (line.needsStockRelease) line];
+
+  /// Libera de uma vez os itens sem estoque que vieram dos orçamentos (código e PIN de quem tem
+  /// "Vender com estoque negativo"). Devolve true quando liberou.
+  Future<bool> releasePendingStock(String code, String pin) async {
+    final lines = linesNeedingStockRelease;
+    if (lines.isEmpty || busy) return false;
+    final supervisor = await authorize('sales.zero_stock_release', code, pin, allowSelf: true);
+    if (supervisor == null) return false;
+    for (final line in lines) {
+      line.needsStockRelease = false;
+      line.zeroStockRelease = (
+        supervisorId: supervisor.id,
+        supervisorName: supervisor.name,
+        minutesOffline: _offlineMinutes,
+        stockMilli: line.product.stockMilli,
+      );
+    }
+    logger?.warn('Venda com estoque negativo liberada', fields: {'items': lines.length, 'supervisor_code': supervisor.code});
+    notice = null;
+    notifyListeners();
+    return true;
+  }
+
   void startPayment() {
     if (cart.isEmpty) return;
+    if (linesNeedingStockRelease.isNotEmpty) return _fail('FA760');
     if (controlledWithoutRelease.isNotEmpty) {
       _payAfterControlled = true;
       notice = null;

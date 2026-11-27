@@ -47,7 +47,7 @@ PullItem product(String id, int code, String name, String barcode, num price, {S
   },
 );
 
-LocalDatabase seeded() {
+LocalDatabase seeded({String profile = 'cashier'}) {
   final database = LocalDatabase.inMemory();
   database.applyPage(
     PullPage(format: 3, until: '10', items: [
@@ -56,11 +56,11 @@ LocalDatabase seeded() {
         'company': {'trade_name': 'Farmácia Demonstração'},
         'series': const [],
         'last_sale_number': null,
-        'terminal_profile': 'cashier',
+        'terminal_profile': profile,
       }),
       user(operatorId, 3, 'Operador Centro', const ['sales.sell', 'sales.quote'], const {'sale_discount': 5}),
       user(clerkId, 6, 'Balconista Ana', const ['sales.quote'], const {'sale_discount': 5}),
-      user(supervisorId, 2, 'Gerente Centro', const ['sales.sell'], const {'sale_discount': 15}),
+      user(supervisorId, 2, 'Gerente Centro', const ['sales.sell', 'sales.zero_stock_release'], const {'sale_discount': 15}),
       product(dipirona, 1, 'Dipirona 500 mg', '7890000000017', 10),
       product(soro, 2, 'Soro Fisiológico', '7890000000024', 5),
       product(clonazepam, 4, 'Clonazepam 2 mg', '7890000000055', 24.5, controlledClass: 'B1'),
@@ -124,7 +124,7 @@ void main() {
 
   String? noticeCode() => controller.notice?.reference.replaceFirst('Código ', '');
 
-  test('puxa o orçamento: vendedor, cliente, preço de agora, desconto na mesma fração e o que ficou de fora', () async {
+  test('puxa o orçamento: vendedor, cliente, preço de agora, desconto na mesma fração; sem estoque espera a liberação', () async {
     await ready();
     api.customerData[customerId] = {'code': 7, 'person_type': 'individual', 'name': 'Cliente Demonstração', 'document': '11144477735'};
     api.quoteResponse['15'] = quoteData(customer: customerId);
@@ -132,21 +132,34 @@ void main() {
     expect(controller.seller?.id, clerkId);
     expect(controller.cart.customer?.name, 'Cliente Demonstração');
     expect([controller.cart.quoteId, controller.cart.quoteCode], [quoteId, 'O1-000004']);
-    final line = controller.cart.lines.single;
+    final line = controller.cart.lines.first;
     // Orçado a R$ 12 com 10% (liberado); hoje custa R$ 10: 2 x 10 = 20, desconto 10% = 2.
     expect([line.unitPriceCents, line.quantityMilli, line.discountCents, line.totalCents], [1000, 2000, 200, 1800]);
     expect(line.release?.supervisorName, 'Gerente Centro');
-    expect(controller.info, contains('Ficou de fora: Soro Fisiológico, sem estoque; item 3, que não está neste terminal.'));
+    // O soro sem estoque entra e espera a liberação; o item que não está no terminal fica de fora.
+    final soro = controller.cart.lines.last;
+    expect([soro.product.name, soro.needsStockRelease, soro.zeroStockRelease], ['Soro Fisiológico', true, null]);
+    expect(controller.info, contains('Ficou de fora: item 3, que não está neste terminal.'));
+    expect(controller.info, contains('1 item sem estoque precisa de liberação.'));
+    controller.startPayment();
+    expect([noticeCode(), controller.paying], ['FA760', false]);
+    // O operador não tem a permissão; o gerente libera.
+    expect(await controller.releasePendingStock('3', '2468'), isFalse);
+    expect(noticeCode(), 'FA757');
+    expect(await controller.releasePendingStock('2', '2468'), isTrue);
+    expect([soro.needsStockRelease, soro.zeroStockRelease?.supervisorId], [false, supervisorId]);
 
     controller.startPayment();
-    controller.addPayment(Payment(method: PaymentMethod.pix, amountCents: 1800));
+    controller.addPayment(Payment(method: PaymentMethod.pix, amountCents: controller.cart.totalCents));
     await controller.finish();
     expect(controller.notice, isNull);
     final sale = database.nextOutboxBatch().last.payload;
     expect(sale['quote_id'], quoteId);
     expect(sale['seller_id'], clerkId);
     expect(sale['customer_id'], customerId);
-    expect((sale['items'] as List).single, containsPair('release', {'supervisor_id': supervisorId, 'reason': 'Cliente fiel'}));
+    expect((sale['items'] as List).first, containsPair('release', {'supervisor_id': supervisorId, 'reason': 'Cliente fiel'}));
+    expect((sale['items'] as List).last, containsPair('zero_stock_release', containsPair('supervisor_id', supervisorId)));
+    expect((sale['items'] as List).map((item) => (item as Map)['quote_id']), [quoteId, quoteId]);
     expect(printer.printed.values.last.map((l) => l.text), contains('Orçamento O1-000004'));
     expect(controller.cart.quoteId, isNull);
   });
@@ -263,5 +276,172 @@ void main() {
     expect(find.byKey(const Key('quote-lookup')), findsNothing);
     expect(find.byKey(const Key('cart-quote')), findsOneWidget);
     expect(tester.widget<Text>(find.byKey(const Key('seller-name'))).data, caps('Vendedor: Balconista Ana'));
+  });
+
+  group('parte C: orçamentos juntados e estoque negativo', () {
+    const secondQuote = '019a0000-0000-7000-8000-0000000000fa';
+    Map<String, dynamic> second({String? customer = customerId}) => {
+      'id': secondQuote, 'code': 'O1-000005', 'card_number': 16, 'seller_id': supervisorId, 'customer_id': customer, 'total': 10,
+      'items': [
+        {'line': 1, 'product_id': dipirona, 'quantity': 1, 'unit_price': 10, 'discount': 0, 'total': 10, 'release': null},
+      ],
+    };
+    final simple = [
+      {'line': 1, 'product_id': dipirona, 'quantity': 2, 'unit_price': 10, 'discount': 0, 'total': 20, 'release': null},
+    ];
+
+    test('junta dois orçamentos: cada item com o vendedor e o orçamento dele; o cliente do primeiro que tem cliente', () async {
+      await ready();
+      api.customerData[customerId] = {'code': 7, 'person_type': 'individual', 'name': 'Cliente Demonstração', 'document': '11144477735'};
+      api.quoteResponse['O1-000004'] = quoteData(items: simple);
+      api.quoteResponse['O1-000005'] = second();
+      // O mesmo orçamento duas vezes (plaquinha e código) conta uma vez.
+      api.quoteResponse['15'] = quoteData(items: simple);
+      expect(await controller.loadQuotes(['O1-000004', '15', 'O1-000005']), isTrue);
+      expect(controller.seller?.id, clerkId);
+      expect(controller.cart.customer?.name, 'Cliente Demonstração');
+      expect([controller.cart.quoteId, controller.cart.quoteCode], [quoteId, 'O1-000004, O1-000005']);
+      expect(controller.info, startsWith('Orçamentos O1-000004, O1-000005 carregados.'));
+      final lines = controller.cart.lines;
+      expect(lines.map((line) => [line.quantityMilli, line.sellerId, line.quoteId]).toList(), [
+        [2000, clerkId, quoteId],
+        [1000, supervisorId, secondQuote],
+      ]);
+      expect(lines.last.warnings, contains('Vendedor: Gerente Centro'));
+      controller.startPayment();
+      controller.addPayment(Payment(method: PaymentMethod.pix, amountCents: controller.cart.totalCents));
+      await controller.finish();
+      final sale = database.nextOutboxBatch().last.payload;
+      expect([sale['quote_id'], sale['seller_id'], sale['customer_id']], [quoteId, clerkId, customerId]);
+      expect((sale['items'] as List).map((item) => [(item as Map)['seller_id'], item['quote_id']]).toList(), [
+        [clerkId, quoteId],
+        [supervisorId, secondQuote],
+      ]);
+    });
+
+    test('um orçamento só: o vendedor do item é o do orçamento, sem repetir na tela', () async {
+      await ready();
+      api.quoteResponse['O1-000004'] = quoteData(items: simple);
+      expect(await controller.loadQuote('O1-000004'), isTrue);
+      expect(controller.cart.lines.single.sellerId, clerkId);
+      expect(controller.cart.lines.single.warnings.where((w) => w.startsWith('Vendedor')), isEmpty);
+    });
+
+    test('produto lido no caixa depois de puxar o orçamento fica num item próprio (não soma no do orçamento)', () async {
+      await ready();
+      api.quoteResponse['O1-000004'] = quoteData(items: simple);
+      expect(await controller.loadQuote('O1-000004'), isTrue);
+      controller.scan('7890000000017');
+      expect(controller.cart.lines.map((line) => [line.quantityMilli, line.quoteId]).toList(), [[2000, quoteId], [1000, null]]);
+    });
+
+    test('liberação feita no orçamento vale no caixa: não pede de novo', () async {
+      await ready();
+      api.quoteResponse['O1-000004'] = quoteData(items: [
+        {'line': 1, 'product_id': soro, 'quantity': 1, 'unit_price': 5, 'discount': 0, 'total': 5, 'release': null,
+         'zero_stock_release': {'supervisor_id': supervisorId, 'stock': 0}},
+      ]);
+      expect(await controller.loadQuote('O1-000004'), isTrue);
+      final line = controller.cart.lines.single;
+      expect([line.needsStockRelease, line.zeroStockRelease?.supervisorId, line.zeroStockRelease?.stockMilli], [false, supervisorId, 0]);
+      expect(controller.linesNeedingStockRelease, isEmpty);
+      controller.startPayment();
+      expect(controller.paying, isTrue);
+    });
+
+    test('quem tem a permissão puxa o orçamento e libera na hora', () async {
+      await controller.login('2', '2468');
+      controller.openShift(0);
+      api.quoteResponse['O1-000004'] = quoteData(items: [
+        {'line': 1, 'product_id': soro, 'quantity': 1, 'unit_price': 5, 'discount': 0, 'total': 5, 'release': null},
+      ]);
+      expect(await controller.loadQuote('O1-000004'), isTrue);
+      expect(controller.cart.lines.single.zeroStockRelease?.supervisorId, supervisorId);
+      expect(controller.linesNeedingStockRelease, isEmpty);
+    });
+
+    test('autoatendimento: o estoque negativo pede sempre o código e o PIN, mesmo de quem abriu o turno', () async {
+      database.close();
+      database = seeded(profile: 'self_service');
+      controller = PosController(
+        database: database,
+        auth: PosAuth(database: database, clock: () => now),
+        printer: () => printer,
+        terminalNumber: () => 1,
+        clock: () => now,
+      );
+      await controller.login('2', '2468');
+      controller.openShift(0);
+      await controller.identifySeller('2');
+      controller.scan('7890000000024');
+      expect(controller.cart.isEmpty, isTrue);
+      expect(controller.pendingZeroStock, isNotNull);
+      await controller.approveZeroStock('2', '2468');
+      expect(controller.cart.lines.single.zeroStockRelease?.supervisorId, supervisorId);
+    });
+
+    test('orçamento: sem a permissão, o vendedor chama quem libera; a liberação vai no orçamento com o saldo', () async {
+      database.close();
+      database = seeded(profile: 'quote');
+      controller = PosController(
+        database: database,
+        auth: PosAuth(database: database, clock: () => now),
+        printer: () => printer,
+        terminalNumber: () => 1,
+        clock: () => now,
+      );
+      await controller.identifySeller('6');
+      controller.scan('7890000000024');
+      expect(controller.pendingZeroStock, isNotNull);
+      await controller.approveZeroStock('6', '2468');
+      expect(noticeCode(), 'FA981');
+      await controller.approveZeroStock('2', '2468');
+      final line = controller.cart.lines.single;
+      expect(line.zeroStockRelease?.supervisorId, supervisorId);
+      expect(await controller.finishQuote(printCoupon: false), isTrue);
+      final quote = database.nextOutboxBatch().where((item) => item.kind == 'quote').last.payload;
+      expect((quote['items'] as List).single, containsPair('zero_stock_release', {'supervisor_id': supervisorId, 'stock': 0.0}));
+    });
+
+    testWidgets('tela: marca dois orçamentos e junta; o que espera liberação tem o botão', (tester) async {
+      await tester.runAsync(ready);
+      api.openQuoteList = [
+        {'id': quoteId, 'code': 'O1-000004', 'card_number': 15, 'seller_name': 'Balconista Ana', 'customer_name': null, 'total': 20, 'item_count': 1,
+         'quoted_at': '2026-11-24T12:00:00Z', 'expires_at': '2026-11-25T03:00:00Z'},
+        {'id': secondQuote, 'code': 'O1-000005', 'card_number': 16, 'seller_name': 'Gerente Centro', 'customer_name': null, 'total': 10,
+         'item_count': 1, 'quoted_at': '2026-11-24T12:10:00Z', 'expires_at': '2026-11-25T03:00:00Z'},
+      ];
+      api.quoteResponse['O1-000004'] = quoteData(items: [
+        {'line': 1, 'product_id': soro, 'quantity': 1, 'unit_price': 5, 'discount': 0, 'total': 5, 'release': null},
+      ]);
+      api.quoteResponse['O1-000005'] = second(customer: null);
+      await tester.binding.setSurfaceSize(const Size(1400, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(MaterialApp(home: PosScreen(controller: controller)));
+      await tester.tap(find.byKey(const Key('scan-field')));
+      await tester.sendKeyEvent(LogicalKeyboardKey.f3);
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pumpAndSettle();
+      expect(tester.widget<OutlinedButton>(find.byKey(const Key('quote-merge'))).onPressed, isNull);
+      await tester.tap(find.byKey(const Key('quote-pick-O1-000004')));
+      await tester.tap(find.byKey(const Key('quote-pick-O1-000005')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('quote-merge')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('quote-lookup')), findsNothing);
+      expect(controller.cart.lines, hasLength(2));
+      // O soro veio sem estoque e sem liberação: o botão aparece; o gerente libera.
+      expect(find.byKey(const Key('stock-release-open')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('stock-release-open')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('release-code')), '2');
+      await tester.enterText(find.byKey(const Key('release-pin')), '2468');
+      await tester.tap(find.byKey(const Key('release-confirm')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('stock-release-open')), findsNothing);
+      expect(controller.linesNeedingStockRelease, isEmpty);
+    });
   });
 }

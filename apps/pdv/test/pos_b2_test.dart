@@ -98,8 +98,8 @@ void main() {
   });
   tearDown(() => database.close());
 
-  Future<void> ready() async {
-    await controller.login('3', '2468');
+  Future<void> ready({String login = '3'}) async {
+    await controller.login(login, '2468');
     controller.openShift(0);
   }
 
@@ -161,12 +161,30 @@ void main() {
   });
 
   group('venda sem estoque', () {
-    test('sincronizado há pouco: não vende', () async {
+    test('com internet: o operador sem a permissão pede quem libera; liberado, vai com o saldo e sem os minutos', () async {
       await ready();
       controller.scan('7890000000024');
-      expect(controller.notice?.message, 'Produto sem estoque nesta filial.');
+      expect(controller.notice, isNull);
       expect(controller.cart.isEmpty, isTrue);
+      expect(controller.pendingZeroStock?.minutesOffline, isNull);
+      await controller.approveZeroStock('5', '2468');
+      final line = controller.cart.lines.single;
+      expect(line.zeroStockRelease?.supervisorId, managerId);
+      expect(line.warnings.join(), contains('Estoque negativo liberado por Gerente Centro'));
+      expect(line.warnings.join(), isNot(contains('sem internet')));
+      controller.startPayment();
+      controller.addPayment(Payment(method: PaymentMethod.pix, amountCents: line.totalCents));
+      await controller.finish();
+      final item = ((database.nextOutboxBatch().last.payload['items']) as List).single as Map;
+      expect(item['zero_stock_release'], {'supervisor_id': managerId, 'minutes_offline': null, 'stock': line.product.stockMilli / 1000});
+    });
+
+    test('quem tem "Vender com estoque negativo" vende direto, sem painel', () async {
+      await ready(login: '5');
+      controller.scan('7890000000024');
       expect(controller.pendingZeroStock, isNull);
+      final line = controller.cart.lines.single;
+      expect(line.zeroStockRelease?.supervisorId, managerId);
     });
 
     test('sem internet há mais que o tempo da filial: só com o gerente, e fica registrado', () async {
@@ -181,21 +199,22 @@ void main() {
       await controller.approveZeroStock('5', '2468');
       final line = controller.cart.lines.single;
       expect(line.zeroStockRelease?.supervisorId, managerId);
-      expect(line.warnings.join(), contains('autorizado por Gerente Centro (50 min sem internet)'));
+      expect(line.warnings.join(), contains('liberado por Gerente Centro (50 min sem internet)'));
       expect(controller.pendingZeroStock, isNull);
 
       controller.startPayment();
       controller.addPayment(Payment(method: PaymentMethod.pix, amountCents: 1000));
       await controller.finish();
       final item = ((database.nextOutboxBatch().last.payload['items']) as List).single as Map;
-      expect(item['zero_stock_release'], {'supervisor_id': managerId, 'minutes_offline': 50});
+      expect(item['zero_stock_release'], {'supervisor_id': managerId, 'minutes_offline': 50, 'stock': line.product.stockMilli / 1000});
     });
 
     test('o que já está na venda conta; encomenda só avisa', () async {
       await ready();
       controller.add(database.saleProductByCode('7890000000017')!, quantityMilli: 10000);
       controller.scan('7890000000017');
-      expect(controller.notice?.message, 'Produto sem estoque nesta filial.');
+      expect(controller.pendingZeroStock?.product.code, database.saleProductByCode('7890000000017')!.code);
+      controller.cancelZeroStock();
       controller.scan('7890000000031');
       expect(controller.cart.lines.last.product.id, encomenda);
       expect(controller.cart.lines.last.warnings, contains('Produto por encomenda'));
@@ -314,7 +333,7 @@ void main() {
       await tester.runAsync(() => controller.approveZeroStock('5', '2468'));
       await tester.pump();
       expect(find.byKey(const Key('zero-stock-panel')), findsNothing);
-      expect(findTextContaining('autorizado por Gerente Centro'), findsOneWidget);
+      expect(findTextContaining('liberado por Gerente Centro'), findsOneWidget);
     });
 
     testWidgets('cliente aparece no painel e o convênio vira forma de pagamento', (tester) async {

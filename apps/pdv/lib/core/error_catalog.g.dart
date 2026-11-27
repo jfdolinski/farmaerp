@@ -814,6 +814,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Importe antes as NFC-e que trazem esses produtos e importe a nota de novo.',
     retryable: false,
   ),
+  'FA760': ErrorCatalogEntry(
+    code: 'FA760',
+    message: 'Há itens sem estoque esperando a liberação.',
+    action: 'Peça a quem tem "Vender com estoque negativo" para liberar (botão Liberar estoque negativo) ou tire os itens.',
+    retryable: false,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',

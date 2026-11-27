@@ -28,7 +28,7 @@ PullItem product(String id, int code, String name, String barcode, num price, Ma
   },
 );
 
-LocalDatabase seeded() {
+LocalDatabase seeded({String profile = 'cashier'}) {
   final database = LocalDatabase.inMemory();
   database.applyPage(
     PullPage(format: 4, until: '10', items: [
@@ -37,6 +37,7 @@ LocalDatabase seeded() {
         'company': {'trade_name': 'Farmácia Demonstração'},
         'series': const [],
         'fixed_seller_id': operatorId,
+        'terminal_profile': profile,
       }),
       PullItem(type: 'user', id: operatorId, data: {
         'code': 3, 'name': 'Operador Centro', 'is_admin': false, 'roles': const [], 'permissions': const ['sales.sell'],
@@ -99,6 +100,23 @@ void main() {
     controller.scan('7890000000024');
     expect(controller.cart.lines.last.autoDiscountCents, 0);
     expect(controller.cart.discountCents, 300);
+  });
+
+  test('orçamento: o desconto automático entra ao incluir o item, como no caixa', () async {
+    database.close();
+    database = seeded(profile: 'quote');
+    controller = PosController(
+      database: database,
+      auth: PosAuth(database: database, clock: () => now),
+      printer: () => printer,
+      terminalNumber: () => 1,
+      clock: () => now,
+    );
+    expect(controller.quoteMode, isTrue);
+    controller.scan('7890000000017');
+    final line = controller.cart.lines.single;
+    expect([line.grossCents, line.autoDiscountCents, line.totalCents], [1000, 100, 900]);
+    expect(line.autoApplied.map((a) => a.name), ['Fabricante M1 10%']);
   });
 
   test('PIX: o valor sugerido já tem o desconto; com o PIX lançado, a venda fecha e leva as regras', () async {
