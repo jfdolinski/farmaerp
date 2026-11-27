@@ -72,6 +72,15 @@ export async function bootstrapRoles(adminConfig, { migratorPassword, appPasswor
   });
 }
 
+/**
+ * O banco ainda não tem nenhum grupo econômico: é um banco novo. Na homologação, o seed de demonstração
+ * só entra assim, para não voltar depois que a homologação é zerada e passa a ter dados de verdade.
+ */
+export async function databaseIsEmpty(config = migratorConfig()) {
+  return withClient(config, async (client) =>
+    (await client.query('SELECT NOT EXISTS (SELECT 1 FROM economic_group) AS empty')).rows[0].empty);
+}
+
 /** Seed de demonstração, só em desenvolvimento e homologação. */
 export async function runSeed(config = migratorConfig(), environment = process.env.APP_ENV) {
   if (environment !== 'development' && environment !== 'homologation') {

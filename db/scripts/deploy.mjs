@@ -2,6 +2,7 @@
 import {
   bootstrapAdmin,
   bootstrapRoles,
+  databaseIsEmpty,
   migratorConfig,
   requireEnv,
   runMigrations,
@@ -42,9 +43,14 @@ try {
       : 'Nenhuma migration pendente.',
   );
 
+  // Seed de demonstração só no banco novo: depois de zerada, a homologação não recebe os dados de exemplo de novo.
   if (process.env.APP_ENV === 'homologation') {
-    await runSeed(config);
-    console.log('Dados de demonstração conferidos.');
+    if (await databaseIsEmpty(config)) {
+      await runSeed(config);
+      console.log('Dados de demonstração criados.');
+    } else {
+      console.log('Banco com dados: o seed de demonstração não roda.');
+    }
   }
 
   // Só no primeiro deploy: depois, estas variáveis saem do painel.

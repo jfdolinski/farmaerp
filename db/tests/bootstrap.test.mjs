@@ -1,7 +1,7 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  bootstrapAdmin, bootstrapRoles, runMigrations, runSeed, waitForDatabase, withClient,
+  bootstrapAdmin, bootstrapRoles, databaseIsEmpty, runMigrations, runSeed, waitForDatabase, withClient,
 } from '../scripts/lib.mjs';
 import { connectionConfig } from './helpers.mjs';
 
@@ -88,8 +88,10 @@ describe('seed por ambiente', () => {
     await expect(runSeed(migrator(), environment)).rejects.toThrow(/só roda em desenvolvimento ou homologação/);
   });
 
-  it('roda em homologação, mais de uma vez', async () => {
+  it('roda em homologação, mais de uma vez; depois, o banco não está mais vazio', async () => {
+    expect(await databaseIsEmpty(migrator())).toBe(true);
     await runSeed(migrator(), 'homologation');
+    expect(await databaseIsEmpty(migrator())).toBe(false);
     await runSeed(migrator(), 'homologation');
     const { rows } = await withClient(migrator(), (client) =>
       client.query('SELECT count(*)::int AS total FROM terminal'),
