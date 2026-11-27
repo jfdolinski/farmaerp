@@ -59,6 +59,75 @@ describe('nota autorizada', () => {
   });
 });
 
+/** Cobrança posta na nota antes da assinatura. */
+const withBilling = (cobr: string) => (xml: string) => xml.replace('</total>', `</total>${cobr}`);
+
+describe('dados completos e duplicatas', () => {
+  it('guarda a infNFe assinada inteira, com os atributos', () => {
+    const { xml, key, emitterCnpj } = buildNfe({
+      items: [{ code: '0001' }, { code: '0002' }],
+      beforeSign: (x) => x.replace('</total>', '</total><transp><modFrete>9</modFrete></transp><infAdic><infCpl>PEDIDO 55</infCpl></infAdic>'),
+    });
+    const { detail } = readAuthorizedNfe(xml);
+    expect(detail.content).toMatchObject({
+      '@_Id': `NFe${key}`,
+      '@_versao': '4.00',
+      ide: { mod: '55', natOp: 'VENDA' },
+      emit: { CNPJ: emitterCnpj, enderEmit: { UF: 'SP' } },
+      transp: { modFrete: '9' },
+      infAdic: { infCpl: 'PEDIDO 55' },
+      total: { ICMSTot: { vNF: '42.00' } },
+    });
+    const det = detail.content.det as { '@_nItem': string; prod: { cProd: string } }[];
+    expect(det.map((item) => [item['@_nItem'], item.prod.cProd])).toEqual([['1', '0001'], ['2', '0002']]);
+    expect(detail.installments).toEqual([]);
+  });
+
+  it('lê as duplicatas na ordem, com número e vencimento opcionais', () => {
+    const { xml } = buildNfe({
+      beforeSign: withBilling(
+        '<cobr><fat><nFat>123</nFat><vOrig>21.00</vOrig><vLiq>21.00</vLiq></fat>' +
+          '<dup><nDup>001</nDup><dVenc>2026-12-20</dVenc><vDup>10.50</vDup></dup>' +
+          '<dup><dVenc>2027-01-20</dVenc><vDup>5.25</vDup></dup>' +
+          '<dup><nDup>003</nDup><vDup>5.25</vDup></dup></cobr>',
+      ),
+    });
+    expect(readAuthorizedNfe(xml).detail.installments).toEqual([
+      { number: '001', dueDate: '2026-12-20', amount: '10.50' },
+      { number: null, dueDate: '2027-01-20', amount: '5.25' },
+      { number: '003', dueDate: null, amount: '5.25' },
+    ]);
+  });
+
+  it('uma duplicata só também vira lista; sem valor, não entra; fatura sem duplicata fica vazia', () => {
+    const one = buildNfe({ beforeSign: withBilling('<cobr><dup><nDup>1</nDup><dVenc>2026-12-01</dVenc><vDup>21.00</vDup></dup></cobr>') });
+    expect(readAuthorizedNfe(one.xml).detail.installments).toEqual([{ number: '1', dueDate: '2026-12-01', amount: '21.00' }]);
+    const noValue = buildNfe({ beforeSign: withBilling('<cobr><dup><nDup>1</nDup><vDup></vDup></dup><dup><nDup>2</nDup><vDup>3.00</vDup></dup></cobr>') });
+    expect(readAuthorizedNfe(noValue.xml).detail.installments).toEqual([{ number: '2', dueDate: null, amount: '3.00' }]);
+    const onlyInvoice = buildNfe({ beforeSign: withBilling('<cobr><fat><nFat>9</nFat></fat></cobr>') });
+    expect(readAuthorizedNfe(onlyInvoice.xml).detail.installments).toEqual([]);
+  });
+
+  it('valor fora do padrão segue como veio: quem confere é o banco', () => {
+    const { xml } = buildNfe({ beforeSign: withBilling('<cobr><dup><nDup>1</nDup><dVenc>20/12/2026</dVenc><vDup>1,50</vDup></dup></cobr>') });
+    expect(readAuthorizedNfe(xml).detail.installments).toEqual([{ number: '1', dueDate: '20/12/2026', amount: '1,50' }]);
+  });
+
+  it('duplicata com outra estrutura dentro vira vazio, sem recusar a nota', () => {
+    const { xml } = buildNfe({ beforeSign: withBilling('<cobr><dup><nDup><x>1</x></nDup><vDup>2.00</vDup></dup><dup>texto</dup></cobr>') });
+    expect(readAuthorizedNfe(xml).detail.installments).toEqual([{ number: null, dueDate: null, amount: '2.00' }]);
+  });
+
+  it('cobrança fora do trecho assinado é ignorada', () => {
+    const { xml } = buildNfe({
+      afterSign: (x) => x.replace('</nfeProc>', '<cobr><dup><nDup>9</nDup><vDup>999.00</vDup></dup></cobr></nfeProc>'),
+    });
+    const { detail } = readAuthorizedNfe(xml);
+    expect(detail.installments).toEqual([]);
+    expect(detail.content.cobr).toBeUndefined();
+  });
+});
+
 describe('recusas', () => {
   it('conteúdo alterado depois da assinatura', () => {
     expect(refusal(buildNfe({ afterSign: (xml) => xml.replace('<qCom>2.0000</qCom>', '<qCom>20.0000</qCom>') }).xml)).toMatch(/assinatura/);

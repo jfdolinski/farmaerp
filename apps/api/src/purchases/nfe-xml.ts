@@ -84,6 +84,21 @@ export interface ParsedInvoice {
   };
   totals: Record<'products' | 'discount' | 'freight' | 'insurance' | 'other' | 'ipi' | 'st' | 'invoice', string>;
   items: ParsedItem[];
+  /** Tudo o que a nota traz, para guardar à parte (não vai na importação). */
+  detail: NfeDetail;
+}
+
+/** Duplicata da cobrança (cobr/dup). O número e o vencimento são opcionais no leiaute. */
+export interface NfeInstallment {
+  number: string | null;
+  dueDate: string | null;
+  amount: string;
+}
+
+export interface NfeDetail {
+  /** A infNFe assinada inteira, como objeto (atributos com o prefixo @_). */
+  content: Record<string, unknown>;
+  installments: NfeInstallment[];
 }
 
 /** Motivo técnico da recusa: vai para o log, nunca para a tela. */
@@ -175,6 +190,24 @@ function elementChildren(node: { childNodes?: unknown }, ns: string, localName: 
 }
 const only = (elements: Element[], what: string): Element =>
   elements.length === 1 ? elements[0] : fail(`${what}: ${elements.length} encontrados`);
+
+/** Texto sem recusar: o que não for texto fica vazio (o banco confere o formato das duplicatas). */
+const loose = (node: unknown, name: string): string | null => {
+  const value = (node as Node | undefined)?.[name];
+  return typeof value === 'string' && value !== '' ? value : null;
+};
+const list = (value: unknown): Node[] =>
+  (Array.isArray(value) ? value : value === undefined || value === null ? [] : [value]).filter(
+    (entry): entry is Node => !!entry && typeof entry === 'object' && !Array.isArray(entry),
+  );
+
+/** Duplicatas da cobrança: sem valor, a duplicata não entra. */
+export function readInstallments(inf: Node): NfeInstallment[] {
+  return list(child(inf, 'cobr')?.dup).flatMap((dup) => {
+    const amount = loose(dup, 'vDup');
+    return amount === null ? [] : [{ number: loose(dup, 'nDup'), dueDate: loose(dup, 'dVenc'), amount }];
+  });
+}
 
 /** Valor das alíquotas de ST da nota (vICMSST e vFCPST), venha de qual grupo de ICMS vier. */
 function icmsGroup(tax: Node | undefined): Node | undefined {
@@ -369,6 +402,7 @@ export function readAuthorizedNfe(xml: string): ParsedInvoice {
       invoice: decimal(totals, 'vNF', null),
     },
     items: dets.map(parseItem),
+    detail: { content: inf, installments: readInstallments(inf) },
   };
 }
 
