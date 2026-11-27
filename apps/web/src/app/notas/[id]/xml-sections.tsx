@@ -438,6 +438,10 @@ export function auditText(entry: AuditEntry): string {
       return `${item}: lote ${text(d.batch_number)} ${d.source === "xml" ? "do XML trocado pelos digitados" : "tirado"}`;
     case "cost_released":
       return `${item}: custo liberado${d.reason ? ` (${text(d.reason)})` : ""}`;
+    case "cancelled":
+      return `Nota cancelada${d.reason ? `: ${text(d.reason)}` : ""}`;
+    case "fraction_changed":
+      return `${item}: fracionamento de ${quantityText(text(d.from))} para ${quantityText(text(d.to))} (estoque de ${quantityText(text(d.stock_from))} para ${quantityText(text(d.stock_to))})${d.reason ? `: ${text(d.reason)}` : ""}`;
     case "discarded":
       return `Nota descartada${d.reason ? `: ${text(d.reason)}` : ""}`;
     default:

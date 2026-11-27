@@ -130,6 +130,37 @@ export async function reverseInvoice(_previous: ItemFormState, form: FormData): 
   return { done: true, notice: "Lançamento estornado. A nota voltou para a conferência." };
 }
 
+export async function cancelInvoice(_previous: ItemFormState, form: FormData): Promise<ItemFormState> {
+  const id = text(form, "id");
+  const result = await apiFetch(`/admin/purchase-invoices/${encodeURIComponent(id)}/cancel`, {
+    method: "POST",
+    body: { reason: text(form, "reason") },
+  });
+  if (!result.ok) return failure(result.error, `/notas/${id}`);
+  refresh();
+  return { done: true, notice: "Nota cancelada." };
+}
+
+/** Fracionamento digitado com vírgula ou ponto; o banco confere o valor. */
+export async function changeItemFraction(_previous: ItemFormState, form: FormData): Promise<ItemFormState> {
+  const itemId = text(form, "itemId");
+  const next = `/notas/${text(form, "invoiceId")}`;
+  const raw = text(form, "fraction").replace(",", ".");
+  const fraction = raw === "" ? NaN : Number(raw);
+  if (!Number.isFinite(fraction) || fraction <= 0) {
+    return {
+      error: { code: "FA005", message: "Informe o fracionamento com números, maior que zero.", action: "Exemplo: 10 ou 2,5.", traceId: null, retryable: false },
+    };
+  }
+  const result = await apiFetch(`/admin/purchase-invoice-items/${encodeURIComponent(itemId)}/fraction`, {
+    method: "POST",
+    body: { fraction, reason: text(form, "reason") },
+  });
+  if (!result.ok) return failure(result.error, next);
+  refresh();
+  return { done: true, notice: "Fracionamento alterado. O estoque e o custo foram acertados." };
+}
+
 /** Lotes digitados: cada linha do formulário vira um lote; linha toda vazia é ignorada. */
 export async function saveItemBatches(_previous: ItemFormState, form: FormData): Promise<ItemFormState> {
   const itemId = text(form, "itemId");

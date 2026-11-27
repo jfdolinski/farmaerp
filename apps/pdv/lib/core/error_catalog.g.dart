@@ -832,6 +832,24 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Escolha alguém ativo que venda ou faça orçamentos na filial do terminal.',
     retryable: false,
   ),
+  'FA763': ErrorCatalogEntry(
+    code: 'FA763',
+    message: 'Esta operação deixa o estoque negativo, e você não tem permissão para isso.',
+    action: 'Peça a quem pode deixar o estoque negativo em notas de entrada para fazer a operação.',
+    retryable: false,
+  ),
+  'FA764': ErrorCatalogEntry(
+    code: 'FA764',
+    message: 'Esta nota já está cancelada.',
+    action: 'Atualize a página para ver a situação atual da nota.',
+    retryable: false,
+  ),
+  'FA765': ErrorCatalogEntry(
+    code: 'FA765',
+    message: 'O fracionamento informado é igual ao que já está na nota.',
+    action: 'Informe um fracionamento diferente ou feche sem alterar.',
+    retryable: false,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',
