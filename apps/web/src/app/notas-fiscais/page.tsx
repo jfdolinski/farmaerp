@@ -16,6 +16,7 @@ interface FiscalRow {
   sale_code: string;
   branch_name: string;
   terminal_name: string;
+  model: string;
   series: number;
   number: string;
   access_key: string;
@@ -63,7 +64,7 @@ function Row({ row, canCancel, canResend }: { row: FiscalRow; canCancel: boolean
   return (
     <tr>
       <td>
-        NFC-e {row.series}/{row.number}
+        {row.model === "55" ? "NF-e" : "NFC-e"} {row.series}/{row.number}
         {row.environment === 2 && <small className={styles.hint}> · homologação</small>}
         <br />
         <small className={styles.hint}>{row.access_key}</small>
@@ -104,10 +105,19 @@ function Row({ row, canCancel, canResend }: { row: FiscalRow; canCancel: boolean
         <details>
           <summary>Ações</summary>
           <div className={styles.stack}>
-            <DocumentActions id={row.id} canResend={canResend && ["pending", "contingency", "rejected"].includes(row.status)} />
+            {/* A NF-e de venda por enquanto só é baixada: o reenvio e a consulta ficam com o caixa. */}
+            {row.model === "65" && (
+              <DocumentActions id={row.id} canResend={canResend && ["pending", "contingency", "rejected"].includes(row.status)} />
+            )}
             {canCancel && row.status === "authorized" && row.cancelable_until && <CancelForm id={row.id} until={row.cancelable_until} />}
             <p>
               <a href={`/notas-fiscais/${row.id}/xml`}>Baixar o XML</a>
+              {row.model === "55" && row.status === "authorized" && (
+                <>
+                  {" "}
+                  · <a href={`/notas-fiscais/${row.id}/danfe`}>DANFE (A4)</a>
+                </>
+              )}
               {row.status === "canceled" && (
                 <>
                   {" "}
@@ -180,9 +190,10 @@ async function FiscalContent({ searchParams }: { searchParams: SearchParams }) {
       <AppHeader user={user} />
       <h1>Notas fiscais</h1>
       <p className={styles.hint}>
-        NFC-e emitidas nos caixas. A central consulta a Sefaz e, de hora em hora, reenvia até 30 notas que ficaram paradas
+        NFC-e e NF-e de venda emitidas nos caixas. A central consulta a Sefaz e, de hora em hora, reenvia até 30 notas que ficaram paradas
         (em contingência ou pendentes) há mais da metade do prazo; a recusada vira aviso. O cancelamento vale até 30
-        minutos depois da autorização e desfaz a venda junto.{" "}
+        minutos depois da autorização e desfaz a venda junto. A NF-e de venda (modelo 55), por enquanto, só é
+        listada e baixada aqui (XML e DANFE).{" "}
         {canResend && <Link href="/notas-fiscais/inutilizacao">Inutilizar numeração</Link>}
       </p>
 

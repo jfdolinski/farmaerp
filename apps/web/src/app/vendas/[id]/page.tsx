@@ -38,6 +38,8 @@ interface SaleDetail {
   fiscal_model: string | null;
   fiscal_status: string;
   nfce: {
+    id: string;
+    model: string;
     series: number;
     number: number;
     access_key: string;
@@ -173,7 +175,7 @@ function SaleView({ sale, tab }: { sale: SaleDetail; tab: string }) {
             {sale.nfce && (
               <>
                 <p>
-                  NFC-e série {sale.nfce.series} nº {sale.nfce.number}
+                  {sale.nfce.model === "55" ? "NF-e" : "NFC-e"} série {sale.nfce.series} nº {sale.nfce.number}
                   {sale.nfce.environment === 2 && " (homologação, sem valor fiscal)"} · chave{" "}
                   <code>{sale.nfce.access_key.replace(/(\d{4})(?=\d)/g, "$1 ")}</code>
                 </p>
@@ -189,6 +191,12 @@ function SaleView({ sale, tab }: { sale: SaleDetail; tab: string }) {
                 )}
                 <p>
                   <a href={`/vendas/${sale.id}/nfce`}>Baixar o XML</a>
+                  {sale.nfce.model === "55" && sale.nfce.status === "authorized" && (
+                    <>
+                      {" "}
+                      · <a href={`/notas-fiscais/${sale.nfce.id}/danfe`}>DANFE (A4)</a>
+                    </>
+                  )}
                 </p>
               </>
             )}

@@ -37,6 +37,7 @@ export interface CustomerValues {
   city_code?: string | null;
   state?: string | null;
   state_registration?: string | null;
+  ie_indicator?: number | null;
 }
 
 export interface AgreementRow {
@@ -232,6 +233,17 @@ function CustomerFields({
             placeholder="Números ou ISENTO"
             disabled={disabled}
           />
+        )}
+        {company && (
+          <label>
+            Contribuinte do ICMS (para a NF-e)
+            <select name="ieIndicator" defaultValue={values.ie_indicator ? String(values.ie_indicator) : ""} disabled={disabled}>
+              <option value="">Pela inscrição estadual</option>
+              <option value="1">Contribuinte (com inscrição)</option>
+              <option value="2">Contribuinte isento</option>
+              <option value="9">Não contribuinte</option>
+            </select>
+          </label>
         )}
         <label>
           Estado
