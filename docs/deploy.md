@@ -268,6 +268,22 @@ O envio real fica **desligado** até a documentação da API nova da Anvisa ser 
 
 Desligado, a rotina monta as remessas e espera; nada sai da VPS.
 
+## Ligar o Catálogo externo
+
+O Catálogo do FarmaERP é uma cópia do serviço catalogo-produtos. A API copia o catálogo completo de hora em hora e consulta na hora o código de barras que a cópia ainda não tem.
+
+1. No Catálogo, em **Empresas**, cadastre a empresa do FarmaERP (uma por ambiente) e gere a chave de acesso. Ela aparece uma vez só: copie na hora.
+2. No serviço `api`, em **Ambiente**, inclua:
+
+| Nome | Valor |
+|---|---|
+| `CATALOG_URL` | Endereço do Catálogo, sem barra no fim (por exemplo `https://catalogo.b6nhiy.easypanel.host`) |
+| `CATALOG_API_KEY` | A chave `cat_...` gerada no passo 1 |
+
+3. Implante a API. A primeira cópia começa 1 minuto depois; a situação fica em `/plataforma`, na aba **Catálogo**, que também tem o botão **Atualizar agora**.
+
+Sem as duas variáveis, a ligação fica desligada e a aba avisa. Cada chamada com a chave conta na cobrança do Catálogo: a cópia horária só baixa de novo quando o catálogo mudou (ETag), e as imagens vêm só dos itens vinculados a algum produto. `CATALOG_WORKER=off` desliga só a rotina horária.
+
 ## Antes de publicar a produção
 
 A produção usa os mesmos passos, em um projeto próprio e com segredos próprios, mas depende destes itens:
