@@ -26,7 +26,12 @@ export default function NewProductPage({ searchParams }: { searchParams: SearchP
   );
 }
 
-const EMPTY_STRUCTURE: ProductStructure = { categories: [], groups: [], channels: [] };
+const EMPTY_STRUCTURE: ProductStructure = {
+  categories: [],
+  groups: [],
+  channels: [],
+  units: [{ code: "UN", name: "Unidade", fractional: false }],
+};
 
 async function NewProductContent({ searchParams }: { searchParams: SearchParams }) {
   const user = await requireUser("/produtos/novo");

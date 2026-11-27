@@ -46,6 +46,7 @@ class _Details extends StatelessWidget {
     final batches = (data['batches'] as List).cast<Map<String, Object?>>();
     final rows = <(String, String?)>[
       ('Código', '${data['code']}'),
+      ('Unidade', text('unit')),
       ('Princípio ativo', text('active_ingredient')),
       ('Fabricante', text('manufacturer')),
       ('Situação na loja', _statusLabels[data['status']] ?? text('status')),

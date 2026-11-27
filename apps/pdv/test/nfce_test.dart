@@ -47,11 +47,13 @@ NfceInput input({
   int environment = 2,
   String? cpf,
   bool ibsCbs = false,
+  String firstUnit = 'UN',
 }) => NfceInput(
   issuer: issuer,
   items: [
     NfceItem(
       code: '1', gtin: '7890000000017', description: 'Dipirona Sódica 500 mg', ncm: '30049099', cest: '1300100',
+      unit: firstUnit,
       quantityMilli: 2000, unitPriceCents: 1290, grossCents: 2580, discountCents: 80, tax: tax,
     ),
     NfceItem(code: '2', description: 'Soro <fisiológico>', ncm: '30049099', quantityMilli: 1000, unitPriceCents: 500, grossCents: 500, tax: tax),
@@ -198,6 +200,12 @@ void main() {
     final xml = buildNfce(input(cpf: '529.982.247-25'), testCredential()).xml;
     if (Platform.environment['UPDATE_NFCE_FIXTURE'] == '1' || !fixture.existsSync()) fixture.writeAsStringSync(xml);
     expect(fixture.readAsStringSync(), xml);
+  });
+
+  test('unidade do produto em uCom e uTrib; sem unidade, UN', () {
+    final xml = buildNfce(input(firstUnit: 'CX'), testCredential()).xml;
+    expect(RegExp('<uCom>([A-Z]+)</uCom>').allMatches(xml).map((m) => m.group(1)), ['CX', 'UN']);
+    expect(RegExp('<uTrib>([A-Z]+)</uTrib>').allMatches(xml).map((m) => m.group(1)), ['CX', 'UN']);
   });
 
   test('o que não dá para emitir vira código do catálogo', () {

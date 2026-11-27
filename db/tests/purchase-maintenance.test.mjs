@@ -17,6 +17,14 @@ beforeAll(async () => {
   manager = await newUser('Gerente lançamento');
   await ownerPool.query('INSERT INTO user_branch (user_id, branch_id) VALUES ($1, $2)', [manager.id, a.branch1.id]);
   await ownerPool.query('INSERT INTO user_role (user_id, role_id, branch_id) VALUES ($1, $2, $3)', [manager.id, a.managerRole.id, a.branch1.id]);
+  // O cancelar não vem no Gerente padrão: a rede dá no perfil (aqui, um perfil a mais do gerente).
+  const { rows: [canceller] } = await ownerPool.query(
+    `INSERT INTO role (economic_group_id, name) VALUES ($1, 'Cancela nota') RETURNING *`, [a.group.id],
+  );
+  await ownerPool.query(
+    `INSERT INTO role_permission (role_id, permission_id) SELECT $1, id FROM permission WHERE code = 'purchases.cancel'`, [canceller.id],
+  );
+  await ownerPool.query('INSERT INTO user_role (user_id, role_id, branch_id) VALUES ($1, $2, $3)', [manager.id, canceller.id, a.branch1.id]);
   // Comprador: confere a nota, mas não lança nem vê custo de outra filial.
   const { rows: [role] } = await ownerPool.query(
     `INSERT INTO role (economic_group_id, name) VALUES ($1, 'Comprador') RETURNING *`, [a.group.id],
@@ -224,13 +232,13 @@ describe('cancelar nota', () => {
     });
   });
 
-  it('o Gerente padrão cancela; deixar negativo fica com o Administrador', async () => {
+  it('cancelar e deixar negativo não vêm dados ao Gerente: ficam para o perfil', async () => {
     const { rows } = await ownerPool.query(
       `SELECT p.code FROM role_permission rp JOIN permission p ON p.id = rp.permission_id
         WHERE rp.role_id = $1 AND p.code IN ('purchases.cancel', 'purchases.negative_stock') AND rp.deleted_at IS NULL`,
       [a.managerRole.id],
     );
-    expect(rows.map((r) => r.code)).toEqual(['purchases.cancel']);
+    expect(rows.map((r) => r.code)).toEqual([]);
   });
 
   it('a API não escreve direto nas colunas novas', async () => {

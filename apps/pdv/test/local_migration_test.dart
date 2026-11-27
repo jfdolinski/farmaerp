@@ -47,7 +47,7 @@ void main() {
     raw.execute("INSERT INTO customer (id, code, person_type, name, document, agreements, search_text, saved_at) VALUES (randomblob(16), 7, 'individual', 'Cliente', '11144477735', '[]', 'cliente', '2026-11-27T10:00:00Z')");
     final database = LocalDatabase.fromDatabase(raw);
     addTearDown(database.close);
-    expect(database.schemaVersion, 19);
+    expect(database.schemaVersion, 20);
     expect(raw.select('SELECT name, abc_curve FROM customer').first, {'name': 'Cliente', 'abc_curve': null});
     raw.execute("UPDATE customer SET abc_curve = 'A'");
     expect(() => raw.execute("UPDATE customer SET abc_curve = 'D'"), throwsA(anything));
@@ -65,7 +65,7 @@ void main() {
     );
     final database = LocalDatabase.fromDatabase(raw);
     addTearDown(database.close);
-    expect(database.schemaVersion, 19);
+    expect(database.schemaVersion, 20);
     expect(raw.select('SELECT number, status, protocol FROM nfce_document').first, {'number': 42, 'status': 'authorized', 'protocol': '135260000000123'});
     raw.execute("UPDATE nfce_document SET status = 'canceled'");
     expect(raw.select('SELECT status FROM nfce_document').first['status'], 'canceled');

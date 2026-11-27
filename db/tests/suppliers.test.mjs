@@ -374,7 +374,7 @@ describe('perfil padrão', () => {
         WHERE rp.role_id = $1 AND rp.deleted_at IS NULL AND p.code LIKE 'purchases.%' ORDER BY p.code`,
       [a.managerRole.id],
     );
-    expect(rows.map((r) => r.code)).toEqual(['purchases.cancel', 'purchases.manage', 'purchases.post', 'purchases.view']);
+    expect(rows.map((r) => r.code)).toEqual(['purchases.manage', 'purchases.post', 'purchases.view']);
   });
 
   it('sem usuário, a API não lê fornecedor nenhum', async () => {

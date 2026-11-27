@@ -3738,5 +3738,15 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": []
+  },
+  "FA766": {
+    "message": "Esta unidade de medida não existe.",
+    "action": "Escolha uma unidade da lista.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "product_unit_check"
+    ]
   }
 }

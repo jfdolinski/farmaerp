@@ -93,7 +93,12 @@ export default function ProductPage({
   );
 }
 
-const EMPTY_STRUCTURE: ProductStructure = { categories: [], groups: [], channels: [] };
+const EMPTY_STRUCTURE: ProductStructure = {
+  categories: [],
+  groups: [],
+  channels: [],
+  units: [{ code: "UN", name: "Unidade", fractional: false }],
+};
 
 async function ProductContent({
   params,

@@ -98,6 +98,7 @@ class NfceItem {
     required this.description,
     required this.ncm,
     this.cest,
+    this.unit = 'UN',
     required this.quantityMilli,
     required this.unitPriceCents,
     required this.grossCents,
@@ -110,6 +111,9 @@ class NfceItem {
   final String description;
   final String ncm;
   final String? cest;
+
+  /// Unidade de medida do produto (UN, CX, KG...): vai em uCom e uTrib.
+  final String unit;
   final int quantityMilli;
   final int unitPriceCents;
   final int grossCents;
@@ -425,12 +429,12 @@ void _item(XmlBuilder b, int line, NfceItem item, NfceIssuer issuer, NfceInput i
       b.element('NCM', nest: item.ncm);
       if (item.cest != null && item.cest!.isNotEmpty) b.element('CEST', nest: item.cest);
       b.element('CFOP', nest: tax['cfop'] as String);
-      b.element('uCom', nest: 'UN');
+      b.element('uCom', nest: item.unit);
       b.element('qCom', nest: _quantity(item.quantityMilli));
       b.element('vUnCom', nest: money(item.unitPriceCents));
       b.element('vProd', nest: money(item.grossCents));
       b.element('cEANTrib', nest: gtin);
-      b.element('uTrib', nest: 'UN');
+      b.element('uTrib', nest: item.unit);
       b.element('qTrib', nest: _quantity(item.quantityMilli));
       b.element('vUnTrib', nest: money(item.unitPriceCents));
       if (item.discountCents > 0) b.element('vDesc', nest: money(item.discountCents));

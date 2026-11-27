@@ -98,6 +98,8 @@ const productData = (body: Body) => ({
   usesPmc: optionalBoolean(body, 'usesPmc'),
   onlineSaleBlocked: optionalBoolean(body, 'onlineSaleBlocked'),
   fractionQuantity: optionalFraction(body, 'fractionQuantity'),
+  // Sigla da lista fixa (UN, CX, KG...); o banco confere. Vazia: UN no cadastro, a atual na alteração.
+  unit: optionalText(body, 'unit', 10),
 });
 
 const barcodeOptions = (body: Body) => ({
@@ -150,7 +152,7 @@ export class ProductsController {
       const { rows } = await client.query(
         `SELECT p.id, p.code, p.display_name, p.catalog_product_id, p.own_manufacturer, p.category_id,
                 p.commission_group_id, p.pricing_group_id, p.price_family_id, p.uses_pmc,
-                p.online_sale_blocked, p.fraction_quantity,
+                p.online_sale_blocked, p.fraction_quantity, p.unit,
                 cp.name AS catalog_name, cp.active_ingredient, m.name AS catalog_manufacturer,
                 cp.ms_registration, cp.controlled_class, cp.ncm, cp.cest
            FROM v_product p
@@ -414,10 +416,13 @@ export class ProductsController {
       const channels = await client.query(
         'SELECT id, name FROM v_sales_channel ORDER BY name',
       );
+      // Unidades de medida aceitas no cadastro (lista fixa do banco).
+      const units = await client.query('SELECT code, name, fractional FROM app.measure_units()');
       return {
         categories: categories.rows,
         groups: groups.rows,
         channels: channels.rows,
+        units: units.rows,
       };
     });
   }

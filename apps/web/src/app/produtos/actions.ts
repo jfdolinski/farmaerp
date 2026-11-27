@@ -41,6 +41,7 @@ const productBody = (form: FormData) => ({
   usesPmc: checked(form, "usesPmc"),
   onlineSaleBlocked: checked(form, "onlineSaleBlocked"),
   fractionQuantity: fraction(form, "fractionQuantity"),
+  unit: optional(form, "unit"),
 });
 
 export async function createProduct(
