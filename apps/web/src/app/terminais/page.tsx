@@ -9,7 +9,9 @@ import {
   ApproveForm,
   OfflineMinutesForm,
   SaleSettingsForm,
+  FixedSellerForm,
   ProfileForm,
+  SellerOption,
   UpdateRingForm,
   ReturnDaysForm,
   AutoRefresh,
@@ -28,6 +30,9 @@ interface TerminalSeries {
 
 interface MonitorRow {
   id: string;
+  branch_id: string;
+  fixed_seller_id: string | null;
+  fixed_seller_name: string | null;
   number: number | null;
   branch_name: string;
   name: string | null;
@@ -143,10 +148,12 @@ async function TerminalsContent() {
   const canBlock = can(user, "terminals.block");
   const canRevoke = can(user, "terminals.revoke");
   const canStructure = can(user, "structure.manage");
-  const [terminals, branches] = await Promise.all([
+  const [terminals, branches, sellers] = await Promise.all([
     apiFetch<MonitorRow[]>("/admin/terminals"),
     apiFetch<{ id: string; name: string; offline_zero_stock_minutes: number; quote_validity_days: number; seller_pin_required: boolean; return_days: number }[]>("/admin/branches"),
+    canApprove ? apiFetch<SellerOption[]>("/admin/terminals/seller-options") : null,
   ]);
+  const sellersOf = (branchId: string) => (sellers?.ok ? sellers.data : []).filter((row) => row.branch_id === branchId);
 
   if (!terminals.ok) redirectIfNeeded(terminals.error, "/terminais");
 
@@ -234,6 +241,9 @@ async function TerminalsContent() {
                         {terminal.device_name}
                       </small>
                       {seriesOf(terminal.id) && <small>{seriesOf(terminal.id)}</small>}
+                      {terminal.fixed_seller_id && (
+                        <small>Vendedor padrão: {terminal.fixed_seller_name ?? "usuário sem acesso para ver"}</small>
+                      )}
                       {terminal.key_storage === "file" && (
                         <small className={styles.warning}>
                           Chave em arquivo (proteção menor)
@@ -279,6 +289,14 @@ async function TerminalsContent() {
                       )}
                       {(terminal.status === "active" || terminal.status === "blocked") && canApprove && terminal.profile && (
                         <ProfileForm id={terminal.id} current={terminal.profile} />
+                      )}
+                      {(terminal.status === "active" || terminal.status === "blocked") && canApprove && (
+                        <FixedSellerForm
+                          id={terminal.id}
+                          current={terminal.fixed_seller_id}
+                          currentName={terminal.fixed_seller_name}
+                          options={sellersOf(terminal.branch_id)}
+                        />
                       )}
                       {(terminal.status === "active" || terminal.status === "blocked") && canApprove && (
                         <UpdateRingForm id={terminal.id} current={terminal.update_ring} />

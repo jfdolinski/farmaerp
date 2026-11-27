@@ -447,6 +447,23 @@ describe('terminais contra o banco real', () => {
       expectCode(response, 'FA302');
     });
 
+    it('vendedor padrão: as opções, escolher, aparecer no monitor e tirar', async () => {
+      const { terminalId } = await approved(newDevice());
+      const options = (await admin('get', '/terminals/seller-options').expect(200)).body as Json[];
+      const choice = options.find((row) => row.branch_id === BRANCH && row.user_id === ADMIN);
+      expect(choice).toMatchObject({ code: expect.any(Number), name: expect.any(String) });
+      await admin('post', `/terminals/${terminalId}/fixed-seller`).send({ userId: ADMIN }).expect(200);
+      const monitor = ((await admin('get', '/terminals').expect(200)).body as Json[]).find((row) => row.id === terminalId);
+      expect(monitor).toMatchObject({ fixed_seller_id: ADMIN, fixed_seller_name: `${choice!.code} · ${choice!.name}` });
+      // O gerente não aprova terminais: nem opções nem mudança.
+      expect((await admin('get', '/terminals/seller-options', MANAGER_EMAIL).expect(200)).body).toEqual([]);
+      expectCode(await admin('post', `/terminals/${terminalId}/fixed-seller`, MANAGER_EMAIL).send({ userId: null }).expect(403), 'FA002');
+      expectCode(await admin('post', `/terminals/${terminalId}/fixed-seller`).send({ userId: 'x' }).expect(422), 'FA005');
+      await admin('post', `/terminals/${terminalId}/fixed-seller`).send({ userId: null }).expect(200);
+      const cleared = ((await admin('get', '/terminals').expect(200)).body as Json[]).find((row) => row.id === terminalId);
+      expect(cleared).toMatchObject({ fixed_seller_id: null, fixed_seller_name: null });
+    });
+
     it('código errado informa o erro certo', async () => {
       expectCode(await admin('get', '/pairing/AAAAAAAA').expect(404), 'FA301');
     });

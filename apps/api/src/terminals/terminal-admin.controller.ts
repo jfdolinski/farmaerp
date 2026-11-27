@@ -105,6 +105,25 @@ export class TerminalAdminController {
     return { status: 'ok' };
   }
 
+  /** Quem pode ser o vendedor padrão, por filial (só onde o usuário aprova terminais). */
+  @Get('terminals/seller-options')
+  sellerOptions() {
+    return this.database.withContext(
+      async (client) => (await client.query<{ o: unknown[] }>('SELECT app.terminal_seller_options() AS o')).rows[0].o,
+    );
+  }
+
+  /** Vendedor padrão: a venda começa com ele e o PDV não pede o vendedor. Nulo tira o padrão. */
+  @Post('terminals/:id/fixed-seller')
+  @HttpCode(200)
+  async fixedSeller(@Param('id') id: string, @RequestBody() rawBody: unknown) {
+    const terminalId = requireUuid(id);
+    const value = asBody(rawBody).userId;
+    const userId = value === null || value === undefined || value === '' ? null : requireUuid(value);
+    await this.database.withContext((client) => client.query('SELECT app.set_terminal_fixed_seller($1, $2)', [terminalId, userId]));
+    return { status: 'ok' };
+  }
+
   /** Anel de atualização: "test" recebe a versão nova antes da rede ("general"). */
   @Post('terminals/:id/update-ring')
   @HttpCode(200)
