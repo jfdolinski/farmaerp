@@ -89,3 +89,20 @@ export async function clearLoginImage(): Promise<LoginImageState> {
   refresh();
   return { cleared: true };
 }
+
+export interface CatalogSyncState {
+  error?: ApiError;
+  started?: boolean;
+}
+
+/** Começa a cópia do Catálogo agora; a tela acompanha pela situação. */
+export async function runCatalogSync(): Promise<CatalogSyncState> {
+  const result = await apiFetch<{ started: boolean }>("/platform/catalog-sync/run", { method: "POST" });
+  if (!result.ok) {
+    if (result.error.code === "FA402") redirect("/login?next=/plataforma%3Faba%3Dcatalogo&expired=1");
+    if (result.error.code === "FA403") redirect("/trocar-senha");
+    return { error: result.error };
+  }
+  refresh();
+  return { started: true };
+}

@@ -14,6 +14,8 @@ export interface CatalogRow {
   barcodes: string[];
   product_id: string | null;
   main_image_id?: string | null;
+  /** Cadastro provisório no Catálogo: aparece, mas não pode ser vinculado até ficar pronto lá. */
+  pending?: boolean;
 }
 
 export const controlledLabel = (value: string) =>
@@ -50,6 +52,9 @@ export function CatalogResults({
               <td>
                 {item.name}
                 {item.active_ingredient && <small>{item.active_ingredient}</small>}
+                {item.pending && (
+                  <small className={styles.warning}>Pendente no Catálogo: o cadastro ainda está sendo completado lá.</small>
+                )}
                 {item.controlled_class && (
                   <small className={styles.warning}>{controlledLabel(item.controlled_class)}</small>
                 )}
@@ -59,6 +64,8 @@ export function CatalogResults({
               <td>
                 {item.product_id ? (
                   <Link href={`/produtos/${item.product_id}`}>Já cadastrado: abrir</Link>
+                ) : item.pending ? (
+                  <small className={styles.hint}>Aguardando o Catálogo</small>
                 ) : (
                   <Link href={hrefFor(item)}>{actionLabel}</Link>
                 )}
