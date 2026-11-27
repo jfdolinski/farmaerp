@@ -280,6 +280,24 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Envie uma imagem JPEG, PNG ou WebP de até 3 MB.',
     retryable: false,
   ),
+  'FA226': ErrorCatalogEntry(
+    code: 'FA226',
+    message: 'Este item do Catálogo ainda não pode ser vinculado.',
+    action: 'Item pendente precisa ter o cadastro completado no Catálogo; item que saiu do Catálogo não pode mais ser vinculado. Escolha outro item ou aguarde a próxima atualização.',
+    retryable: false,
+  ),
+  'FA227': ErrorCatalogEntry(
+    code: 'FA227',
+    message: 'Os dados recebidos do Catálogo são inválidos.',
+    action: 'A cópia do Catálogo tenta de novo na próxima hora. Se continuar, informe o código ao suporte.',
+    retryable: true,
+  ),
+  'FA228': ErrorCatalogEntry(
+    code: 'FA228',
+    message: 'A ligação com o Catálogo não está configurada.',
+    action: 'Informe o endereço e a chave do Catálogo nas variáveis da API (CATALOG_URL e CATALOG_API_KEY) e publique de novo.',
+    retryable: false,
+  ),
   'FA301': ErrorCatalogEntry(
     code: 'FA301',
     message: 'Código não encontrado ou expirado.',
