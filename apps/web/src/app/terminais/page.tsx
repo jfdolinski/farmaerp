@@ -19,6 +19,7 @@ import {
   UnblockButton,
 } from "./ui";
 import styles from "./page.module.css";
+import { activeTab, TabItem, Tabs } from "../shell/tabs";
 
 export const metadata: Metadata = { title: "Terminais · FarmaERP" };
 
@@ -123,18 +124,20 @@ function formatDate(value: string | null): string {
     : "Nunca";
 }
 
-export default function TerminalsPage() {
+type SearchParams = Promise<{ aba?: string | string[] }>;
+
+export default function TerminalsPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <main className={styles.page}>
       <AutoRefresh />
       <Suspense fallback={<p className={styles.hint}>Carregando terminais...</p>}>
-        <TerminalsContent />
+        <TerminalsContent searchParams={searchParams} />
       </Suspense>
     </main>
   );
 }
 
-async function TerminalsContent() {
+async function TerminalsContent({ searchParams }: { searchParams: SearchParams }) {
   const user = await requireUser("/terminais");
   const canView = can(user, "terminals.view");
   const canRequest = can(user, "terminals.request");
@@ -150,185 +153,224 @@ async function TerminalsContent() {
   const canStructure = can(user, "structure.manage");
   const [terminals, branches, sellers] = await Promise.all([
     apiFetch<MonitorRow[]>("/admin/terminals"),
-    apiFetch<{ id: string; name: string; offline_zero_stock_minutes: number; quote_validity_days: number; seller_pin_required: boolean; return_days: number }[]>("/admin/branches"),
+    apiFetch<
+      {
+        id: string;
+        name: string;
+        offline_zero_stock_minutes: number;
+        quote_validity_days: number;
+        seller_pin_required: boolean;
+        return_days: number;
+      }[]
+    >("/admin/branches"),
     canApprove ? apiFetch<SellerOption[]>("/admin/terminals/seller-options") : null,
   ]);
   const sellersOf = (branchId: string) => (sellers?.ok ? sellers.data : []).filter((row) => row.branch_id === branchId);
 
   if (!terminals.ok) redirectIfNeeded(terminals.error, "/terminais");
 
+  const pendingCount = terminals.ok ? terminals.data.filter((row) => row.status === "pending").length : 0;
+  const hasBranches = branches.ok && branches.data.length > 0;
+  const tabs: TabItem[] = [
+    ...(canView
+      ? [
+          {
+            id: "situacao",
+            label: "Situação",
+            count: terminals.ok ? terminals.data.length : undefined,
+            attention: pendingCount > 0 && canApprove,
+          },
+        ]
+      : []),
+    ...(canRequest ? [{ id: "novo", label: "Cadastrar terminal" }] : []),
+    ...(canStructure && hasBranches ? [{ id: "filiais", label: "Regras por filial" }] : []),
+  ];
+
+  if (tabs.length === 0) {
+    return (
+      <>
+        <AppHeader user={user} />
+        <h1>Terminais</h1>
+        <section className={styles.card}>
+          <p>Você não tem permissão para ver os terminais.</p>
+        </section>
+      </>
+    );
+  }
+  const tab = activeTab(tabs, (await searchParams).aba);
+
   return (
     <>
       <AppHeader user={user} />
       <h1>Terminais</h1>
 
-      {canRequest && <AddTerminal branches={branches.ok ? branches.data : []} />}
+      <Tabs base="/terminais" items={tabs} active={tab}>
+        {tab === "novo" && <AddTerminal branches={branches.ok ? branches.data : []} />}
 
-      {canStructure && branches.ok && branches.data.length > 0 && (
-        <section className={styles.card}>
-          <h2>Tempo para o PDV contar como sem internet</h2>
-          <p className={styles.hint}>
-            A venda com estoque negativo é sempre liberável por quem tem &quot;Vender com estoque negativo&quot;. Depois deste
-            tempo sem sincronizar, a liberação fica registrada também como feita sem internet. Cada terminal pode ter uma
-            exceção, na tabela abaixo.
-          </p>
-          <ul className={styles.bullets}>
-            {branches.data.map((branch) => (
-              <li key={branch.id}>
-                <strong>{branch.name}</strong>{" "}
-                <OfflineMinutesForm scope="branch" id={branch.id} current={branch.offline_zero_stock_minutes} />
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {canStructure && branches.ok && branches.data.length > 0 && (
-        <section className={styles.card}>
-          <h2>Orçamento, vendedor e devolução</h2>
-          <p className={styles.hint}>
-            Por quanto tempo o orçamento vale no caixa, se o vendedor digita o PIN junto com o código e o prazo de devolução.
-          </p>
-          <ul className={styles.bullets}>
-            {branches.data.map((branch) => (
-              <li key={branch.id}>
-                <strong>{branch.name}</strong>{" "}
-                <SaleSettingsForm id={branch.id} days={branch.quote_validity_days} pin={branch.seller_pin_required} />{" "}
-                <ReturnDaysForm id={branch.id} days={branch.return_days} />
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {!canView && !canRequest && (
-        <section className={styles.card}>
-          <p>Você não tem permissão para ver os terminais.</p>
-        </section>
-      )}
-      {canView && <section className={styles.card}>
-        <h2>Situação dos terminais</h2>
-        {!terminals.ok && <ErrorNotice error={terminals.error} />}
-        {terminals.ok && terminals.data.length === 0 && (
-          <p className={styles.hint}>Nenhum terminal cadastrado.</p>
+        {tab === "filiais" && branches.ok && (
+          <section className={styles.card}>
+            <h2>Tempo para o PDV contar como sem internet</h2>
+            <p className={styles.hint}>
+              A venda com estoque negativo é sempre liberável por quem tem &quot;Vender com estoque negativo&quot;.
+              Depois deste tempo sem sincronizar, a liberação fica registrada também como feita sem internet. Cada
+              terminal pode ter uma exceção, na tabela abaixo.
+            </p>
+            <ul className={styles.bullets}>
+              {branches.data.map((branch) => (
+                <li key={branch.id}>
+                  <strong>{branch.name}</strong>{" "}
+                  <OfflineMinutesForm scope="branch" id={branch.id} current={branch.offline_zero_stock_minutes} />
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
-        {terminals.ok && terminals.data.length > 0 && (
-          <div className={styles.tableWrap}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Filial</th>
-                  <th>Terminal</th>
-                  <th>Situação</th>
-                  <th>Conexão</th>
-                  <th>Versão</th>
-                  <th>Sincronização</th>
-                  <th>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {terminals.data.map((terminal) => (
-                  <tr key={terminal.id}>
-                    <td>{terminal.branch_name}</td>
-                    <td>
-                      <strong>
-                        {terminal.number && `${terminal.number} · `}
-                        {terminal.name ?? "Sem nome"}
-                      </strong>
-                      <small>
-                        {terminal.profile && PROFILE_LABELS[terminal.profile]}
-                        {terminal.profile && terminal.device_name && " · "}
-                        {terminal.device_name}
-                      </small>
-                      {seriesOf(terminal.id) && <small>{seriesOf(terminal.id)}</small>}
-                      {terminal.fixed_seller_id && (
-                        <small>Vendedor padrão: {terminal.fixed_seller_name ?? "usuário sem acesso para ver"}</small>
-                      )}
-                      {terminal.key_storage === "file" && (
-                        <small className={styles.warning}>
-                          Chave em arquivo (proteção menor)
-                        </small>
-                      )}
-                    </td>
-                    <td>
-                      <span className={`${styles.badge} ${styles[terminal.status]}`}>
-                        {STATUS_LABELS[terminal.status]}
-                      </span>
-                    </td>
-                    <td>
-                      <span
-                        className={`${styles.badge} ${styles[terminal.connectivity]}`}
-                      >
-                        {terminal.connectivity === "online" ? "Online" : "Offline"}
-                      </span>
-                      <small>Visto: {formatDate(terminal.last_seen_at)}</small>
-                    </td>
-                    <td>
-                      {terminal.app_version ?? "-"}
-                      {terminal.update_ring === "test" && <small>Terminal de teste</small>}
-                      {terminal.last_update_status && (
-                        <small className={terminal.last_update_status === "rolled_back" || terminal.last_update_status === "failed" ? styles.warning : undefined}>
-                          {terminal.last_update_version}: {UPDATE_LABELS[terminal.last_update_status]} em {formatDate(terminal.last_update_at)}
-                          {terminal.last_update_detail ? ` (${terminal.last_update_detail})` : ""}
-                        </small>
-                      )}
-                    </td>
-                    <td>
-                      <SyncSummary terminal={terminal} />
-                    </td>
-                    <td className={styles.actions}>
-                      {terminal.status === "pending" && canApprove && (
-                        <>
-                          <ApproveForm id={terminal.id} />
-                          <ReasonAction
-                            id={terminal.id}
-                            action="revoke"
-                            label="Recusar"
-                          />
-                        </>
-                      )}
-                      {(terminal.status === "active" || terminal.status === "blocked") && canApprove && terminal.profile && (
-                        <ProfileForm id={terminal.id} current={terminal.profile} />
-                      )}
-                      {(terminal.status === "active" || terminal.status === "blocked") && canApprove && (
-                        <FixedSellerForm
-                          id={terminal.id}
-                          current={terminal.fixed_seller_id}
-                          currentName={terminal.fixed_seller_name}
-                          options={sellersOf(terminal.branch_id)}
-                        />
-                      )}
-                      {(terminal.status === "active" || terminal.status === "blocked") && canApprove && (
-                        <UpdateRingForm id={terminal.id} current={terminal.update_ring} />
-                      )}
-                      {terminal.status === "active" && canApprove && (
-                        <OfflineMinutesForm
-                          scope="terminal"
-                          id={terminal.id}
-                          current={terminal.offline_minutes}
-                          inherited={terminal.branch_offline_minutes}
-                        />
-                      )}
-                      {terminal.status === "active" && (
-                        <>
-                          {canBlock && <ReasonAction id={terminal.id} action="block" />}
-                          {canRevoke && <ReasonAction id={terminal.id} action="revoke" />}
-                        </>
-                      )}
-                      {terminal.status === "blocked" && (
-                        <>
-                          {canBlock && <UnblockButton id={terminal.id} />}
-                          {canRevoke && <ReasonAction id={terminal.id} action="revoke" />}
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+
+        {tab === "filiais" && branches.ok && (
+          <section className={styles.card}>
+            <h2>Orçamento, vendedor e devolução</h2>
+            <p className={styles.hint}>
+              Por quanto tempo o orçamento vale no caixa, se o vendedor digita o PIN junto com o código e o prazo de
+              devolução.
+            </p>
+            <ul className={styles.bullets}>
+              {branches.data.map((branch) => (
+                <li key={branch.id}>
+                  <strong>{branch.name}</strong>{" "}
+                  <SaleSettingsForm id={branch.id} days={branch.quote_validity_days} pin={branch.seller_pin_required} />{" "}
+                  <ReturnDaysForm id={branch.id} days={branch.return_days} />
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
-      </section>}
+
+        {tab === "situacao" && (
+          <section className={styles.card}>
+            <h2>Situação dos terminais</h2>
+            {!terminals.ok && <ErrorNotice error={terminals.error} />}
+            {terminals.ok && terminals.data.length === 0 && <p className={styles.hint}>Nenhum terminal cadastrado.</p>}
+            {terminals.ok && terminals.data.length > 0 && (
+              <div className={styles.tableWrap}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Filial</th>
+                      <th>Terminal</th>
+                      <th>Situação</th>
+                      <th>Conexão</th>
+                      <th>Versão</th>
+                      <th>Sincronização</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {terminals.data.map((terminal) => (
+                      <tr key={terminal.id}>
+                        <td>{terminal.branch_name}</td>
+                        <td>
+                          <strong>
+                            {terminal.number && `${terminal.number} · `}
+                            {terminal.name ?? "Sem nome"}
+                          </strong>
+                          <small>
+                            {terminal.profile && PROFILE_LABELS[terminal.profile]}
+                            {terminal.profile && terminal.device_name && " · "}
+                            {terminal.device_name}
+                          </small>
+                          {seriesOf(terminal.id) && <small>{seriesOf(terminal.id)}</small>}
+                          {terminal.fixed_seller_id && (
+                            <small>
+                              Vendedor padrão: {terminal.fixed_seller_name ?? "usuário sem acesso para ver"}
+                            </small>
+                          )}
+                          {terminal.key_storage === "file" && (
+                            <small className={styles.warning}>Chave em arquivo (proteção menor)</small>
+                          )}
+                        </td>
+                        <td>
+                          <span className={`${styles.badge} ${styles[terminal.status]}`}>
+                            {STATUS_LABELS[terminal.status]}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`${styles.badge} ${styles[terminal.connectivity]}`}>
+                            {terminal.connectivity === "online" ? "Online" : "Offline"}
+                          </span>
+                          <small>Visto: {formatDate(terminal.last_seen_at)}</small>
+                        </td>
+                        <td>
+                          {terminal.app_version ?? "-"}
+                          {terminal.update_ring === "test" && <small>Terminal de teste</small>}
+                          {terminal.last_update_status && (
+                            <small
+                              className={
+                                terminal.last_update_status === "rolled_back" ||
+                                terminal.last_update_status === "failed"
+                                  ? styles.warning
+                                  : undefined
+                              }
+                            >
+                              {terminal.last_update_version}: {UPDATE_LABELS[terminal.last_update_status]} em{" "}
+                              {formatDate(terminal.last_update_at)}
+                              {terminal.last_update_detail ? ` (${terminal.last_update_detail})` : ""}
+                            </small>
+                          )}
+                        </td>
+                        <td>
+                          <SyncSummary terminal={terminal} />
+                        </td>
+                        <td className={styles.actions}>
+                          {terminal.status === "pending" && canApprove && (
+                            <>
+                              <ApproveForm id={terminal.id} />
+                              <ReasonAction id={terminal.id} action="revoke" label="Recusar" />
+                            </>
+                          )}
+                          {(terminal.status === "active" || terminal.status === "blocked") &&
+                            canApprove &&
+                            terminal.profile && <ProfileForm id={terminal.id} current={terminal.profile} />}
+                          {(terminal.status === "active" || terminal.status === "blocked") && canApprove && (
+                            <FixedSellerForm
+                              id={terminal.id}
+                              current={terminal.fixed_seller_id}
+                              currentName={terminal.fixed_seller_name}
+                              options={sellersOf(terminal.branch_id)}
+                            />
+                          )}
+                          {(terminal.status === "active" || terminal.status === "blocked") && canApprove && (
+                            <UpdateRingForm id={terminal.id} current={terminal.update_ring} />
+                          )}
+                          {terminal.status === "active" && canApprove && (
+                            <OfflineMinutesForm
+                              scope="terminal"
+                              id={terminal.id}
+                              current={terminal.offline_minutes}
+                              inherited={terminal.branch_offline_minutes}
+                            />
+                          )}
+                          {terminal.status === "active" && (
+                            <>
+                              {canBlock && <ReasonAction id={terminal.id} action="block" />}
+                              {canRevoke && <ReasonAction id={terminal.id} action="revoke" />}
+                            </>
+                          )}
+                          {terminal.status === "blocked" && (
+                            <>
+                              {canBlock && <UnblockButton id={terminal.id} />}
+                              {canRevoke && <ReasonAction id={terminal.id} action="revoke" />}
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+      </Tabs>
     </>
   );
 }

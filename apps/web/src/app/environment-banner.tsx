@@ -8,7 +8,7 @@ export async function EnvironmentBanner() {
     return null;
   }
   return (
-    <div className={styles.banner} role="status">
+    <div className={styles.banner} role="status" data-env-banner="">
       HOMOLOGAÇÃO: ambiente de testes, sem dados reais
     </div>
   );

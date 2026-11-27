@@ -20,7 +20,17 @@ import {
   CONFIRMATION_LABELS,
 } from "../format";
 import { ReturnsSection, type Returns } from "./returns";
-import { BatchForm, CancelForm, DiscardForm, FractionForm, ItemActions, PostForm, ReleaseCostForm, ReverseForm } from "../ui";
+import { activeTab, TabItem, Tabs } from "../../shell/tabs";
+import {
+  BatchForm,
+  CancelForm,
+  DiscardForm,
+  FractionForm,
+  ItemActions,
+  PostForm,
+  ReleaseCostForm,
+  ReverseForm,
+} from "../ui";
 import {
   AuditEntry,
   AuditSection,
@@ -135,17 +145,19 @@ interface InvoiceDetail {
 
 type Params = Promise<{ id: string }>;
 
-export default function InvoicePage({ params }: { params: Params }) {
+type SearchParams = Promise<{ aba?: string | string[] }>;
+
+export default function InvoicePage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   return (
     <main className={styles.page}>
       <Suspense fallback={<p className={styles.hint}>Carregando nota...</p>}>
-        <InvoiceContent params={params} />
+        <InvoiceContent params={params} searchParams={searchParams} />
       </Suspense>
     </main>
   );
 }
 
-async function InvoiceContent({ params }: { params: Params }) {
+async function InvoiceContent({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   const { id } = await params;
   const path = `/notas/${id}`;
   const user = await requireUser(path);
@@ -187,6 +199,16 @@ async function InvoiceContent({ params }: { params: Params }) {
       : []),
     ...invoice.items.flatMap((item) => postingBlockers(item)),
   ];
+  const tabs: TabItem[] = [
+    { id: "resumo", label: "Resumo", attention: invoice.status === "review" && blockers.length > 0 },
+    { id: "itens", label: "Itens", count: invoice.items.length, attention: reviewing && pending > 0 },
+    { id: "dados", label: "Dados da nota" },
+    ...(invoice.returns.can_return || invoice.returns.returns.length > 0
+      ? [{ id: "devolucoes", label: "Devoluções", count: invoice.returns.returns.length }]
+      : []),
+    { id: "auditoria", label: "Auditoria" },
+  ];
+  const tab = activeTab(tabs, (await searchParams).aba);
   const totals: [string, string][] = [
     ["Produtos", invoice.products_total],
     ["Desconto", invoice.discount_total],
@@ -207,219 +229,255 @@ async function InvoiceContent({ params }: { params: Params }) {
         <Link href="/notas">Voltar para notas</Link>
       </div>
 
-      <section className={styles.card}>
-        <h2>{invoice.supplier_name}</h2>
-        <p className={styles.hint}>
-          <Link href={`/fornecedores/${invoice.supplier_id}`}>CNPJ {cnpjText(invoice.emitter_cnpj)}</Link> · Para{" "}
-          {invoice.branch_name} · Emitida em {dateTimeText(invoice.issued_at)} · Protocolo {invoice.protocol_number}
-        </p>
-        <p className={styles.hint}>Chave {keyText(invoice.access_key)}</p>
-        {invoice.environment === 2 && (
-          <p className={styles.warning} role="status">
-            Nota do ambiente de teste da Sefaz. Só a homologação aceita notas assim.
-          </p>
-        )}
-        <p>
-          <strong>{STATUS_LABELS[invoice.status] ?? invoice.status}</strong>
-          {invoice.status === "review" &&
-            (pending > 0 ? ` · ${pending} de ${invoice.items.length} itens a conferir` : " · Todos os itens ligados")}
-        </p>
-        {invoice.events.length > 0 && (
-          <ul className={`${styles.hint} ${styles.bullets}`}>
-            {invoice.events.map((event) => (
-              <li key={`${event.kind}-${event.created_at}`}>
-                {EVENT_LABELS[event.kind]} por {event.user_name ?? "usuário"} em{" "}
-                {dateTimeText(event.created_at)}
-                {event.reason && `: ${event.reason}`}
-              </li>
-            ))}
-          </ul>
-        )}
-        {invoice.cancelled_by_name && (
-          <p className={styles.warning} role="status">
-            Cancelada por {invoice.cancelled_by_name}: {invoice.cancel_reason}. A nota fica guardada e o mesmo XML não entra de novo.
-          </p>
-        )}
-        {invoice.cancelled_at && (
-          <p className={styles.warning} role="alert">
-            {invoice.status === "posted"
-              ? `O emitente cancelou esta nota em ${dateTimeText(invoice.cancelled_at)}, depois do lançamento. Confira com o fornecedor e, se for o caso, estorne o lançamento.`
-              : `O emitente cancelou esta nota em ${dateTimeText(invoice.cancelled_at)}. Ela não pode mais ser lançada.`}
-          </p>
-        )}
-        {invoice.status !== "cancelled" && (
-          <p className={invoice.confirmation === "confirmed" ? styles.success : invoice.confirmation === "pending" ? styles.hint : styles.warning}>
-            {invoice.confirmation_message
-              ? invoice.confirmation_message.replace(/\.$/, "")
-              : (CONFIRMATION_LABELS[invoice.confirmation] ?? invoice.confirmation)}
-            {invoice.confirmed_at && ` em ${dateTimeText(invoice.confirmed_at)}`}
-            {invoice.source === "download" && ". O XML veio do download da Sefaz"}
-            {invoice.confirmation === "pending" && !invoice.confirmation_required && ". Fora da produção, a confirmação não é exigida para lançar"}
-            .
-          </p>
-        )}
-        {invoice.not_postable_reason && (
-          <p className={styles.warning}>{REASON_LABELS[invoice.not_postable_reason] ?? invoice.not_postable_reason}</p>
-        )}
-        <ContentNotice content={invoice.content} error={invoice.content_error} />
-        <div className={styles.tableWrap}>
-          <table>
-            <tbody>
-              {totals
-                .filter(([, value]) => Number(value) !== 0)
-                .map(([label, value]) => (
-                  <tr key={label}>
-                    <th scope="row">{label}</th>
-                    <td>{moneyText(value)}</td>
-                  </tr>
-                ))}
-              <tr>
-                <th scope="row">Total da nota</th>
-                <td>
-                  <strong>{moneyText(invoice.invoice_total)}</strong>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {invoice.content && <NoteDataSection content={invoice.content} />}
-
-      <section className={styles.card}>
-        <h2>Itens</h2>
-        {invoice.items.map((item) => (
-          <div key={item.id} className={styles.device}>
-            <div className={styles.inline}>
-              <strong>
-                {item.item_number}. {item.description}
-              </strong>
-            </div>
-            <p className={styles.hint}>
-              {[
-                `Código ${item.supplier_code}`,
-                item.barcode && `EAN ${item.barcode}`,
-                item.ncm && `NCM ${item.ncm}`,
-                `CFOP ${item.cfop}`,
-                `${quantityText(item.quantity)} ${item.unit} × ${moneyText(item.unit_price)} = ${moneyText(item.products_value)}`,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
-            {item.product_id ? (
-              <p>
-                <Link href={`/produtos/${item.product_id}`}>
-                  {item.product_code} · {item.product_name}
-                </Link>
-                <small className={styles.hint}>
-                  {" "}
-                  {SOURCE_LABELS[item.match_source ?? ""] ?? ""} · Fracionamento {quantityText(item.fraction)} ·{" "}
-                  Quantidade no estoque: {quantityText(item.stock_quantity)}
-                </small>
-              </p>
-            ) : (
-              <p className={styles.warning}>Sem produto ligado.</p>
-            )}
-            {item.batches.length > 0 && (
+      <Tabs base={path} items={tabs} active={tab}>
+        {tab === "resumo" && (
+          <>
+            <section className={styles.card}>
+              <h2>{invoice.supplier_name}</h2>
               <p className={styles.hint}>
-                Lotes:{" "}
-                {item.batches
-                  .map((batch) => `${batch.number} (${quantityText(batch.quantity)}, validade ${dayText(batch.expiresOn)})`)
-                  .join(", ")}
-                {item.posting?.batch_status === "not_required" &&
-                  ". O produto não controla lote nesta filial, então os lotes da nota não entram no estoque."}
+                <Link href={`/fornecedores/${invoice.supplier_id}`}>CNPJ {cnpjText(invoice.emitter_cnpj)}</Link> · Para{" "}
+                {invoice.branch_name} · Emitida em {dateTimeText(invoice.issued_at)} · Protocolo{" "}
+                {invoice.protocol_number}
               </p>
-            )}
-            {item.ms_differs && (
-              <p className={styles.warning}>
-                O registro na Anvisa da nota ({item.anvisa_code}) é diferente do Catálogo ({item.catalog_ms}).
+              <p className={styles.hint}>Chave {keyText(invoice.access_key)}</p>
+              {invoice.environment === 2 && (
+                <p className={styles.warning} role="status">
+                  Nota do ambiente de teste da Sefaz. Só a homologação aceita notas assim.
+                </p>
+              )}
+              <p>
+                <strong>{STATUS_LABELS[invoice.status] ?? invoice.status}</strong>
+                {invoice.status === "review" &&
+                  (pending > 0
+                    ? ` · ${pending} de ${invoice.items.length} itens a conferir`
+                    : " · Todos os itens ligados")}
               </p>
-            )}
-            {item.pmc_below_price && (
-              <p className={styles.warning}>
-                O PMC da nota ({moneyText(item.pmc)}) é menor que o preço de venda ({moneyText(item.sale_price)}).
-              </p>
-            )}
-            <ItemTaxes det={itemContent(invoice.content, item.item_number)} />
-            {item.posting && invoice.status !== "cancelled" && <CostLine posting={item.posting} />}
-            {item.posting && invoice.status !== "cancelled" && <BatchLine item={item} />}
-            {reviewing && item.posting?.batch_required && (
-              <BatchForm
-                itemId={item.id}
-                invoiceId={invoice.id}
-                unit={item.unit}
-                batches={item.batches}
-                open={item.posting.batch_status === "missing"}
-              />
-            )}
-            {invoice.status === "review" && invoice.can_override_cost && item.posting?.cost_status === "locked" && (
-              <ReleaseCostForm itemId={item.id} invoiceId={invoice.id} />
-            )}
-            {invoice.status === "posted" && invoice.can_post && item.product_id && item.fraction && (
-              <FractionForm
-                itemId={item.id}
-                invoiceId={invoice.id}
-                unit={item.unit}
-                quantity={item.quantity}
-                fraction={item.fraction}
-                canNegative={invoice.can_negative_stock}
-              />
-            )}
-            {reviewing && <ItemActions item={item} invoiceId={invoice.id} />}
-          </div>
-        ))}
-      </section>
+              {invoice.events.length > 0 && (
+                <ul className={`${styles.hint} ${styles.bullets}`}>
+                  {invoice.events.map((event) => (
+                    <li key={`${event.kind}-${event.created_at}`}>
+                      {EVENT_LABELS[event.kind]} por {event.user_name ?? "usuário"} em {dateTimeText(event.created_at)}
+                      {event.reason && `: ${event.reason}`}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {invoice.cancelled_by_name && (
+                <p className={styles.warning} role="status">
+                  Cancelada por {invoice.cancelled_by_name}: {invoice.cancel_reason}. A nota fica guardada e o mesmo XML
+                  não entra de novo.
+                </p>
+              )}
+              {invoice.cancelled_at && (
+                <p className={styles.warning} role="alert">
+                  {invoice.status === "posted"
+                    ? `O emitente cancelou esta nota em ${dateTimeText(invoice.cancelled_at)}, depois do lançamento. Confira com o fornecedor e, se for o caso, estorne o lançamento.`
+                    : `O emitente cancelou esta nota em ${dateTimeText(invoice.cancelled_at)}. Ela não pode mais ser lançada.`}
+                </p>
+              )}
+              {invoice.status !== "cancelled" && (
+                <p
+                  className={
+                    invoice.confirmation === "confirmed"
+                      ? styles.success
+                      : invoice.confirmation === "pending"
+                        ? styles.hint
+                        : styles.warning
+                  }
+                >
+                  {invoice.confirmation_message
+                    ? invoice.confirmation_message.replace(/\.$/, "")
+                    : (CONFIRMATION_LABELS[invoice.confirmation] ?? invoice.confirmation)}
+                  {invoice.confirmed_at && ` em ${dateTimeText(invoice.confirmed_at)}`}
+                  {invoice.source === "download" && ". O XML veio do download da Sefaz"}
+                  {invoice.confirmation === "pending" &&
+                    !invoice.confirmation_required &&
+                    ". Fora da produção, a confirmação não é exigida para lançar"}
+                  .
+                </p>
+              )}
+              {invoice.not_postable_reason && (
+                <p className={styles.warning}>
+                  {REASON_LABELS[invoice.not_postable_reason] ?? invoice.not_postable_reason}
+                </p>
+              )}
+              <ContentNotice content={invoice.content} error={invoice.content_error} />
+              <div className={styles.tableWrap}>
+                <table>
+                  <tbody>
+                    {totals
+                      .filter(([, value]) => Number(value) !== 0)
+                      .map(([label, value]) => (
+                        <tr key={label}>
+                          <th scope="row">{label}</th>
+                          <td>{moneyText(value)}</td>
+                        </tr>
+                      ))}
+                    <tr>
+                      <th scope="row">Total da nota</th>
+                      <td>
+                        <strong>{moneyText(invoice.invoice_total)}</strong>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
 
-      <InstallmentsSection installments={invoice.installments} read={invoice.content !== null} />
+            {invoice.status === "review" && invoice.can_post && (
+              <section className={styles.card}>
+                <h2>Lançamento</h2>
+                <PostForm invoiceId={invoice.id} blockers={blockers} />
+              </section>
+            )}
 
-      <BatchesSection
-        rows={invoice.items.flatMap((item) =>
-          item.batches.map((batch) => ({
-            itemNumber: item.item_number,
-            description: item.description,
-            unit: item.unit,
-            ...batch,
-          })),
+            {invoice.status === "posted" && invoice.can_post && (
+              <section className={styles.card}>
+                <ReverseForm invoiceId={invoice.id} canNegative={invoice.can_negative_stock} />
+              </section>
+            )}
+
+            {invoice.can_cancel && invoice.status !== "cancelled" && (
+              <section className={styles.card}>
+                <CancelForm
+                  invoiceId={invoice.id}
+                  posted={invoice.status === "posted"}
+                  canNegative={invoice.can_negative_stock}
+                />
+              </section>
+            )}
+
+            {invoice.can_manage && invoice.status !== "posted" && !invoice.cancelled_by_name && (
+              <section className={styles.card}>
+                <DiscardForm invoiceId={invoice.id} />
+              </section>
+            )}
+          </>
         )}
-      />
 
-      <ReturnsSection
-        invoiceId={invoice.id}
-        data={invoice.returns}
-        values={Object.fromEntries(
-          invoice.items.map((item) => [
-            item.id,
-            { products: Number(item.products_value), entered: Number(item.posting?.stock_quantity ?? 0) },
-          ]),
+        {tab === "itens" && (
+          <section className={styles.card}>
+            <h2>Itens</h2>
+            {invoice.items.map((item) => (
+              <div key={item.id} className={styles.device}>
+                <div className={styles.inline}>
+                  <strong>
+                    {item.item_number}. {item.description}
+                  </strong>
+                </div>
+                <p className={styles.hint}>
+                  {[
+                    `Código ${item.supplier_code}`,
+                    item.barcode && `EAN ${item.barcode}`,
+                    item.ncm && `NCM ${item.ncm}`,
+                    `CFOP ${item.cfop}`,
+                    `${quantityText(item.quantity)} ${item.unit} × ${moneyText(item.unit_price)} = ${moneyText(item.products_value)}`,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+                {item.product_id ? (
+                  <p>
+                    <Link href={`/produtos/${item.product_id}`}>
+                      {item.product_code} · {item.product_name}
+                    </Link>
+                    <small className={styles.hint}>
+                      {" "}
+                      {SOURCE_LABELS[item.match_source ?? ""] ?? ""} · Fracionamento {quantityText(item.fraction)} ·{" "}
+                      Quantidade no estoque: {quantityText(item.stock_quantity)}
+                    </small>
+                  </p>
+                ) : (
+                  <p className={styles.warning}>Sem produto ligado.</p>
+                )}
+                {item.batches.length > 0 && (
+                  <p className={styles.hint}>
+                    Lotes:{" "}
+                    {item.batches
+                      .map(
+                        (batch) =>
+                          `${batch.number} (${quantityText(batch.quantity)}, validade ${dayText(batch.expiresOn)})`,
+                      )
+                      .join(", ")}
+                    {item.posting?.batch_status === "not_required" &&
+                      ". O produto não controla lote nesta filial, então os lotes da nota não entram no estoque."}
+                  </p>
+                )}
+                {item.ms_differs && (
+                  <p className={styles.warning}>
+                    O registro na Anvisa da nota ({item.anvisa_code}) é diferente do Catálogo ({item.catalog_ms}).
+                  </p>
+                )}
+                {item.pmc_below_price && (
+                  <p className={styles.warning}>
+                    O PMC da nota ({moneyText(item.pmc)}) é menor que o preço de venda ({moneyText(item.sale_price)}).
+                  </p>
+                )}
+                <ItemTaxes det={itemContent(invoice.content, item.item_number)} />
+                {item.posting && invoice.status !== "cancelled" && <CostLine posting={item.posting} />}
+                {item.posting && invoice.status !== "cancelled" && <BatchLine item={item} />}
+                {reviewing && item.posting?.batch_required && (
+                  <BatchForm
+                    itemId={item.id}
+                    invoiceId={invoice.id}
+                    unit={item.unit}
+                    batches={item.batches}
+                    open={item.posting.batch_status === "missing"}
+                  />
+                )}
+                {invoice.status === "review" && invoice.can_override_cost && item.posting?.cost_status === "locked" && (
+                  <ReleaseCostForm itemId={item.id} invoiceId={invoice.id} />
+                )}
+                {invoice.status === "posted" && invoice.can_post && item.product_id && item.fraction && (
+                  <FractionForm
+                    itemId={item.id}
+                    invoiceId={invoice.id}
+                    unit={item.unit}
+                    quantity={item.quantity}
+                    fraction={item.fraction}
+                    canNegative={invoice.can_negative_stock}
+                  />
+                )}
+                {reviewing && <ItemActions item={item} invoiceId={invoice.id} />}
+              </div>
+            ))}
+          </section>
         )}
-      />
 
-      <AuditSection audit={invoice.audit} />
+        {tab === "dados" && (
+          <>
+            {invoice.content && <NoteDataSection content={invoice.content} />}
 
-      {invoice.status === "review" && invoice.can_post && (
-        <section className={styles.card}>
-          <h2>Lançamento</h2>
-          <PostForm invoiceId={invoice.id} blockers={blockers} />
-        </section>
-      )}
+            <InstallmentsSection installments={invoice.installments} read={invoice.content !== null} />
 
-      {invoice.status === "posted" && invoice.can_post && (
-        <section className={styles.card}>
-          <ReverseForm invoiceId={invoice.id} canNegative={invoice.can_negative_stock} />
-        </section>
-      )}
+            <BatchesSection
+              rows={invoice.items.flatMap((item) =>
+                item.batches.map((batch) => ({
+                  itemNumber: item.item_number,
+                  description: item.description,
+                  unit: item.unit,
+                  ...batch,
+                })),
+              )}
+            />
+          </>
+        )}
 
-      {invoice.can_cancel && invoice.status !== "cancelled" && (
-        <section className={styles.card}>
-          <CancelForm invoiceId={invoice.id} posted={invoice.status === "posted"} canNegative={invoice.can_negative_stock} />
-        </section>
-      )}
+        {tab === "devolucoes" && (
+          <ReturnsSection
+            invoiceId={invoice.id}
+            data={invoice.returns}
+            values={Object.fromEntries(
+              invoice.items.map((item) => [
+                item.id,
+                { products: Number(item.products_value), entered: Number(item.posting?.stock_quantity ?? 0) },
+              ]),
+            )}
+          />
+        )}
 
-      {invoice.can_manage && invoice.status !== "posted" && !invoice.cancelled_by_name && (
-        <section className={styles.card}>
-          <DiscardForm invoiceId={invoice.id} />
-        </section>
-      )}
+        {tab === "auditoria" && <AuditSection audit={invoice.audit} />}
+      </Tabs>
     </>
   );
 }

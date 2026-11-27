@@ -4,7 +4,16 @@ import { apiFetch, can, redirectIfNeeded, requireUser } from "@/lib/api";
 import { AppHeader } from "../app-header";
 import { ErrorNotice } from "../error-notice";
 import styles from "../terminais/page.module.css";
-import { BranchForm, BranchRow, CompanyForm, CompanyRow, CreateBranchForm, CreateCompanyForm, MoveBranchForm } from "./ui";
+import { activeTab, TabItem, Tabs } from "../shell/tabs";
+import {
+  BranchForm,
+  BranchRow,
+  CompanyForm,
+  CompanyRow,
+  CreateBranchForm,
+  CreateCompanyForm,
+  MoveBranchForm,
+} from "./ui";
 
 export const metadata: Metadata = { title: "Empresas · FarmaERP" };
 
@@ -14,17 +23,19 @@ interface Structure {
   branches: BranchRow[];
 }
 
-export default function CompaniesPage() {
+type SearchParams = Promise<{ aba?: string | string[] }>;
+
+export default function CompaniesPage({ searchParams }: { searchParams: SearchParams }) {
   return (
     <main className={styles.page}>
       <Suspense fallback={<p className={styles.hint}>Carregando empresas...</p>}>
-        <CompaniesContent />
+        <CompaniesContent searchParams={searchParams} />
       </Suspense>
     </main>
   );
 }
 
-async function CompaniesContent() {
+async function CompaniesContent({ searchParams }: { searchParams: SearchParams }) {
   const user = await requireUser("/empresas");
 
   if (!can(user, "structure.manage") && !can(user, "branches.view_all")) {
@@ -42,43 +53,58 @@ async function CompaniesContent() {
   const result = await apiFetch<Structure>("/admin/structure");
   if (!result.ok) redirectIfNeeded(result.error, "/empresas");
   const data = result.ok ? result.data : { canManage: false, companies: [], branches: [] };
+  const tabs: TabItem[] = [
+    ...data.companies.map((company) => ({
+      id: company.id,
+      label: company.trade_name,
+      count: data.branches.filter((branch) => branch.company_id === company.id).length,
+    })),
+    ...(data.canManage ? [{ id: "nova", label: "Nova empresa" }] : []),
+  ];
+  const tab = tabs.length > 0 ? activeTab(tabs, (await searchParams).aba) : "";
 
   return (
     <>
       <AppHeader user={user} />
       <h1>Empresas e filiais</h1>
       {!result.ok && <ErrorNotice error={result.error} />}
-      {data.canManage && (
-        <section className={styles.card}>
-          <h2>Nova empresa da mesma rede</h2>
-          <p className={styles.hint}>
-            Outro CNPJ do mesmo dono: ele compartilha produtos, clientes, usuários e crediário com as empresas desta lista.
-            Uma farmácia de outro dono é um cliente separado, cadastrado pelo administrador da plataforma.
-          </p>
-          <CreateCompanyForm />
-        </section>
-      )}
-      {result.ok && data.companies.length === 0 && !data.canManage && (
-        <section className={styles.card}>
-          <p className={styles.hint}>Nenhuma empresa cadastrada.</p>
-        </section>
-      )}
-      {data.companies.map((company) => (
-        <section key={company.id} className={styles.card}>
-          <h2>{company.trade_name}</h2>
-          <CompanyForm company={company} canManage={data.canManage} />
-          {data.branches
-            .filter((branch) => branch.company_id === company.id)
-            .map((branch) => (
-              <div key={branch.id} className={styles.device}>
-                <h3>{branch.name}</h3>
-                <BranchForm branch={branch} companyRoot={company.cnpj_root} canManage={data.canManage} />
-                {data.canManage && <MoveBranchForm branch={branch} companies={data.companies} />}
-              </div>
+      {tabs.length > 0 && (
+        <Tabs base="/empresas" items={tabs} active={tab}>
+          {tab === "nova" && (
+            <section className={styles.card}>
+              <h2>Nova empresa da mesma rede</h2>
+              <p className={styles.hint}>
+                Outro CNPJ do mesmo dono: ele compartilha produtos, clientes, usuários e crediário com as empresas desta
+                lista. Uma farmácia de outro dono é um cliente separado, cadastrado pelo administrador da plataforma.
+              </p>
+              <CreateCompanyForm />
+            </section>
+          )}
+          {result.ok && data.companies.length === 0 && !data.canManage && (
+            <section className={styles.card}>
+              <p className={styles.hint}>Nenhuma empresa cadastrada.</p>
+            </section>
+          )}
+          {data.companies
+            .filter((company) => company.id === tab)
+            .map((company) => (
+              <section key={company.id} className={styles.card}>
+                <h2>{company.trade_name}</h2>
+                <CompanyForm company={company} canManage={data.canManage} />
+                {data.branches
+                  .filter((branch) => branch.company_id === company.id)
+                  .map((branch) => (
+                    <div key={branch.id} className={styles.device}>
+                      <h3>{branch.name}</h3>
+                      <BranchForm branch={branch} companyRoot={company.cnpj_root} canManage={data.canManage} />
+                      {data.canManage && <MoveBranchForm branch={branch} companies={data.companies} />}
+                    </div>
+                  ))}
+                {data.canManage && <CreateBranchForm company={company} />}
+              </section>
             ))}
-          {data.canManage && <CreateBranchForm company={company} />}
-        </section>
-      ))}
+        </Tabs>
+      )}
     </>
   );
 }
