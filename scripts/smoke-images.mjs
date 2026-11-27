@@ -123,7 +123,7 @@ async function homologation() {
   const anonymous = await fetch(`${WEB}/terminais`, { redirect: 'manual' });
   check('sem sessão, a retaguarda leva ao login', anonymous.status === 307 && anonymous.headers.get('location').includes('/login'));
   const loginPage = await (await fetch(`${WEB}/login`)).text();
-  check('a tela de login abre, com a faixa de homologação', loginPage.includes('HOMOLOGAÇÃO') && loginPage.includes('Entre com seu e-mail'));
+  check('a tela de login abre, com a faixa de homologação', loginPage.includes('HOMOLOGAÇÃO') && loginPage.includes('Use seu e-mail e sua senha'));
 
   const cookie = `farmaerp_session=${first.token}`;
   const page = await (await fetch(`${WEB}/terminais`, { headers: { Cookie: cookie } })).text();

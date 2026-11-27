@@ -7,6 +7,8 @@ import '../core/error_display.dart';
 import '../face/face_service.dart';
 import '../face/face_widgets.dart';
 import '../ui/caps.dart';
+import '../ui/login_backdrop.dart';
+import '../ui/login_image.dart';
 import '../ui/pdv_motion.dart';
 import '../ui/pdv_window.dart';
 import 'cart.dart';
@@ -36,6 +38,7 @@ class PosScreen extends StatelessWidget {
     this.online = true,
     this.appVersion,
     this.face,
+    this.loginImage,
   });
 
   final PosController controller;
@@ -46,6 +49,9 @@ class PosScreen extends StatelessWidget {
 
   /// Rosto: câmera na entrada e cadastro do rosto. Sem ele (outro sistema ou sem modelos), só PIN.
   final FaceService? face;
+
+  /// Imagem da tela de entrada guardada no caixa. Sem ela, fica a cor do terminal.
+  final LoginImageStore? loginImage;
 
   @override
   Widget build(BuildContext context) {
@@ -148,7 +154,7 @@ class PosScreen extends StatelessWidget {
           body: controller.quoteMode
               ? _SaleView(controller: controller, online: online)
               : switch ((operator, controller.session)) {
-            (null, _) => _LoginView(controller: controller, face: face),
+            (null, _) => _LoginView(controller: controller, face: face, image: loginImage),
             (_, null) => _OpenShiftView(controller: controller),
             _ => _SaleView(controller: controller, online: online),
           },
@@ -200,10 +206,11 @@ class _Notice extends StatelessWidget {
 }
 
 class _LoginView extends StatefulWidget {
-  const _LoginView({required this.controller, this.face});
+  const _LoginView({required this.controller, this.face, this.image});
 
   final PosController controller;
   final FaceService? face;
+  final LoginImageStore? image;
 
   @override
   State<_LoginView> createState() => _LoginViewState();
@@ -270,11 +277,9 @@ class _LoginViewState extends State<_LoginView> {
     final controller = widget.controller;
     final face = widget.face;
     final useCamera = face != null && !_otherWay;
-    return Center(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: useCamera ? 520 : 380),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
+    return LoginBackdrop(
+      image: widget.image,
+      wide: useCamera,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -392,8 +397,6 @@ class _LoginViewState extends State<_LoginView> {
               ],
             ],
           ),
-        ),
-      ),
     );
   }
 }

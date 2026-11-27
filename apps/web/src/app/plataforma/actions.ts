@@ -72,3 +72,20 @@ export async function decideIssuer(_previous: IssuerDecisionState, form: FormDat
   // Sem atualizar a lista agora: o cartão mostra o resultado até a página ser recarregada.
   return { done: { decision, notes: result.data.notes } };
 }
+
+export interface LoginImageState {
+  error?: ApiError;
+  cleared?: boolean;
+}
+
+/** Tira a imagem da tela de entrada: ela volta para a cor da marca. */
+export async function clearLoginImage(): Promise<LoginImageState> {
+  const result = await apiFetch<{ status: string }>("/platform/login-image", { method: "DELETE" });
+  if (!result.ok) {
+    if (result.error.code === "FA402") redirect("/login?next=/plataforma&expired=1");
+    if (result.error.code === "FA403") redirect("/trocar-senha");
+    return { error: result.error };
+  }
+  refresh();
+  return { cleared: true };
+}

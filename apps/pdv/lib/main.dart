@@ -30,6 +30,7 @@ import 'terminal/terminal_api.dart';
 import 'terminal/terminal_controller.dart';
 import 'terminal/terminal_screen.dart';
 import 'ui/caps.dart';
+import 'ui/login_image.dart';
 import 'update/update_api.dart';
 import 'update/update_service.dart';
 import 'update/update_signature.dart';
@@ -139,6 +140,14 @@ Future<void> main() async {
   // Avisos e erros sobem para a central pela outbox.
   logger.onEntry = (entry) => database.enqueueLog(entry, now: DateTime.now());
 
+  // Imagem da tela de entrada: guardada no caixa para aparecer mesmo sem internet.
+  final loginImage = LoginImageStore(
+    directory: Directory('${dataDirectory.path}${Platform.pathSeparator}tela-entrada'),
+    api: HttpLoginImageApi(baseUrl: _apiUrl),
+    logger: logger,
+  );
+  await loginImage.load();
+
   // NFC-e: o certificado e o CSC chegam cifrados para a chave deste caixa.
   final nfceCredentials = NfceCredentialService(api: api, database: database, store: store, logger: logger);
   final sefaz = SefazClient();
@@ -159,6 +168,8 @@ Future<void> main() async {
       await nfceCredentials.refresh(accessToken: accessToken, terminalId: terminalId, sign: sign);
       // Com internet: transmite as notas em contingência ou pendentes.
       unawaited(nfceRetransmitter.tick());
+      // Com internet: confere se a imagem da tela de entrada mudou.
+      unawaited(loginImage.refresh());
       // Ao abrir, a primeira verificação de versão roda aqui, com o terminal já pronto.
       unawaited(updates.tickIfDue());
     },
@@ -225,6 +236,7 @@ Future<void> main() async {
     display: DisplaySettings(database),
     appVersion: _appVersion,
     face: face,
+    loginImage: loginImage,
   ));
   unawaited(controller.start());
   updates.start();
@@ -238,7 +250,16 @@ LocalLogger _createLogger(Directory dataDirectory) => LocalLogger(
 );
 
 class FarmaErpPdvApp extends StatelessWidget {
-  const FarmaErpPdvApp({super.key, required this.controller, this.pos, this.database, this.display, this.appVersion, this.face});
+  const FarmaErpPdvApp({
+    super.key,
+    required this.controller,
+    this.pos,
+    this.database,
+    this.display,
+    this.appVersion,
+    this.face,
+    this.loginImage,
+  });
 
   final TerminalController controller;
 
@@ -252,6 +273,9 @@ class FarmaErpPdvApp extends StatelessWidget {
 
   /// Rosto no PDV (câmera e modelos), quando o sistema tem.
   final FaceService? face;
+
+  /// Imagem da tela de entrada guardada no caixa.
+  final LoginImageStore? loginImage;
 
   @override
   Widget build(BuildContext context) {
@@ -270,7 +294,15 @@ class FarmaErpPdvApp extends StatelessWidget {
       },
       home: pos == null || database == null
           ? TerminalScreen(controller: controller)
-          : PdvHome(terminal: controller, pos: pos!, database: database!, display: settings, appVersion: appVersion, face: face),
+          : PdvHome(
+              terminal: controller,
+              pos: pos!,
+              database: database!,
+              display: settings,
+              appVersion: appVersion,
+              face: face,
+              loginImage: loginImage,
+            ),
     );
     return settings == null ? app(context) : ListenableBuilder(listenable: settings, builder: (context, _) => app(context));
   }

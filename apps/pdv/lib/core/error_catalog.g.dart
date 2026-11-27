@@ -274,6 +274,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Revogue os terminais e zere o estoque antes de encerrar a filial.',
     retryable: false,
   ),
+  'FA225': ErrorCatalogEntry(
+    code: 'FA225',
+    message: 'A imagem da tela de entrada é inválida.',
+    action: 'Envie uma imagem JPEG, PNG ou WebP de até 3 MB.',
+    retryable: false,
+  ),
   'FA301': ErrorCatalogEntry(
     code: 'FA301',
     message: 'Código não encontrado ou expirado.',

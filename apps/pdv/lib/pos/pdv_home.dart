@@ -6,6 +6,7 @@ import '../face/face_service.dart';
 import '../local/local_database.dart';
 import '../terminal/terminal_controller.dart';
 import '../terminal/terminal_screen.dart';
+import '../ui/login_image.dart';
 import 'display_settings.dart';
 import 'pos_controller.dart';
 import 'pos_screen.dart';
@@ -34,6 +35,7 @@ class PdvHome extends StatelessWidget {
     this.display,
     this.appVersion,
     this.face,
+    this.loginImage,
   });
 
   final TerminalController terminal;
@@ -45,6 +47,9 @@ class PdvHome extends StatelessWidget {
 
   /// Rosto (só no Windows por enquanto).
   final FaceService? face;
+
+  /// Imagem da tela de entrada guardada no caixa.
+  final LoginImageStore? loginImage;
 
   @override
   Widget build(BuildContext context) {
@@ -59,6 +64,7 @@ class PdvHome extends StatelessWidget {
           online: terminal.online,
           appVersion: appVersion,
           face: face,
+          loginImage: loginImage,
           onDisplaySettings: display == null ? null : () => showDisplaySettings(context, display!),
           onPrinterSettings: () async {
             final choice = await choosePrinter(context, printers: listPrinters(), current: database.setting(printerSetting));
