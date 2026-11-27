@@ -8,6 +8,8 @@ import 'access_key.dart';
 import 'nfce_urls.dart';
 import 'xml_signer.dart';
 
+part 'nfe.dart';
+
 const _nfeNamespace = 'http://www.portalfiscal.inf.br/nfe';
 /// Textos obrigatórios em homologação: no primeiro item (xProd) e no nome do destinatário (até 60).
 const homologationText = 'NOTA FISCAL EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL';
@@ -104,6 +106,11 @@ class NfceItem {
     required this.grossCents,
     this.discountCents = 0,
     required this.tax,
+    this.freightCents = 0,
+    this.insuranceCents = 0,
+    this.otherCents = 0,
+    this.ipiReturnedCents = 0,
+    this.returnPercent,
   });
 
   final String code;
@@ -121,6 +128,18 @@ class NfceItem {
 
   /// Tributação em vigor do produto (como desce do catálogo).
   final Map<String, dynamic> tax;
+
+  /// Só na NF-e: frete, seguro e outras despesas do item (entram na base do ICMS e no total).
+  final int freightCents;
+  final int insuranceCents;
+  final int otherCents;
+
+  /// Só na NF-e de devolução: IPI devolvido do item e o percentual da mercadoria devolvida.
+  final int ipiReturnedCents;
+  final num? returnPercent;
+
+  /// Valor do item na base dos impostos: produtos menos desconto, mais frete, seguro e outras.
+  int get taxBaseCents => grossCents - discountCents + freightCents + insuranceCents + otherCents;
 }
 
 class NfcePayment {
@@ -345,7 +364,7 @@ NfceDocument buildNfce(NfceInput input, SigningCredential credential) {
         final item = input.items[index];
         productsCents += item.grossCents;
         discountCents += item.discountCents;
-        _item(b, index + 1, item, issuer, input, homologation && index == 0, totals);
+        _item(b, index + 1, item, issuer, (ibsCbs: input.ibsCbs), homologation && index == 0, totals);
       }
       b.element('total', nest: () {
         b.element('ICMSTot', nest: () {
@@ -416,9 +435,9 @@ NfceDocument buildNfce(NfceInput input, SigningCredential credential) {
   );
 }
 
-void _item(XmlBuilder b, int line, NfceItem item, NfceIssuer issuer, NfceInput input, bool homologationName, _Taxes totals) {
+void _item(XmlBuilder b, int line, NfceItem item, NfceIssuer issuer, ({bool ibsCbs}) input, bool homologationName, _Taxes totals) {
   final tax = item.tax;
-  final base = item.grossCents - item.discountCents;
+  final base = item.taxBaseCents;
   final gtin = item.gtin != null && RegExp(r'^(\d{8}|\d{12,14})$').hasMatch(item.gtin!) ? item.gtin! : 'SEM GTIN';
   b.element('det', nest: () {
     b.attribute('nItem', '$line');
@@ -437,7 +456,11 @@ void _item(XmlBuilder b, int line, NfceItem item, NfceIssuer issuer, NfceInput i
       b.element('uTrib', nest: item.unit);
       b.element('qTrib', nest: _quantity(item.quantityMilli));
       b.element('vUnTrib', nest: money(item.unitPriceCents));
+      // Ordem do leiaute: frete, seguro, desconto, outras.
+      if (item.freightCents > 0) b.element('vFrete', nest: money(item.freightCents));
+      if (item.insuranceCents > 0) b.element('vSeg', nest: money(item.insuranceCents));
       if (item.discountCents > 0) b.element('vDesc', nest: money(item.discountCents));
+      if (item.otherCents > 0) b.element('vOutro', nest: money(item.otherCents));
       b.element('indTot', nest: '1');
     });
     b.element('imposto', nest: () {
@@ -446,6 +469,13 @@ void _item(XmlBuilder b, int line, NfceItem item, NfceIssuer issuer, NfceInput i
       _contribution(b, 'COFINS', tax['cofins_cst'] as String, (tax['cofins_rate'] as num?) ?? 0, base, (value) => totals.cofins += value, item);
       if (input.ibsCbs) _ibsCbs(b, tax, base, totals, item);
     });
+    // Devolução: o IPI que volta ao fornecedor.
+    if (item.ipiReturnedCents > 0) {
+      b.element('impostoDevol', nest: () {
+        b.element('pDevol', nest: (item.returnPercent ?? 100).clamp(0, 100).toStringAsFixed(2));
+        b.element('IPI', nest: () => b.element('vIPIDevol', nest: money(item.ipiReturnedCents)));
+      });
+    }
   });
 }
 
