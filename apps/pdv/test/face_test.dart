@@ -69,10 +69,16 @@ class FakeEngine implements FaceEngine {
 }
 
 class FakeCamera implements FaceCamera {
-  FakeCamera({this.opens = true, this.failAfter});
+  FakeCamera({this.opens = true, this.failAfter, this.missFirst = 0, this.missAt = const {}});
 
   final bool opens;
   final int? failAfter;
+
+  /// Recém-ligada: os primeiros quadros ainda não existem.
+  final int missFirst;
+
+  /// Tentativas (contando de 1) que voltam sem quadro.
+  final Set<int> missAt;
   int captures = 0;
   bool closed = false;
 
@@ -83,6 +89,7 @@ class FakeCamera implements FaceCamera {
   Future<Frame?> capture() async {
     captures += 1;
     if (failAfter != null && captures > failAfter!) return null;
+    if (captures <= missFirst || missAt.contains(captures)) return null;
     return Frame(width: 640, height: 480, rgb: Uint8List(640 * 480 * 3));
   }
 
@@ -271,8 +278,32 @@ void main() {
       expect(cosine(result!, vector(1)), closeTo(1, 1e-6));
       expect(updates, greaterThan(4));
       final broken = FaceReader();
-      expect(await readFace(camera: FakeCamera(failAfter: 1), engine: FakeEngine(goodRead(vector(1))), reader: broken, onUpdate: () {}, cancelled: () => false, pause: Duration.zero), isNull);
+      final dead = FakeCamera(failAfter: 1);
+      expect(await readFace(camera: dead, engine: FakeEngine(goodRead(vector(1))), reader: broken, onUpdate: () {}, cancelled: () => false, pause: Duration.zero, missPause: Duration.zero), isNull);
       expect(broken.cameraProblem, isTrue);
+      // Desiste só depois de 30 tentativas seguidas sem quadro.
+      expect(dead.captures, 31);
+    });
+
+    test('câmera recém-ligada, ainda sem quadro, não é câmera quebrada', () async {
+      final reader = FaceReader();
+      final warming = FakeCamera(missFirst: 10);
+      final result = await readFace(
+        camera: warming, engine: FakeEngine(goodRead(vector(1))), reader: reader, onUpdate: () {}, cancelled: () => false,
+        pause: Duration.zero, missPause: Duration.zero,
+      );
+      expect(reader.cameraProblem, isFalse);
+      expect(cosine(result!, vector(1)), closeTo(1, 1e-6));
+    });
+
+    test('um quadro perdido no meio da leitura não derruba a leitura', () async {
+      final reader = FaceReader();
+      final result = await readFace(
+        camera: FakeCamera(missAt: {2, 3, 5, 6}), engine: FakeEngine(goodRead(vector(1))), reader: reader, onUpdate: () {},
+        cancelled: () => false, pause: Duration.zero, missPause: Duration.zero, maxMissedFrames: 3,
+      );
+      expect(reader.cameraProblem, isFalse);
+      expect(result, isNotNull);
     });
   });
 
