@@ -157,6 +157,7 @@ class SaleCustomer {
     this.groupId,
     this.birthDate,
     this.credit,
+    this.abcCurve,
   });
 
   final String id;
@@ -171,6 +172,9 @@ class SaleCustomer {
 
   /// Crediário como a central mandou (sem o que o terminal ainda não enviou).
   final CreditAccount? credit;
+
+  /// Curva ABC do cliente na filial do terminal (A, B ou C; sem compras na filial, nenhuma).
+  final String? abcCurve;
 }
 
 /// Venda em montagem.
