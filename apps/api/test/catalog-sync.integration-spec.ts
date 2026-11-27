@@ -20,6 +20,7 @@ const ADMIN = 'admin@farmaerp.test';
 const MANAGER = 'gerente@farmaerp.test';
 const OPERATOR = 'operador@farmaerp.test';
 const CENTRO = '019a0000-0000-7000-8000-000000000005';
+const COMPANY = '019a0000-0000-7000-8000-000000000002';
 const SUL = '019a0000-0000-7000-8000-000000000006';
 const KEY_CENTRO = 'cat_chave_do_centro_123';
 const KEY_SUL = 'cat_chave_do_sul_456';
@@ -46,10 +47,11 @@ describe('cópia do Catálogo externo contra o banco real', () => {
   let items: Json[] = [];
   let version = 1;
   let png: Buffer;
+  let linkedProduct = '';
   const run = randomInt(1e6, 9e6);
   const codes = { dorflex: gtin(), rivotril: gtin(), saiu: gtin(), novo: gtin(), desconhecido: gtin() };
 
-  const admin = (method: 'get' | 'post' | 'put' | 'delete', path: string, email = ADMIN) =>
+  const admin = (method: 'get' | 'post' | 'put' | 'patch' | 'delete', path: string, email = ADMIN) =>
     request(app.getHttpServer())[method](path).set('X-Forwarded-For', ip).set('Authorization', `Bearer ${sessions.get(email)}`);
   const codeOf = (response: request.Response) => (response.body as Json).code as string;
   const etag = () => `W/"${run}-v${version}"`;
@@ -64,6 +66,11 @@ describe('cópia do Catálogo externo contra o banco real', () => {
     if (url.pathname === '/api/v1/catalog.json') {
       if (req.headers['if-none-match'] === etag()) return { status: 304, headers: { ETag: etag() } };
       return { status: 200, body: { generated_at: new Date().toISOString(), total: items.length, items }, headers: { ETag: etag() } };
+    }
+    const taxOf = /^\/api\/v1\/products\/(\d+)\/tax$/.exec(url.pathname)?.[1];
+    if (taxOf) {
+      if (!items.some((item) => String(item.id) === taxOf)) return { status: 404, body: { error: 'Produto não encontrado' } };
+      return { status: 200, body: { product_id: Number(taxOf), uf: url.searchParams.get('uf'), values: { cfop: '5405', cst_icms: '60', cst_pis: '04', pis_rate: '0', cst_cofins: '04', cofins_rate: '0' } } };
     }
     const barcode = /^\/api\/v1\/barcodes\/(\d+)$/.exec(url.pathname)?.[1];
     if (barcode) {
@@ -90,7 +97,7 @@ describe('cópia do Catálogo externo contra o banco real', () => {
     items = [
       {
         id: run + 1, name: `Dorflex C/10 Comp ${run}`, brand: 'Sanofi', manufacturer: '', anvisa_registry: '1030000850011', med_controlled: '',
-        ncm: '30049099', cest: '1300100', actives: [{ name: 'dipirona', concentration: '300 mg' }], barcodes: [{ code: codes.dorflex }],
+        ncm: '30049099', cest: '1300100', tax_origin: '0', actives: [{ name: 'dipirona', concentration: '300 mg' }], barcodes: [{ code: codes.dorflex }],
         images: [{ url: `${base}/files/dorflex.png` }], pending: false, active: true,
       },
       {
@@ -234,7 +241,7 @@ describe('cópia do Catálogo externo contra o banco real', () => {
   it('imagens: só do item vinculado, reduzidas para o caixa, sem a chave', async () => {
     const dorflex = ((await admin('get', `/admin/catalog?q=${codes.dorflex}`).expect(200)).body as Json[])[0];
     expect(await service.syncImages()).toBe(0);
-    await admin('post', '/admin/products').send({ displayName: `Dorflex vinculado ${run}`, barcode: gtin(), catalogProductId: dorflex.id }).expect(201);
+    linkedProduct = ((await admin('post', '/admin/products').send({ displayName: `Dorflex vinculado ${run}`, barcode: gtin(), catalogProductId: dorflex.id }).expect(201)).body as Json).id as string;
     expect(await service.syncImages()).toBe(1);
     expect(requests.some((r) => r.path === '/files/dorflex.png' && r.key === undefined)).toBe(true);
     const again = ((await admin('get', `/admin/catalog?q=${codes.dorflex}`).expect(200)).body as Json[])[0];
@@ -251,6 +258,26 @@ describe('cópia do Catálogo externo contra o banco real', () => {
     expect(await service.syncImages()).toBe(0);
     const status = (await admin('get', '/platform/catalog-sync').expect(200)).body as Json;
     expect(status.imagesDue).toBe(0);
+  });
+
+  it('tributação: o item vinculado recebe a do estado das filiais com chave, com o CST convertido para o Simples', async () => {
+    const regime = await admin('patch', `/admin/fiscal/companies/${COMPANY}/regime`).send({ regime: 1 });
+    expect(regime.status, JSON.stringify(regime.body)).toBe(200);
+    const before = requests.length;
+    expect(await service.syncTaxes()).toBeGreaterThanOrEqual(1);
+    const taxCalls = requests.slice(before).filter((r) => r.path === `/api/v1/products/${run + 1}/tax?uf=SP`);
+    expect(taxCalls).toHaveLength(1);
+    expect([KEY_CENTRO, KEY_SUL]).toContain(taxCalls[0].key);
+    const rules = (await admin('get', `/admin/products/${linkedProduct}/tax`).expect(200)).body as Json[];
+    expect(rules.find((r) => r.branch_id === CENTRO)).toMatchObject({ status: 'ok', cfop: '5405', icms_csosn: '500', icms_cst: null, origin: 0, pis_cst: '04' });
+    // Já buscada hoje: não busca de novo.
+    expect(requests.slice(before).length).toBeGreaterThan(0);
+    const again = requests.length;
+    await service.syncTaxes();
+    expect(requests.slice(again).some((r) => r.path.startsWith(`/api/v1/products/${run + 1}/tax`))).toBe(false);
+    const coverage = (await admin('get', '/admin/fiscal/tax-coverage').expect(200)).body as Json[];
+    expect(coverage.find((r) => r.branch_id === CENTRO)).toMatchObject({ has_catalog_key: true });
+    expect((await admin('get', `/admin/fiscal/branches/${CENTRO}/catalog-tax-problems`).expect(200)).body).toEqual([]);
   });
 
   it('"Atualizar agora" começa a verificação e responde na hora', async () => {

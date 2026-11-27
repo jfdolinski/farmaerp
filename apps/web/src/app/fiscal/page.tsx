@@ -74,6 +74,16 @@ async function FiscalContent({ searchParams }: { searchParams: SearchParams }) {
     tab === "nfce" ? apiFetch<NfceRow[]>("/admin/fiscal/nfce") : null,
   ]);
   const returnTax = tab === "devolucao" ? await apiFetch<ReturnTaxRow[]>("/admin/fiscal/return-tax") : null;
+  // Problemas da tributação do Catálogo, só das filiais que têm algum.
+  const problemBranches = coverage?.ok ? coverage.data.filter((item) => Number(item.catalog_problems) > 0) : [];
+  const problems = new Map(
+    await Promise.all(
+      problemBranches.map(async (item) => {
+        const list = await apiFetch<CatalogTaxProblem[]>(`/admin/fiscal/branches/${encodeURIComponent(item.branch_id)}/catalog-tax-problems`);
+        return [item.branch_id, list.ok ? list.data : []] as const;
+      }),
+    ),
+  );
   const catalogKeys =
     tab === "catalogo" ? await apiFetch<{ configured: boolean; branches: CatalogKeyRow[] }>("/admin/catalog-keys") : null;
   const companies = [...new Set(rows.map((row) => row.company_id))];
@@ -192,6 +202,7 @@ async function FiscalContent({ searchParams }: { searchParams: SearchParams }) {
                         <TaxCoverage
                           row={row}
                           coverage={coverage.data.find((item) => item.branch_id === row.branch_id)}
+                          problems={problems.get(row.branch_id)}
                         />
                       ) : (
                         <ErrorNotice error={coverage.error} />
@@ -309,11 +320,39 @@ interface CoverageRow {
   branch_id: string;
   products_total: string;
   products_missing: string;
+  catalog_waiting: string;
+  catalog_problems: string;
+  has_catalog_key: boolean;
 }
 
-function TaxCoverage({ row, coverage }: { row: FiscalRow; coverage?: CoverageRow }) {
+interface CatalogTaxProblem {
+  product_id: string;
+  product_code: string;
+  product_name: string;
+  status: "no_rule" | "incomplete" | "not_found" | "failed";
+  message: string | null;
+  fetched_at: string;
+}
+
+const PROBLEM_LABELS: Record<CatalogTaxProblem["status"], string> = {
+  no_rule: "Sem regra no Catálogo",
+  incomplete: "Regra incompleta",
+  not_found: "Fora do Catálogo",
+  failed: "Catálogo sem resposta",
+};
+
+function TaxCoverage({
+  row,
+  coverage,
+  problems,
+}: {
+  row: FiscalRow;
+  coverage?: CoverageRow;
+  problems?: CatalogTaxProblem[];
+}) {
   const total = Number(coverage?.products_total ?? 0);
   const missing = Number(coverage?.products_missing ?? 0);
+  const waiting = Number(coverage?.catalog_waiting ?? 0);
   return (
     <>
       {row.tax_regime === null && (
@@ -338,6 +377,54 @@ function TaxCoverage({ row, coverage }: { row: FiscalRow; coverage?: CoverageRow
           Produtos ativos sem tributação: {missing.toLocaleString("pt-BR")} de {total.toLocaleString("pt-BR")}. Eles
           dependem do vínculo com o Catálogo e de uma regra para o regime e o estado desta filial.
         </p>
+      )}
+      {coverage && !coverage.has_catalog_key && (
+        <p className={styles.warning}>
+          Esta filial não tem chave do Catálogo: a tributação do Catálogo não é buscada para ela. Cadastre na aba{" "}
+          <Link href="/fiscal?aba=catalogo">Catálogo</Link>.
+        </p>
+      )}
+      {coverage?.has_catalog_key && waiting > 0 && (
+        <p className={styles.hint}>
+          Aguardando a primeira busca no Catálogo: {waiting.toLocaleString("pt-BR")} produto(s). A tributação é buscada
+          aos poucos, e renovada todo dia.
+        </p>
+      )}
+      {problems && problems.length > 0 && (
+        <details>
+          <summary className={styles.warning}>
+            Tributação do Catálogo com problema: {Number(coverage?.catalog_problems ?? problems.length).toLocaleString("pt-BR")}{" "}
+            produto(s)
+          </summary>
+          <p className={styles.hint}>
+            O ajuste é feito no Catálogo (regra do NCM, classificação ou origem do produto). O código de ICMS do regime
+            que o Catálogo não informa é convertido por uma tabela fixa, a conferir com o contador.
+          </p>
+          <div className={styles.tableWrap}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Produto</th>
+                  <th>Situação</th>
+                  <th>Motivo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {problems.map((problem) => (
+                  <tr key={problem.product_id}>
+                    <td>
+                      <Link href={`/produtos/${problem.product_id}`}>
+                        {problem.product_code} · {problem.product_name}
+                      </Link>
+                    </td>
+                    <td>{PROBLEM_LABELS[problem.status]}</td>
+                    <td>{problem.message}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
       )}
     </>
   );
