@@ -643,7 +643,33 @@ const _migrations = <String>[
   DROP TABLE nfce_document;
   ALTER TABLE nfce_document_new RENAME TO nfce_document;
   ''',
+  // Arquivo do que sobrou de outro terminal (itens não enviados e notas fiscais), quando o caixa é
+  // pareado de novo e a cópia local é refeita. Nunca é limpo e fica criptografado como o resto.
+  '''
+  CREATE TABLE local_archive (
+    id INTEGER PRIMARY KEY,
+    terminal_id TEXT,
+    source TEXT NOT NULL,
+    data TEXT NOT NULL,
+    archived_at TEXT NOT NULL
+  ) STRICT;
+  ''',
 ];
+
+/// Como a cópia local ficou ao ser ligada ao terminal pareado.
+enum TerminalBinding {
+  /// Já era deste terminal.
+  same,
+
+  /// Cópia vazia, ou de antes desta marca com itens por enviar: passa a ser deste terminal.
+  adopted,
+
+  /// Era de outro terminal: o que importava foi arquivado e a cópia foi limpa para a carga inteira.
+  reset,
+}
+
+/// Resultado de [LocalDatabase.bindTerminal]: [archived] itens não enviados e notas guardados no arquivo.
+typedef TerminalBindResult = ({TerminalBinding binding, int archived});
 
 /// NFC-e (ou NF-e de venda, modelo 55) do caixa, para guardar, imprimir o DANFE e subir à central.
 class LocalNfce {
@@ -1156,6 +1182,77 @@ class LocalDatabase {
     lastPullAt: DateTime.tryParse(_state('last_pull_at') ?? ''),
   );
 
+  /// Terminal a que a cópia local pertence (null antes desta marca existir).
+  String? get dataTerminalId => _state('data_terminal_id');
+
+  /// Liga a cópia local ao terminal pareado, antes de subir ou descer qualquer coisa.
+  ///
+  /// Cópia de outro terminal (o caixa foi pareado de novo, por exemplo numa central nova): os itens
+  /// ainda não enviados e as notas fiscais vão para o arquivo local, e todo o resto é limpo — a carga
+  /// inteira refaz a cópia e nada de outra central sobe. Ficam só os ajustes do aparelho
+  /// (impressora, tela). Cópia de antes desta marca: com itens por enviar, é adotada (nada se
+  /// perde); sem eles, é refeita como a de outro terminal.
+  TerminalBindResult bindTerminal(String terminalId, {required DateTime now}) {
+    final current = dataTerminalId;
+    if (current == terminalId) return (binding: TerminalBinding.same, archived: 0);
+    final hasData = _db.select(
+      'SELECT EXISTS (SELECT 1 FROM app_user) OR EXISTS (SELECT 1 FROM product) OR EXISTS (SELECT 1 FROM sale) '
+      'OR EXISTS (SELECT 1 FROM cash_session) OR EXISTS (SELECT 1 FROM nfce_document) '
+      "OR EXISTS (SELECT 1 FROM outbox WHERE kind <> 'log') AS v",
+    ).first['v'] == 1;
+    final pending = _db.select("SELECT count(*) AS n FROM outbox WHERE sent_at IS NULL AND kind <> 'log'").first['n'] as int;
+    if (!hasData || (current == null && pending > 0)) {
+      _setState('data_terminal_id', terminalId);
+      return (binding: TerminalBinding.adopted, archived: 0);
+    }
+    var archived = 0;
+    _transaction(() {
+      // A limpeza passa por tabelas ligadas entre si: as chaves são conferidas no fim.
+      _db.execute('PRAGMA defer_foreign_keys = ON');
+      final at = now.toUtc().toIso8601String();
+      void archive(String source, String sql) {
+        for (final row in _db.select(sql)) {
+          final data = <String, Object?>{
+            for (final column in row.keys) column: switch (row[column]) { final Uint8List bytes => base64Encode(bytes), final other => other },
+          };
+          _db.execute(
+            'INSERT INTO local_archive (terminal_id, source, data, archived_at) VALUES (?, ?, ?, ?)',
+            [current, source, jsonEncode(data), at],
+          );
+          archived += 1;
+        }
+      }
+
+      archive('outbox', "SELECT * FROM outbox WHERE sent_at IS NULL AND kind <> 'log' ORDER BY sequence");
+      archive('nfce_document', 'SELECT * FROM nfce_document ORDER BY emitted_at');
+      final tables = _db
+          .select("SELECT name FROM pragma_table_list WHERE schema = 'main' AND type IN ('table', 'virtual')")
+          .map((row) => row['name'] as String)
+          .where((name) => !name.startsWith('sqlite_') && name != 'local_archive' && name != 'sync_state');
+      for (final table in tables) {
+        _db.execute('DELETE FROM "$table"');
+      }
+      // Fica só o que é do aparelho (impressora, tela).
+      _db.execute("DELETE FROM sync_state WHERE key NOT LIKE 'setting:%'");
+      _setState('data_terminal_id', terminalId);
+    });
+    return (binding: TerminalBinding.reset, archived: archived);
+  }
+
+  /// Quantos registros o arquivo local guarda (de terminais anteriores).
+  int get archivedCount => _db.select('SELECT count(*) AS n FROM local_archive').first['n'] as int;
+
+  /// Registros do arquivo local, do mais antigo ao mais novo (para o suporte e os testes).
+  List<({String? terminalId, String source, String data, String archivedAt})> archivedRows() => [
+    for (final row in _db.select('SELECT terminal_id, source, data, archived_at FROM local_archive ORDER BY id'))
+      (
+        terminalId: row['terminal_id'] as String?,
+        source: row['source'] as String,
+        data: row['data'] as String,
+        archivedAt: row['archived_at'] as String,
+      ),
+  ];
+
   /// Começa uma carga inteira: nova geração e janela vazia. Os dados atuais ficam até ela terminar.
   void startFullLoad() => _transaction(() {
     _setState('generation', syncState.generation + 1);
@@ -1187,7 +1284,7 @@ class LocalDatabase {
     }
     if (fullLoad) {
       // O que não veio na carga inteira saiu do escopo da filial.
-      for (final table in ['product', 'app_user', 'fiscal', 'health_professional']) {
+      for (final table in ['product', 'app_user', 'fiscal', 'health_professional', 'discount_rule']) {
         _db.execute('DELETE FROM $table WHERE seen_generation < ?', [state.generation]);
       }
       _db.execute('DELETE FROM product_search WHERE product_id NOT IN (SELECT id FROM product)');
@@ -1672,7 +1769,8 @@ class LocalDatabase {
 
   /// Pessoa pelo código, para a entrada no PDV.
   LocalUser? userByCode(int code) {
-    final rows = _db.select('SELECT * FROM app_user WHERE code = ? LIMIT 1', [code]);
+    // Se sobrou alguém antigo com o mesmo código, vale quem chegou por último na cópia.
+    final rows = _db.select('SELECT * FROM app_user WHERE code = ? ORDER BY seen_generation DESC, rowid DESC LIMIT 1', [code]);
     if (rows.isEmpty) return null;
     return _user(rows.first);
   }

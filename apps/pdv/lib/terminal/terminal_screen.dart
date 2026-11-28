@@ -89,6 +89,11 @@ class TerminalScreen extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 12),
               child: Text('Terminal número ${controller.terminalNumber}'),
             ),
+          if (!loaded && sync?.resetNotice != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(sync!.resetNotice!, key: const Key('local-reset'), textAlign: TextAlign.center),
+            ),
           if (!loaded) ..._preparing(context),
           if (loaded) ...[
             const Text(

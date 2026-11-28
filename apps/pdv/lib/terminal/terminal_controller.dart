@@ -307,7 +307,7 @@ class TerminalController extends ChangeNotifier {
     }
     await _rememberStatus('active');
     _setPhase(TerminalPhase.ready);
-    await sync?.run(token.value);
+    await sync?.run(token.value, terminalId: _terminalId);
     final after = afterSync;
     if (after != null) {
       try {

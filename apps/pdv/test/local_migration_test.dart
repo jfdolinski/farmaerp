@@ -47,7 +47,7 @@ void main() {
     raw.execute("INSERT INTO customer (id, code, person_type, name, document, agreements, search_text, saved_at) VALUES (randomblob(16), 7, 'company', 'Empresa', '11222333000181', '[]', 'empresa', '2026-11-27T10:00:00Z')");
     final database = LocalDatabase.fromDatabase(raw);
     addTearDown(database.close);
-    expect(database.schemaVersion, 23);
+    expect(database.schemaVersion, 24);
     expect(raw.select('SELECT name, state_registration, ie_indicator FROM customer').first, {'name': 'Empresa', 'state_registration': null, 'ie_indicator': null});
     raw.execute("UPDATE customer SET state_registration = '110042490114', ie_indicator = 1");
     expect(() => raw.execute('UPDATE customer SET ie_indicator = 3'), throwsA(anything));
@@ -65,7 +65,7 @@ void main() {
     );
     final database = LocalDatabase.fromDatabase(raw);
     addTearDown(database.close);
-    expect(database.schemaVersion, 23);
+    expect(database.schemaVersion, 24);
     expect(raw.select('SELECT model, number FROM nfce_document').first, {'model': '65', 'number': 42});
     // A NF-e com a mesma série e número entra; outra NFC-e com o mesmo número, não.
     raw.execute(
@@ -95,7 +95,7 @@ void main() {
     raw.execute("INSERT INTO customer (id, code, person_type, name, document, agreements, search_text, saved_at) VALUES (randomblob(16), 7, 'individual', 'Cliente', '11144477735', '[]', 'cliente', '2026-11-27T10:00:00Z')");
     final database = LocalDatabase.fromDatabase(raw);
     addTearDown(database.close);
-    expect(database.schemaVersion, 23);
+    expect(database.schemaVersion, 24);
     expect(raw.select('SELECT name, abc_curve FROM customer').first, {'name': 'Cliente', 'abc_curve': null});
     raw.execute("UPDATE customer SET abc_curve = 'A'");
     expect(() => raw.execute("UPDATE customer SET abc_curve = 'D'"), throwsA(anything));
@@ -113,7 +113,7 @@ void main() {
     );
     final database = LocalDatabase.fromDatabase(raw);
     addTearDown(database.close);
-    expect(database.schemaVersion, 23);
+    expect(database.schemaVersion, 24);
     expect(raw.select('SELECT number, status, protocol FROM nfce_document').first, {'number': 42, 'status': 'authorized', 'protocol': '135260000000123'});
     raw.execute("UPDATE nfce_document SET status = 'canceled'");
     expect(raw.select('SELECT status FROM nfce_document').first['status'], 'canceled');

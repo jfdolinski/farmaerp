@@ -99,7 +99,7 @@ void main() {
 
   group('banco local', () {
     test('cria o esquema uma vez e guarda UUID em 16 bytes', () {
-      expect(database.schemaVersion, 23);
+      expect(database.schemaVersion, 24);
       expect(uuidBytes(dipirona), hasLength(16));
       expect(uuidText(uuidBytes(dipirona)), dipirona);
       expect(toCents(12.9), 1290);
@@ -323,6 +323,8 @@ void main() {
       expect(api.pullCalls, hasLength(1));
       expect(api.pullCalls.single.token, 'token-1');
       expect(sync.initialLoadDone, isTrue);
+      // A cópia local fica ligada ao terminal pareado (outro pareamento a refaz).
+      expect(database.dataTerminalId, 'term-1');
       expect(api.lastSyncAt, isNull);
 
       await terminal.tick();
