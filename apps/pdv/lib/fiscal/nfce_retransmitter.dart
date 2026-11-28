@@ -37,7 +37,8 @@ NfceContingencyAlert? nfceContingencyAlert(LocalDatabase database, DateTime now,
 }
 
 /// Transmite as notas em contingência (e as que ficaram pendentes sem resposta) quando a Sefaz
-/// volta a responder. Roda depois de cada sincronização; uma rodada por vez.
+/// volta a responder. Roda depois de cada sincronização; uma rodada por vez. Vale também para a
+/// NF-e de venda (modelo 55) que ficou pendente, nos endereços da NF-e.
 class NfceRetransmitter {
   NfceRetransmitter({
     required this.database,
@@ -45,8 +46,12 @@ class NfceRetransmitter {
     required this.sefaz,
     required this.terminalId,
     this.logger,
+    this.onNfeAuthorized,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now;
+
+  /// NF-e de venda autorizada depois: o caixa imprime o DANFE A4.
+  final Future<void> Function(LocalNfce nfe)? onNfeAuthorized;
 
   final LocalDatabase database;
   final NfceCredentialService credentials;
@@ -77,28 +82,32 @@ class NfceRetransmitter {
         final signed = nfce.xml;
         // Primeiro consulta: a nota pode já estar na Sefaz (resposta perdida, ou a central
         // reenviou) ou ter sido cancelada pela retaguarda. Só envia o que a Sefaz não tem.
-        var result = await sefaz.consult(accessKey: nfce.accessKey, signedNfe: signed, uf: uf, environment: nfce.environment, credentials: opened);
+        final model = nfce.model;
+        var result = await sefaz.consult(
+          accessKey: nfce.accessKey, signedNfe: signed, uf: uf, environment: nfce.environment, credentials: opened, model: model,
+        );
         if (result is SefazNotFound) {
-          result = await sefaz.authorize(signedNfe: signed, uf: uf, environment: nfce.environment, credentials: opened);
+          result = await sefaz.authorize(signedNfe: signed, uf: uf, environment: nfce.environment, credentials: opened, model: model);
           if (result is SefazDuplicate) {
-            result = await sefaz.consult(accessKey: nfce.accessKey, signedNfe: signed, uf: uf, environment: nfce.environment, credentials: opened);
+            result = await sefaz.consult(
+              accessKey: nfce.accessKey, signedNfe: signed, uf: uf, environment: nfce.environment, credentials: opened, model: model,
+            );
           }
         }
         final now = _clock();
         switch (result) {
           case SefazAuthorized():
-            database.updateNfce(
-              nfce.copyWith(
-                status: 'authorized',
-                protocol: result.protocol,
-                statusCode: result.statusCode,
-                reason: result.reason,
-                xml: result.procXml,
-                authorizedAt: result.authorizedAt,
-              ),
-              now: now,
+            final authorized = nfce.copyWith(
+              status: 'authorized',
+              protocol: result.protocol,
+              statusCode: result.statusCode,
+              reason: result.reason,
+              xml: result.procXml,
+              authorizedAt: result.authorizedAt,
             );
+            database.updateNfce(authorized, now: now);
             answered += 1;
+            if (authorized.isNfe) await onNfeAuthorized?.call(authorized);
             logger?.info('NFC-e transmitida e autorizada', fields: {'number': nfce.number, 'emission_type': nfce.emissionType});
           case SefazCanceled():
             database.updateNfce(nfce.copyWith(status: 'canceled', statusCode: result.statusCode, reason: result.reason), now: now);

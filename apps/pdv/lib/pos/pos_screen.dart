@@ -1533,10 +1533,32 @@ class _PaymentPanelState extends State<_PaymentPanel> {
                 key: Key('overpaid'),
               ),
             const SizedBox(height: 12),
+            // Cliente PJ com cadastro completo: o operador escolhe entre NFC-e e NF-e (A4).
+            if (controller.nfeAvailable) ...[
+              SegmentedButton<String>(
+                key: const Key('fiscal-model'),
+                segments: const [
+                  ButtonSegment(value: '65', label: Text('NFC-e (cupom)')),
+                  ButtonSegment(value: '55', label: Text('NF-e (A4)')),
+                ],
+                selected: {cart.fiscalModel},
+                onSelectionChanged: controller.busy ? null : (value) => controller.setFiscalModel(value.first),
+              ),
+              if (cart.fiscalModel == '55')
+                const Text(
+                  'A NF-e precisa de internet: sem a Sefaz, a venda continua aberta.',
+                  key: Key('fiscal-model-hint'),
+                ),
+              const SizedBox(height: 8),
+            ],
             FilledButton(
               key: const Key('finish'),
               onPressed: ready && !controller.busy ? controller.finish : null,
-              child: Text(controller.busy ? 'Gravando...' : 'Finalizar venda'),
+              child: Text(
+                controller.busy
+                    ? (cart.fiscalModel == '55' ? 'Enviando a NF-e...' : 'Gravando...')
+                    : (cart.fiscalModel == '55' ? 'Finalizar com NF-e' : 'Finalizar venda'),
+              ),
             ),
             TextButton(
               onPressed: controller.backToItems,

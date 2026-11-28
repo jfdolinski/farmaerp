@@ -27,6 +27,11 @@ class ErrorDisplay {
   final String action;
   final String reference;
   final bool retryable;
+
+  /// O mesmo erro com um motivo que o operador precisa ver (como o da recusa da Sefaz, que diz o que
+  /// corrigir). Nunca com dados pessoais.
+  ErrorDisplay withDetail(String detail) =>
+      ErrorDisplay(message: '$message $detail', action: action, reference: reference, retryable: retryable);
 }
 
 /// Exemplo: `Código FA203 · Ref. a1b2c3d4`, para o operador informar ao suporte.

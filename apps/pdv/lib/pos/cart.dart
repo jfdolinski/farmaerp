@@ -193,6 +193,9 @@ class Cart {
   String? quoteId;
   String? quoteCode;
 
+  /// Documento fiscal da venda: 65 NFC-e (cupom) ou 55 NF-e (DANFE A4, cliente PJ).
+  String fiscalModel = '65';
+
   /// Quanto deste produto já está na venda.
   int quantityOf(String productId) =>
       lines.where((line) => line.product.id == productId).fold(0, (sum, line) => sum + line.quantityMilli);
@@ -257,6 +260,7 @@ class Cart {
     seller = null;
     quoteId = null;
     quoteCode = null;
+    fiscalModel = '65';
   }
 }
 
@@ -371,7 +375,7 @@ SaleDraft buildSale({
       'seller_id': cart.seller?.id,
       'quote_id': cart.quoteId,
       'sold_at': now.toUtc().toIso8601String(),
-      'fiscal_model': '65',
+      'fiscal_model': cart.fiscalModel,
       'items': items,
       'payments': payments,
       'subtotal': money(cart.subtotalCents),

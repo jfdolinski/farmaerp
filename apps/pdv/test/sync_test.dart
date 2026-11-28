@@ -99,7 +99,7 @@ void main() {
 
   group('banco local', () {
     test('cria o esquema uma vez e guarda UUID em 16 bytes', () {
-      expect(database.schemaVersion, 21);
+      expect(database.schemaVersion, 22);
       expect(uuidBytes(dipirona), hasLength(16));
       expect(uuidText(uuidBytes(dipirona)), dipirona);
       expect(toCents(12.9), 1290);

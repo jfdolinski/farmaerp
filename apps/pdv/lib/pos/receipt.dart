@@ -82,7 +82,7 @@ List<ReceiptLine> buildReceipt({
     ReceiptLine('${branch['name'] ?? ''} · CNPJ ${_cnpj(branch['cnpj'] as String?)}', center: true),
     if (address.isNotEmpty) for (final line in _wrap(address)) ReceiptLine(line, center: true),
     const ReceiptLine(''),
-    if (nfce != null && nfce.printable) ...[
+    if (nfce != null && nfce.printable && !nfce.isNfe) ...[
       const ReceiptLine('DANFE NFC-e', bold: true, center: true),
       for (final line in _wrap('Documento Auxiliar da Nota Fiscal de Consumidor Eletrônica')) ReceiptLine(line, center: true),
     ] else ...[
@@ -154,7 +154,8 @@ List<ReceiptLine> buildReceipt({
       const ReceiptLine('Reconheço a compra no crediário.', center: true),
       const ReceiptLine(''),
     ],
-    if (nfce != null && nfce.printable) ...nfceReceiptLines(nfce, customer: customer)
+    if (nfce != null && nfce.isNfe) ...nfeReceiptLines(nfce)
+    else if (nfce != null && nfce.printable) ...nfceReceiptLines(nfce, customer: customer)
     else
       const ReceiptLine('Nota fiscal pendente de emissão.', center: true),
     const ReceiptLine('Obrigado pela preferência!', center: true),
@@ -162,6 +163,20 @@ List<ReceiptLine> buildReceipt({
 }
 
 /// Parte fiscal do DANFE NFC-e: número, série, protocolo, consulta pela chave e o QR Code.
+/// NF-e de venda (modelo 55): o documento fiscal é o DANFE A4; o cupom só diz qual é a nota.
+List<ReceiptLine> nfeReceiptLines(LocalNfce nfe) {
+  final key = nfe.accessKey.replaceAllMapped(RegExp(r'(\d{4})(?=\d)'), (match) => '${match[1]} ');
+  return [
+    ReceiptLine('NF-e nº ${nfe.number} Série ${nfe.series}', bold: true, center: true),
+    for (final line in _wrap(key)) ReceiptLine(line, center: true),
+    if (nfe.environment == 2) const ReceiptLine('EMITIDA EM HOMOLOGAÇÃO - SEM VALOR FISCAL', center: true),
+    ReceiptLine(
+      nfe.authorized ? 'Documento fiscal: DANFE em folha A4.' : 'NF-e enviada à Sefaz; aguardando a autorização.',
+      center: true,
+    ),
+  ];
+}
+
 List<ReceiptLine> nfceReceiptLines(LocalNfce nfce, {SaleCustomer? customer}) {
   String two(int value) => value.toString().padLeft(2, '0');
   String moment(DateTime value) {
