@@ -32,6 +32,15 @@ export class CatalogSyncService implements OnApplicationBootstrap, OnModuleDestr
   private url: string | null = catalogUrl();
   private fetcher: Fetcher = fetch;
   private imagesRunning = false;
+
+  /**
+   * Chave salva começa a cópia na hora (e as imagens e a tributação depois), sem esperar a próxima
+   * hora. Desligada com CATALOG_WORKER=off, como a rotina; os testes ligam quando precisam.
+   */
+  startAfterKey = process.env.CATALOG_WORKER !== 'off';
+
+  /** Última rodada começada por uma chave salva (para os testes esperarem). */
+  afterKey: Promise<void> = Promise.resolve();
   private taxesRunning = false;
 
   constructor(
@@ -92,7 +101,19 @@ export class CatalogSyncService implements OnApplicationBootstrap, OnModuleDestr
     await this.database.withContext((db) =>
       db.query('SELECT app.set_branch_catalog_key($1, $2, $3)', [branchId, seal(Buffer.from(key, 'utf8'), keyContext(branchId)), keyPrefix]),
     );
+    if (this.startAfterKey) this.afterKey = this.refreshAll();
     return { keyPrefix };
+  }
+
+  /** Cópia, imagens e tributação, uma depois da outra, em segundo plano (falha fica na situação da cópia). */
+  private async refreshAll(): Promise<void> {
+    try {
+      await this.sync('manual');
+      await this.syncImages();
+      await this.syncTaxes();
+    } catch (error) {
+      this.logger.pino.warn({ context: 'CatalogSyncService', err: error }, 'Atualização do Catálogo depois da chave falhou');
+    }
   }
 
   // ===== Cópia =====

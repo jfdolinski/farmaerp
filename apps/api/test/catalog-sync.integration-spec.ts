@@ -284,6 +284,22 @@ describe('cópia do Catálogo externo contra o banco real', () => {
     expect((await admin('get', `/admin/fiscal/branches/${CENTRO}/catalog-tax-problems`).expect(200)).body).toEqual([]);
   });
 
+  it('salvar a chave da filial começa a cópia na hora, sem esperar a próxima hora', async () => {
+    version += 1;
+    service.startAfterKey = true;
+    try {
+      const before = requests.length;
+      await admin('put', `/admin/catalog-keys/${CENTRO}`).send({ key: KEY_CENTRO }).expect(200);
+      await service.afterKey;
+      const copies = requests.slice(before).filter((r) => r.path === '/api/v1/catalog.json');
+      expect(copies.length).toBeGreaterThanOrEqual(1);
+      const status = (await admin('get', '/platform/catalog-sync').expect(200)).body as Json;
+      expect(status.runs.find((r: Json) => r.status === 'updated')).toBeDefined();
+    } finally {
+      service.startAfterKey = false;
+    }
+  });
+
   it('"Atualizar agora" começa a verificação e responde na hora', async () => {
     version += 1;
     expect((await admin('post', '/platform/catalog-sync/run').expect(202)).body).toEqual({ started: true });

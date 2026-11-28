@@ -13,6 +13,7 @@ export default defineConfig({
     env: {
       APP_ENV: 'development',
       DFE_WORKER: 'off',
+      CATALOG_WORKER: 'off',
       DB_NAME: 'farmaerp_integration',
       TERMINAL_TOKEN_SECRET: 'segredo-de-teste-com-mais-de-32-caracteres',
       FISCAL_ENCRYPTION_KEY: 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=',
