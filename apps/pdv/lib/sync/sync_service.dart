@@ -33,10 +33,38 @@ class SyncService extends ChangeNotifier {
   /// Itens da outbox esperando envio.
   int get outboxPending => database.outboxPending;
 
-  /// Sobe a outbox e depois desce o que mudou. Erros da API sobem para quem chamou.
-  Future<void> run(String accessToken) async {
+  /// Chamado quando a cópia local foi refeita por ser de outro terminal (ex.: tirar o operador da tela).
+  VoidCallback? onLocalReset;
+
+  /// Aviso para a tela de carga quando a cópia local foi refeita (null se não foi).
+  String? resetNotice;
+
+  /// Sobe a outbox e depois desce o que mudou. Erros da API sobem para quem chamou. Com [terminalId],
+  /// antes de tudo liga a cópia local a ele (cópia de outro terminal é refeita, ver
+  /// [LocalDatabase.bindTerminal]).
+  Future<void> run(String accessToken, {String? terminalId}) async {
+    if (terminalId != null) bindTerminal(terminalId);
     await push(accessToken);
     await pull(accessToken);
+  }
+
+  /// Liga a cópia local ao terminal pareado. Se ela era de outro terminal, foi limpa: a carga
+  /// inteira recomeça, o operador sai e a tela de carga avisa.
+  void bindTerminal(String terminalId) {
+    final previous = database.dataTerminalId;
+    final result = database.bindTerminal(terminalId, now: _clock());
+    if (result.binding != TerminalBinding.reset) return;
+    // Aviso, sem dados pessoais: só os terminais e a contagem do que foi arquivado.
+    logger?.warn(
+      'Cópia local de outro terminal: arquivada e refeita',
+      fields: {'previous_terminal_id': previous, 'terminal_id': terminalId, 'archived': result.archived},
+    );
+    resetNotice = result.archived > 0
+        ? 'Este caixa foi pareado de novo. Os dados do pareamento anterior foram guardados à parte '
+              '(${result.archived} itens não enviados ou notas fiscais) e a cópia da loja está sendo baixada de novo.'
+        : 'Este caixa foi pareado de novo. A cópia da loja está sendo baixada de novo.';
+    onLocalReset?.call();
+    notifyListeners();
   }
 
   bool _pushing = false;

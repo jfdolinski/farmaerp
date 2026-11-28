@@ -235,6 +235,8 @@ Future<void> main() async {
     logger: logger,
   );
   posRef = pos;
+  // Cópia local refeita (o caixa foi pareado de novo): ninguém fica na tela com dados de antes.
+  controller.sync?.onLocalReset = pos.logout;
   // Rosto: por enquanto só no Windows (no Linux, PIN e liberação do gerente).
   final face = Platform.isWindows ? FaceService(camera: LiteFaceCamera.new, engine: OnnxFaceEngine.open) : null;
   pos.face = face;
