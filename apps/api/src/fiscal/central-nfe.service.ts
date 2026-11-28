@@ -9,6 +9,7 @@ import { nfeAuthorizationUrl, nfeSvcAuthorizationUrl } from '../sefaz/nfe-sefaz.
 import { sefazEndpoints, sefazEnvironment } from '../sefaz/sefaz-config.js';
 import { ClientCertificate, notReached, postSoap } from '../sefaz/soap.js';
 import { signingMaterial } from './certificate.js';
+import { EventContext, NfceActionsService } from './nfce-actions.service.js';
 import { open } from './secret-box.js';
 
 interface Prepared {
@@ -25,7 +26,7 @@ interface Sealed {
   encrypted_password: Buffer | null;
 }
 
-export type CentralNfeStatus = 'pending' | 'authorized' | 'rejected';
+export type CentralNfeStatus = 'pending' | 'authorized' | 'rejected' | 'canceled';
 
 /** Motivo da contingência SVC (xJust): o mesmo do caixa. */
 const CONTINGENCY_REASON = 'Sefaz da UF sem comunicacao no momento da emissao';
@@ -71,7 +72,28 @@ export class CentralNfeService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(AppLogger) private readonly logger: AppLogger,
+    @Inject(NfceActionsService) private readonly actions: NfceActionsService,
   ) {}
+
+  /**
+   * Cancela a NF-e da central na Sefaz (até 24 horas da autorização; o banco confere). Só a nota: a
+   * devolução ou a transferência fica, e pode ganhar uma NF-e nova. Pedido repetido de uma nota já
+   * cancelada responde que está feito, sem ir à Sefaz.
+   */
+  async cancel(id: string, reason: string): Promise<{ status: CentralNfeStatus; already?: boolean; sefaz?: string }> {
+    const context = await this.database.withContext(async (client) =>
+      (await client.query<EventContext & { status: string }>('SELECT * FROM app.central_nfe_cancel_context($1)', [id])).rows[0],
+    );
+    if (context.status === 'canceled') return { status: 'canceled', already: true };
+    const result = await this.actions.sendCancel(context, reason);
+    const status = await this.database.withContext(async (client) =>
+      (await client.query<{ s: CentralNfeStatus }>('SELECT app.central_nfe_cancel_register($1, $2::jsonb) AS s', [id, JSON.stringify({
+        reason, protocol: result.protocol, status_code: result.status, xml: result.xml, registered_at: result.registeredAt,
+      })])).rows[0].s,
+    );
+    this.logger.pino.info({ context: 'CentralNfeService', documentId: id }, 'NF-e da central cancelada');
+    return { status, sefaz: result.sefaz };
+  }
 
   private certificate(row: Sealed | undefined): ClientCertificate {
     if (!row?.encrypted_pfx || !row.encrypted_password) throw new AppError('FA943');

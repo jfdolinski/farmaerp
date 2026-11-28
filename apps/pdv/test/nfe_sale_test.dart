@@ -141,7 +141,12 @@ void main() {
 
   setUpAll(() async => pin = await hashFor('2468'));
 
-  Future<PosController> pos(SefazTransport transport, {bool withNfeSeries = true}) async {
+  Future<PosController> pos(
+    SefazTransport transport, {
+    bool withNfeSeries = true,
+    DateTime Function()? clock,
+    Future<Map<String, dynamic>> Function(String documentId, String reason, String supervisorId)? cancelNfce,
+  }) async {
     database = await _seeded(pin, withNfeSeries: withNfeSeries);
     addTearDown(database.close);
     final store = _Store()..values['terminal_fiscal_seed'] = _fixture['seed'] as String;
@@ -162,6 +167,8 @@ void main() {
       terminalNumber: () => 1,
       customers: CustomerService(api: _Api(), database: database, accessToken: () async => 't'),
       danfePrinter: danfe,
+      clock: clock,
+      cancelNfce: cancelNfce,
     );
     await controller.login('3', '2468');
     controller.openShift(0);
@@ -289,6 +296,23 @@ void main() {
       expect(database.nextFiscalNumber('55'), (series: 1, number: 2));
       expect(database.nextFiscalNumber('65'), (series: 1, number: 42));
       expect(controller.cart.fiscalModel, '65');
+    });
+
+    test('cancelar a última venda com NF-e: oferece por 24 horas (a NFC-e, só 30 minutos)', () async {
+      DateTime? now;
+      final controller = await pos(
+        FakeTransport(() => response()),
+        clock: () => now ?? DateTime.now(),
+        cancelNfce: (documentId, reason, supervisorId) async => {'cash_refund': 'same_session'},
+      );
+      await ring(controller, company);
+      await controller.finish();
+      final nfe = database.nfceOfSale(controller.lastSale!.saleId!)!;
+      expect(nfe.isNfe, isTrue);
+      now = nfe.authorizedAt!.add(const Duration(hours: 23));
+      expect(controller.cancelableNfce?.id, nfe.id);
+      now = nfe.authorizedAt!.add(const Duration(hours: 24, minutes: 1));
+      expect(controller.cancelableNfce, isNull);
     });
 
     test('sem comunicação com a Sefaz: a venda continua aberta, nada é gravado e o número não é gasto', () async {

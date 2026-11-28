@@ -1015,7 +1015,7 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
   'FA786': ErrorCatalogEntry(
     code: 'FA786',
     message: 'O prazo para cancelar esta NF-e já passou.',
-    action: 'O cancelamento da NF-e vale até 24 horas depois da autorização. Para desfazer a venda, faça a devolução.',
+    action: 'O cancelamento da NF-e vale até 24 horas depois da autorização. Depois disso, a operação se desfaz por devolução.',
     retryable: false,
   ),
   'FA787': ErrorCatalogEntry(

@@ -19,7 +19,7 @@ function optionalDay(value?: string): string | null {
 }
 
 /** Justificativa da Sefaz: de 15 a 255 letras. */
-function reasonOf(body: Record<string, unknown>): string {
+export function reasonOf(body: Record<string, unknown>): string {
   const reason = requireText(body, 'reason', 255).trim();
   if (reason.length < 15) throw new AppError('FA005');
   return reason;

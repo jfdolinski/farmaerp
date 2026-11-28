@@ -2203,14 +2203,18 @@ class PosController extends ChangeNotifier {
   /// Prazo do cancelamento da NFC-e (o mesmo da central).
   static const cancelWindow = Duration(minutes: 30);
 
-  /// NFC-e autorizada da última venda, ainda no prazo de cancelar. Null quando não dá.
+  /// Prazo do cancelamento da NF-e de venda (o mesmo da central).
+  static const nfeCancelWindow = Duration(hours: 24);
+
+  /// Nota autorizada da última venda (NFC-e ou NF-e), ainda no prazo de cancelar. Null quando não dá.
   LocalNfce? get cancelableNfce {
     final sale = lastSale;
     if (quoteMode || sale == null || sale.saleId == null || lastSaleCanceled || cancelNfce == null) return null;
     final document = database.nfceOfSale(sale.saleId!);
     final authorizedAt = document?.authorizedAt;
     if (document == null || document.status != 'authorized' || authorizedAt == null) return null;
-    return _clock().difference(authorizedAt) < cancelWindow ? document : null;
+    final window = document.isNfe ? nfeCancelWindow : cancelWindow;
+    return _clock().difference(authorizedAt) < window ? document : null;
   }
 
   /// Cancela a última venda: o supervisor (outra pessoa, com "Cancelar NFC-e") libera no caixa e a

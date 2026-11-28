@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { ErrorNotice } from "../error-notice";
+import { CentralCancelForm } from "../nfe-central/cancel-form";
 import styles from "../terminais/page.module.css";
 import { emitTransferNfe, TransferNfeState } from "./actions";
 
@@ -13,10 +14,13 @@ export interface TransferInfo {
     id: string;
     series: number;
     number: number;
-    status: "pending" | "authorized" | "rejected";
+    status: "pending" | "authorized" | "rejected" | "canceled";
     status_code: string | null;
     reason: string | null;
     authorized_at: string | null;
+    cancel_reason?: string | null;
+    /** Até quando a autorizada pode ser cancelada (24 horas); null fora do prazo. */
+    cancelable_until?: string | null;
   } | null;
 }
 
@@ -45,6 +49,20 @@ export function TransferNfeCell({ transfer, reversed }: { transfer: TransferInfo
         <span className={styles.warning}>
           Recusada pela Sefaz{nfe.status_code && ` (${nfe.status_code})`}: {nfe.reason ?? "sem motivo informado"}
         </span>
+      )}
+      {nfe?.status === "canceled" && (
+        <>
+          <span className={styles.warning}>
+            Cancelada · nº {nfe.number} série {nfe.series}
+            {nfe.cancel_reason && <small className={styles.hint}> · {nfe.cancel_reason}</small>}
+          </span>
+          <span>
+            <a href={`/nfe-central/${nfe.id}/xml`}>XML</a> · <a href={`/nfe-central/${nfe.id}/cancelamento`}>XML do cancelamento</a>
+          </span>
+        </>
+      )}
+      {transfer.can_issue_nfe && nfe?.status === "authorized" && nfe.cancelable_until && (
+        <CentralCancelForm id={nfe.id} until={nfe.cancelable_until} next="/estoque?aba=movimentacoes" />
       )}
       {transfer.can_issue_nfe && !reversed && nfe?.status !== "authorized" && (
         <form action={action}>

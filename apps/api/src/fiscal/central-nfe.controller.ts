@@ -1,8 +1,9 @@
-import { Body as RequestBody, Controller, Get, HttpCode, Inject, Param, Patch, Post, Res, UseGuards } from '@nestjs/common';
+import { Body as RequestBody, Controller, Get, HttpCode, Inject, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
 import { buildDanfe } from '@farmaerp/fiscal-js';
 import type { Response } from 'express';
 import { SessionGuard } from '../auth/session.guard.js';
 import { asBody, requireUuid } from '../common/parse.js';
+import { reasonOf } from './fiscal-documents.controller.js';
 import { DatabaseService } from '../database.service.js';
 import { AppError } from '../observability/app-error.js';
 import { CentralNfeService } from './central-nfe.service.js';
@@ -39,10 +40,27 @@ export class CentralNfeController {
     return file;
   }
 
+  /** XML da nota; com kind=cancel, o do evento de cancelamento. */
   @Get('central-nfe/:id/xml')
-  async xml(@Param('id') id: string, @Res() response: Response) {
+  async xml(@Param('id') id: string, @Query('kind') kind: string | undefined, @Res() response: Response) {
+    if (kind === 'cancel') {
+      const documentId = requireUuid(id);
+      const event = await this.database.withContext(async (client) =>
+        (await client.query<{ access_key: string; xml: string }>('SELECT * FROM app.central_nfe_cancel_xml($1)', [documentId])).rows[0],
+      );
+      if (!event) throw new AppError('FA006');
+      response.status(200).type('application/xml; charset=utf-8').attachment(`Cancelamento-NFe-${event.access_key}.xml`).send(event.xml);
+      return;
+    }
     const file = await this.file(id);
     response.status(200).type('application/xml; charset=utf-8').attachment(`NFe-${file.access_key}.xml`).send(file.xml);
+  }
+
+  /** Cancela a NF-e da central (devolução ou transferência) na Sefaz: só a nota. */
+  @Post('central-nfe/:id/cancel')
+  @HttpCode(200)
+  cancel(@Param('id') id: string, @RequestBody() rawBody: unknown) {
+    return this.nfe.cancel(requireUuid(id), reasonOf(asBody(rawBody)));
   }
 
   /** Padrões fiscais da NF-e de devolução de cada filial que a pessoa vê no fiscal. */

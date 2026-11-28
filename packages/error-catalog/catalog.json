@@ -1858,7 +1858,11 @@
       "purchase_return_tax_setting_branch_key",
       "central_nfe_access_key_key",
       "central_nfe_number_key",
-      "central_nfe_emission_type_check"
+      "central_nfe_emission_type_check",
+      "central_nfe_cancel_reason_check",
+      "central_nfe_cancel_protocol_check",
+      "central_nfe_cancel_xml_check",
+      "central_nfe_canceled_check"
     ]
   },
   "FA932": {
@@ -4077,7 +4081,7 @@
   },
   "FA786": {
     "message": "O prazo para cancelar esta NF-e já passou.",
-    "action": "O cancelamento da NF-e vale até 24 horas depois da autorização. Para desfazer a venda, faça a devolução.",
+    "action": "O cancelamento da NF-e vale até 24 horas depois da autorização. Depois disso, a operação se desfaz por devolução.",
     "httpStatus": 422,
     "severity": "warning",
     "retryable": false,

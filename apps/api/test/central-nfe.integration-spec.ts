@@ -28,6 +28,8 @@ type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-ex
 
 const soap = (inner: string) =>
   `<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope"><soap:Body><nfeResultMsg>${inner}</nfeResultMsg></soap:Body></soap:Envelope>`;
+/** Hora atual no formato da Sefaz (a nota autorizada agora pode ser cancelada nas 24 horas). */
+const now = () => new Date().toISOString().replace(/\.\d{3}Z$/, '+00:00');
 const keyOf = (body: string) => /Id="NFe(\d{44})"/.exec(body)?.[1] ?? '';
 
 describe('NF-e de devolução emitida pela central', () => {
@@ -65,10 +67,18 @@ describe('NF-e de devolução emitida pela central', () => {
           return;
         }
         const key = keyOf(body);
+        if ((req.url ?? '').endsWith('/event')) {
+          res.writeHead(200, { 'Content-Type': 'application/soap+xml; charset=utf-8' });
+          res.end(soap('<retEnvEvento versao="1.00"><cStat>128</cStat><xMotivo>Lote processado</xMotivo><retEvento versao="1.00"><infEvento>'
+            + `<cStat>135</cStat><xMotivo>Evento registrado</xMotivo><nProt>135260000000904</nProt><dhRegEvento>${now()}</dhRegEvento>`
+            + '</infEvento></retEvento></retEnvEvento>'));
+          return;
+        }
         const answer = next === 'reject'
           ? '<retEnviNFe><cStat>104</cStat><xMotivo>Lote processado</xMotivo><protNFe versao="4.00"><infProt><cStat>539</cStat><xMotivo>Rejeicao: Duplicidade de NF-e com diferenca na Chave de Acesso</xMotivo></infProt></protNFe></retEnviNFe>'
           : `<retEnviNFe><cStat>104</cStat><xMotivo>Lote processado</xMotivo><protNFe versao="4.00"><infProt><tpAmb>2</tpAmb><chNFe>${key}</chNFe>`
-            + '<dhRecbto>2026-11-27T16:00:05-03:00</dhRecbto><nProt>135260000000777</nProt><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe></retEnviNFe>';
+            + `<dhRecbto>${now()}</dhRecbto><nProt>135260000000777</nProt>`
+            + '<cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe></retEnviNFe>';
         res.writeHead(200, { 'Content-Type': 'application/soap+xml; charset=utf-8' });
         res.end(soap(answer));
       });
@@ -156,6 +166,44 @@ describe('NF-e de devolução emitida pela central', () => {
     expect((danfe.body as Buffer).subarray(0, 5).toString()).toBe('%PDF-');
 
     expect(codeOf(await admin('post', `/purchase-returns/${returnId}/nfe`).expect(409))).toBe('FA773');
+  });
+
+  it('cancela a NF-e da devolução no evento da NF-e: só a nota; a devolução aceita NF-e nova', async () => {
+    const { invoiceId, returnId } = await returned();
+    const emitted = (await admin('post', `/purchase-returns/${returnId}/nfe`).expect(200)).body as Json;
+    expect(emitted.status).toBe('authorized');
+    let detail = (await admin('get', `/purchase-invoices/${invoiceId}`).expect(200)).body as Json;
+    expect((detail.return_nfes as Json[])[0].cancelable_until).toEqual(expect.any(String));
+    // Motivo curto e quem não emite: recusados antes da Sefaz.
+    const before = paths.length;
+    expect(codeOf(await admin('post', `/central-nfe/${emitted.id}/cancel`).send({ reason: 'curto' }).expect(422))).toBe('FA005');
+    expect(codeOf(await admin('post', `/central-nfe/${emitted.id}/cancel`, OPERATOR).send({ reason: 'Valores da devolução errados' }).expect(403))).toBe('FA002');
+    expect(paths.length).toBe(before);
+
+    const canceled = (await admin('post', `/central-nfe/${emitted.id}/cancel`).send({ reason: 'Valores da devolução errados' }).expect(200)).body as Json;
+    expect(canceled).toEqual({ status: 'canceled', sefaz: '135 Evento registrado' });
+    expect(paths.at(-1)).toBe('/event');
+    const event = received.at(-1)!;
+    expect(event).toContain('<tpEvento>110111</tpEvento>');
+    expect(event).toMatch(/<chNFe>\d{44}<\/chNFe>/);
+    expect(event).toContain('<nProt>135260000000777</nProt>');
+    expect(event).toContain('<xJust>Valores da devolução errados</xJust>');
+    // Repetido: já está feito, sem ir à Sefaz.
+    const again = paths.length;
+    expect((await admin('post', `/central-nfe/${emitted.id}/cancel`).send({ reason: 'Valores da devolução errados' }).expect(200)).body)
+      .toEqual({ status: 'canceled', already: true });
+    expect(paths.length).toBe(again);
+
+    detail = (await admin('get', `/purchase-invoices/${invoiceId}`).expect(200)).body as Json;
+    expect((detail.return_nfes as Json[])[0]).toMatchObject({ id: emitted.id, status: 'canceled', cancel_reason: 'Valores da devolução errados', cancelable_until: null });
+    const file = await admin('get', `/central-nfe/${emitted.id}/xml?kind=cancel`).expect(200);
+    expect(file.headers['content-disposition']).toContain('Cancelamento-NFe-');
+    expect(file.text).toContain('<procEventoNFe');
+    // A devolução continua e ganha NF-e nova, com outro número.
+    const second = (await admin('post', `/purchase-returns/${returnId}/nfe`).expect(200)).body as Json;
+    expect(second).toMatchObject({ status: 'authorized' });
+    expect(second.id).not.toBe(emitted.id);
+    expect(codeOf(await admin('get', `/central-nfe/${second.id}/xml?kind=cancel`).expect(404))).toBe('FA006');
   });
 
   it('sem resposta da Sefaz fica pendente e a próxima tentativa transmite o mesmo XML; recusada pode ser emitida de novo', async () => {

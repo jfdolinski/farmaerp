@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomInt } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  appPool, asUser, branchCnpj, closePools, createFixtures, hasCode, ownerPool, randomRoot,
+  appPool, asOwner, asUser, branchCnpj, closePools, createFixtures, hasCode, ownerPool, randomRoot,
 } from './helpers.mjs';
 
 let a;
@@ -312,6 +312,96 @@ describe('NF-e de devolução emitida pela central', () => {
     });
     await asUser(b.admin.id, async (client) => {
       await expectCode(client, () => client.query('SELECT app.central_nfe_contingency(gen_random_uuid(), $1, $2, 6::smallint)', ['1', '<x/>']), 'FA006');
+    });
+  });
+
+  it('cancelamento: só a autorizada, até 24 horas, por quem emite; a devolução fica e aceita NF-e nova', async () => {
+    const hoursAgo = (h) => new Date(Date.now() - h * 3_600_000).toISOString();
+    const procXml = '<nfeProc>' + 'c'.repeat(200) + '</nfeProc>';
+    const cancelEvent = {
+      reason: 'Valores da devolução errados', protocol: '135260000000901', status_code: '135',
+      xml: '<procEventoNFe>' + 'e'.repeat(200) + '</procEventoNFe>', registered_at: new Date().toISOString(),
+    };
+    await asUser(a.admin.id, async (client) => {
+      const r = await returned(client);
+      await client.query('SELECT app.update_supplier($1, $2::jsonb)', [r.supplierId, JSON.stringify(supplierAddress)]);
+      const prepared = await prepare(client, r.returnId);
+      const id = await store(client, prepared);
+      const context = (noteId) => client.query('SELECT * FROM app.central_nfe_cancel_context($1)', [noteId]).then((x) => x.rows);
+      const register = (noteId) => client.query('SELECT app.central_nfe_cancel_register($1, $2::jsonb) AS s', [noteId, JSON.stringify(cancelEvent)])
+        .then((x) => x.rows[0].s);
+      const list = async () => (await client.query('SELECT app.purchase_invoice_return_nfes($1) AS x', [r.invoiceId])).rows[0].x;
+      // Pendente não se cancela.
+      await expectCode(client, () => context(id), 'FA787');
+      await expectCode(client, () => register(id), 'FA787');
+      const authorizedAt = hoursAgo(23);
+      await result(client, id, { kind: 'authorized', protocol: '135260000000780', authorized_at: authorizedAt, xml: procXml, status_code: '100', reason: 'Autorizado' });
+      expect((await context(id))[0]).toMatchObject({
+        id, status: 'authorized', model: '55', emission_type: 1, protocol: '135260000000780', access_key: expect.stringMatching(/^\d{44}$/), state: 'SP',
+      });
+      expect(new Date((await list())[0].cancelable_until).getTime() - new Date(authorizedAt).getTime()).toBe(24 * 3_600_000);
+      // Outro grupo não acha; quem não emite NF-e na filial não cancela.
+      await as(client, b.admin);
+      await expectCode(client, () => context(id), 'FA006');
+      await expectCode(client, () => register(id), 'FA006');
+      await as(client, buyer);
+      await expectCode(client, () => context(id), 'FA002');
+      await expectCode(client, () => register(id), 'FA002');
+      await as(client, a.admin);
+      const stockBefore = await stockOf(client, r.prod.id);
+      expect(await register(id)).toBe('canceled');
+      const { rows: [saved] } = await client.query(
+        'SELECT status, protocol, xml, cancel_reason, cancel_protocol, canceled_by FROM central_nfe WHERE id = $1', [id],
+      );
+      expect(saved).toEqual({
+        status: 'canceled', protocol: '135260000000780', xml: procXml, cancel_reason: 'Valores da devolução errados',
+        cancel_protocol: '135260000000901', canceled_by: a.admin.id,
+      });
+      // Repetido: responde que está feito; o contexto volta como está.
+      expect(await register(id)).toBe('canceled');
+      expect((await context(id))[0]).toMatchObject({ status: 'canceled' });
+      // A devolução e o estoque ficam; a lista mostra a cancelada sem prazo.
+      expect(await stockOf(client, r.prod.id)).toBe(stockBefore);
+      expect((await list())[0]).toMatchObject({ id, status: 'canceled', cancel_reason: 'Valores da devolução errados', cancelable_until: null });
+      expect((await client.query('SELECT * FROM app.central_nfe_cancel_xml($1)', [id])).rows).toEqual([{ access_key: expect.any(String), xml: cancelEvent.xml }]);
+      // A devolução aceita uma NF-e nova, com outro número.
+      const again = await prepare(client, r.returnId);
+      expect(again.number).toBe(prepared.number + 1);
+      const second = await store(client, again);
+      expect((await client.query('SELECT * FROM app.central_nfe_cancel_xml($1)', [second])).rows).toEqual([]);
+      await expectCode(client, () => prepare(client, r.returnId), 'FA773');
+      // Fora das 24 horas: FA786.
+      const late = await returned(client);
+      await client.query('SELECT app.update_supplier($1, $2::jsonb)', [late.supplierId, JSON.stringify(supplierAddress)]);
+      const lateId = await store(client, await prepare(client, late.returnId));
+      await result(client, lateId, { kind: 'authorized', protocol: '135260000000781', authorized_at: hoursAgo(25), xml: procXml, status_code: '100', reason: 'Autorizado' });
+      await expectCode(client, () => context(lateId), 'FA786');
+      expect((await client.query('SELECT app.purchase_invoice_return_nfes($1) AS x', [late.invoiceId])).rows[0].x[0].cancelable_until).toBeNull();
+    });
+  });
+
+  it('cancelada não volta e o cancelamento só se grava na passagem da autorizada', async () => {
+    await asOwner(async (client) => {
+      await as(client, a.admin);
+      const r = await returned(client);
+      await client.query('SELECT app.update_supplier($1, $2::jsonb)', [r.supplierId, JSON.stringify(supplierAddress)]);
+      const id = await store(client, await prepare(client, r.returnId));
+      const update = (sql) => client.query(`UPDATE central_nfe SET ${sql} WHERE id = $1`, [id]);
+      const cancelSql = `status = 'canceled', cancel_reason = 'Motivo com mais de quinze letras', cancel_protocol = '135260000000902',
+        cancel_xml = repeat('e', 120), canceled_at = now(), canceled_by = '${a.admin.id}'`;
+      // Pendente não vira cancelada, nem ganha dados de cancelamento.
+      await expectCode(client, () => update(cancelSql + `, protocol = '135260000000782', authorized_at = now()`), 'FA772');
+      await expectCode(client, () => update("cancel_reason = 'Motivo com mais de quinze letras'"), 'FA772');
+      await update(`status = 'authorized', protocol = '135260000000782', authorized_at = now(), xml = repeat('p', 150)`);
+      // Autorizada sem os dados do cancelamento não vira cancelada.
+      await expectCode(client, () => update("status = 'canceled'"), 'FA931');
+      // Nem com outro XML.
+      await expectCode(client, () => update(cancelSql + ", xml = repeat('q', 150)"), 'FA772');
+      await update(cancelSql);
+      // Cancelada não volta nem muda o cancelamento.
+      await expectCode(client, () => update("status = 'authorized'"), 'FA772');
+      await expectCode(client, () => update("cancel_reason = 'Outro motivo com mais de quinze'"), 'FA772');
+      await expectCode(client, () => update("xml = repeat('r', 150)"), 'FA772');
     });
   });
 
