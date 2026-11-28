@@ -461,6 +461,24 @@ describe('notas fiscais pela central contra o banco real', () => {
       expect((await send('Inscrição estadual do destinatário: 110042490114').expect(200)).body).toMatchObject({ sequence: 1, status: '136' });
       expect(received.at(-1)).toMatchObject({ path: '/nfe/event', clientCertificate: true });
       expect(received.at(-1)!.body).toContain(`<infEvento Id="ID110110${nfe.key}01">`);
+      // Nota emitida na SVC: a carta vai à Sefaz da UF (a SVC não recebe CC-e).
+      const svcSale = uuidV7();
+      const svcNumber = base + numberOffset++;
+      expect((await push([{ kind: 'sale', payload: {
+        id: svcSale, number: svcNumber, cash_session_id: sessionId, operator_id: OPERATOR_ID, customer_id: DEMO_CUSTOMER, sold_at: new Date().toISOString(),
+        fiscal_model: '55', items: [{ id: uuidV7(), line: 1, product_id: DIPIRONA, quantity: 1, unit_price: 12.9, discount: 0, total: 12.9 }],
+        payments: [{ id: uuidV7(), method: 'cash', amount: 12.9, change: 0 }], subtotal: 12.9, discount_total: 0, total: 12.9,
+      } }]).expect(200)).body.results[0]).toMatchObject({ status: 'applied' });
+      const svcNfe = saleNfe({ series: series55, number: svcNumber });
+      const svcId = uuidV7();
+      expect((await push([{ kind: 'nfce', payload: {
+        id: svcId, model: '55', sale_id: svcSale, series: series55, number: svcNumber, access_key: svcNfe.key, environment: 2, emission_type: 6,
+        status: 'authorized', protocol: '135260000000127', status_code: '100', reason: 'Autorizado o uso da NF-e', xml: svcNfe.xml,
+        emitted_at: new Date().toISOString(), authorized_at: new Date().toISOString(),
+      } }]).expect(200)).body.results[0]).toMatchObject({ status: 'applied' });
+      await admin('post', `/nfe-corrections/sale/${svcId}`).send({ text: 'Inscrição estadual do destinatário: 110042490114' }).expect(200);
+      expect(received.at(-1)).toMatchObject({ path: '/nfe/event' });
+      expect(received.at(-1)!.body).toContain(`<chNFe>${svcNfe.key}</chNFe>`);
 
       // 573: a Sefaz já tinha a sequência 2 (outro envio); a consulta traz a carta dela, que fica registrada, e avisa.
       eventStatus = '573';

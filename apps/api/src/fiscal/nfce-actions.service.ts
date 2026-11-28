@@ -330,9 +330,11 @@ export class NfceActionsService implements OnApplicationBootstrap, OnModuleDestr
   /**
    * Envia a carta de correção (evento 110110) da NF-e 55. 573 (já existe evento com essa sequência,
    * por exemplo quando a resposta não voltou a tempo) consulta a chave e usa a carta que a Sefaz
-   * guardou com essa sequência, com o texto dela.
+   * guardou com essa sequência, com o texto dela. Vai sempre à Sefaz da UF, mesmo na nota emitida em
+   * contingência: a SVC não recebe CC-e (MOC 7.00, Anexo III - Manual de Contingência, item d).
    */
-  async sendCorrection(context: EventContext, sequence: number, text: string): Promise<CorrectionResult> {
+  async sendCorrection(document: EventContext, sequence: number, text: string): Promise<CorrectionResult> {
+    const context: EventContext = { ...document, emission_type: 1 };
     const certificate = this.certificate(context);
     const { envelope, event } = correctionEnvelope({
       environment: context.environment as 1 | 2, uf: context.state ?? '', cnpj: context.cnpj, accessKey: context.access_key,

@@ -194,8 +194,8 @@ describe('carta de correção', () => {
       + `<retEvento versao="1.00"><infEvento><cStat>${status}</cStat><xMotivo>Registrado</xMotivo><nProt>${protocol}</nProt>`
       + '<dhRegEvento>2026-11-28T10:00:02-03:00</dhRegEvento></infEvento></retEvento></procEventoNFe>';
     const answer = soap(`<retConsSitNFe versao="4.00"><cStat>100</cStat>${prot('100')}${proc('110111', 2, '135', '135260000000700', '')}`
-      + `${proc('110110', 1, '135', '135260000000701', 'Primeira')}${proc('110110', 2, '573', '', 'Recusada')}${proc('110110', 2, '136', '135260000000702', 'Rua &amp; fundos')}</retConsSitNFe>`);
-    expect(correctionFromStatus(answer, 2)).toMatchObject({ protocol: '135260000000702', status: '136', text: 'Rua & fundos', registeredAt: '2026-11-28T10:00:02-03:00' });
+      + `${proc('110110', 1, '135', '135260000000701', 'Primeira')}${proc('110110', 2, '573', '', 'Recusada')}${proc('110110', 2, '136', '135260000000702', 'Rua &amp; fundos &#231;&#xE3;')}</retConsSitNFe>`);
+    expect(correctionFromStatus(answer, 2)).toMatchObject({ protocol: '135260000000702', status: '136', text: 'Rua & fundos çã', registeredAt: '2026-11-28T10:00:02-03:00' });
     expect(correctionFromStatus(answer, 2)!.xml).toMatch(/^<\?xml version="1.0" encoding="UTF-8"\?><procEventoNFe/);
     expect(correctionFromStatus(answer, 1)).toMatchObject({ protocol: '135260000000701', text: 'Primeira' });
     expect(correctionFromStatus(answer, 3)).toBeNull();
