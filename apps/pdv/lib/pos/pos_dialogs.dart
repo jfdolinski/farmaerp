@@ -908,8 +908,8 @@ class _CancelSaleDialogState extends State<_CancelSaleDialog> {
         spacing: 10,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('A NFC-e é cancelada na Sefaz e a venda é desfeita (estoque, pagamentos, cashback e crediário). '
-              'Precisa de internet e da liberação de um supervisor.'),
+          Text('A ${(widget.controller.cancelableNfce?.isNfe ?? false) ? 'NF-e' : 'NFC-e'} é cancelada na Sefaz e a venda é desfeita '
+              '(estoque, pagamentos, cashback e crediário). Precisa de internet e da liberação de um supervisor.'),
           TextField(
             key: const Key('cancel-reason'),
             controller: _reason,

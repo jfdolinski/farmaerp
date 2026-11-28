@@ -384,4 +384,29 @@ describe('notas fiscais pela central contra o banco real', () => {
     expect(codeOf(await admin('get', `/fiscal-documents/${note.id}/danfe`).expect(404))).toBe('FA006');
     expect((await admin('get', `/fiscal-documents/${note.id}/xml`).expect(200)).headers['content-disposition']).toContain('NFCe-');
   });
+
+  it('o caixa cancela a NF-e de venda (55) com o supervisor: o evento vai ao serviço da NF-e e a venda é desfeita', async () => {
+    const saleId = uuidV7();
+    const number = base + numberOffset++;
+    expect((await push([{ kind: 'sale', payload: {
+      id: saleId, number, cash_session_id: sessionId, operator_id: OPERATOR_ID, customer_id: DEMO_CUSTOMER, sold_at: new Date().toISOString(), fiscal_model: '55',
+      items: [{ id: uuidV7(), line: 1, product_id: DIPIRONA, quantity: 1, unit_price: 12.9, discount: 0, total: 12.9 }],
+      payments: [{ id: uuidV7(), method: 'cash', amount: 12.9, change: 0 }], subtotal: 12.9, discount_total: 0, total: 12.9,
+    } }]).expect(200)).body.results[0]).toMatchObject({ status: 'applied' });
+    const nfe = saleNfe({ series: series55, number });
+    const id = uuidV7();
+    expect((await push([{ kind: 'nfce', payload: {
+      id, model: '55', sale_id: saleId, series: series55, number, access_key: nfe.key, environment: 2, emission_type: 1, status: 'authorized',
+      protocol: '135260000000125', status_code: '100', reason: 'Autorizado o uso da NF-e', xml: nfe.xml,
+      emitted_at: new Date().toISOString(), authorized_at: new Date().toISOString(),
+    } }]).expect(200)).body.results[0]).toMatchObject({ status: 'applied' });
+    const adminId = ((await request(server()).get('/auth/me').set('X-Forwarded-For', ip)
+      .set('Authorization', `Bearer ${sessions.get(ADMIN_EMAIL)}`).expect(200)).body as Json).userId as string;
+    const done = (await request(server()).post(`/terminals/fiscal-documents/${id}/cancel`).set('X-Forwarded-For', ip)
+      .set('Authorization', `Bearer ${token}`).send({ reason: 'Cliente pediu nota com outro CNPJ', supervisorId: adminId }).expect(200)).body as Json;
+    expect(done).toMatchObject({ cash_refund: 'same_session', sefaz: '135 Evento registrado' });
+    expect(received.at(-1)).toMatchObject({ path: '/nfe/event', clientCertificate: true });
+    expect(received.at(-1)!.body).toContain(`<chNFe>${nfe.key}</chNFe>`);
+    expect(((await admin('get', '/sales').expect(200)).body as Json[]).some((row) => row.id === saleId)).toBe(false);
+  });
 });

@@ -38,17 +38,30 @@ interface Sealed {
   emission_type?: number;
 }
 
-export interface DocumentContext extends Sealed {
+/** O que o evento de cancelamento precisa da nota: a chave, o protocolo e quem emitiu. */
+export interface EventContext extends Sealed {
+  access_key: string;
+  environment: number;
+  protocol: string | null;
+  cnpj: string;
+}
+
+export interface DocumentContext extends EventContext {
   id: string;
   branch_id: string;
   sale_id: string;
   status: string;
-  access_key: string;
-  environment: number;
-  protocol: string | null;
   xml: string;
   authorized_at: Date | null;
-  cnpj: string;
+}
+
+/** Cancelamento registrado na Sefaz (o evento com o protocolo dele). */
+export interface CancelResult {
+  protocol: string;
+  status: string;
+  xml: string;
+  registeredAt: string;
+  sefaz: string;
 }
 
 /** Resultado para o banco (app.fiscal_resend_result) e para a tela. */
@@ -266,11 +279,11 @@ export class NfceActionsService implements OnApplicationBootstrap, OnModuleDestr
   }
 
   /**
-   * Envia o evento de cancelamento. 573 (um pedido anterior já tinha chegado, por exemplo quando a
-   * resposta não voltou a tempo) consulta a chave e usa o evento que a Sefaz guardou, com o protocolo
-   * do cancelamento.
+   * Envia o evento de cancelamento (NFC-e, NF-e de venda ou NF-e da central). 573 (um pedido anterior
+   * já tinha chegado, por exemplo quando a resposta não voltou a tempo) consulta a chave e usa o
+   * evento que a Sefaz guardou, com o protocolo do cancelamento.
    */
-  private async sendCancel(context: DocumentContext, reason: string): Promise<{ protocol: string; status: string; xml: string; registeredAt: string; sefaz: string }> {
+  async sendCancel(context: EventContext, reason: string): Promise<CancelResult> {
     const certificate = this.certificate(context);
     const { envelope, event } = cancellationEnvelope({
       environment: context.environment as 1 | 2, uf: context.state ?? '', cnpj: context.cnpj, accessKey: context.access_key,

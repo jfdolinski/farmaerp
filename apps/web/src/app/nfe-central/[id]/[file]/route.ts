@@ -3,9 +3,10 @@ import { apiDownload } from "@/lib/api";
 const FILES: Record<string, { path: string; type: string; fallback: string }> = {
   xml: { path: "xml", type: "application/xml; charset=utf-8", fallback: "NFe.xml" },
   danfe: { path: "danfe", type: "application/pdf", fallback: "DANFE.pdf" },
+  cancelamento: { path: "xml?kind=cancel", type: "application/xml; charset=utf-8", fallback: "Cancelamento-NFe.xml" },
 };
 
-/** XML ou DANFE da NF-e emitida pela central (devolução ou transferência), repassados da API com a sessão de quem pediu. */
+/** XML, DANFE ou XML do cancelamento da NF-e emitida pela central (devolução ou transferência), repassados da API com a sessão de quem pediu. */
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string; file: string }> }) {
   const { id, file } = await params;
   const kind = FILES[file];

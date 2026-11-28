@@ -62,8 +62,11 @@ export function DocumentActions({ id, canResend }: { id: string; canResend: bool
   );
 }
 
-function remaining(until: string, now: number): string {
+/** Tempo até o fim do prazo: minutos e segundos, ou horas e minutos quando passa de uma hora. */
+export function remaining(until: string, now: number): string {
   const seconds = Math.max(0, Math.floor((new Date(until).getTime() - now) / 1000));
+  const hours = Math.floor(seconds / 3600);
+  if (hours > 0) return `${hours} h ${String(Math.floor((seconds % 3600) / 60)).padStart(2, "0")} min`;
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 

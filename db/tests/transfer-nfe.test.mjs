@@ -176,6 +176,16 @@ describe('NF-e de transferência entre filiais', () => {
       expect((await client.query('SELECT kind, transfer_group, purchase_return_id FROM central_nfe WHERE id = $1', [second])).rows)
         .toEqual([{ kind: 'transfer', transfer_group: id, purchase_return_id: null }]);
       await expectCode(client, () => prepare(client, id), 'FA776');
+      // Cancelada: a transferência fica e aceita NF-e nova; a lista mostra a mais nova.
+      expect(await client.query('SELECT app.central_nfe_cancel_register($1, $2::jsonb) AS s', [second, JSON.stringify({
+        reason: 'Quantidade transferida errada', protocol: '135260000000903', status_code: '135',
+        xml: '<procEventoNFe>' + 'e'.repeat(200) + '</procEventoNFe>', registered_at: new Date().toISOString(),
+      })]).then((x) => x.rows[0].s)).toBe('canceled');
+      expect((await client.query('SELECT app.transfer_nfes($1::uuid[]) AS x', [[id]])).rows[0].x[id])
+        .toMatchObject({ id: second, status: 'canceled', cancel_reason: 'Quantidade transferida errada', cancelable_until: null });
+      const third = await store(client, await prepare(client, id));
+      expect((await client.query('SELECT app.transfer_nfes($1::uuid[]) AS x', [[id]])).rows[0].x[id]).toMatchObject({ id: third, status: 'pending' });
+      await expectCode(client, () => prepare(client, id), 'FA776');
     });
   });
 

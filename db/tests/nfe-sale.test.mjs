@@ -268,7 +268,7 @@ describe('NF-e 55 do caixa na central', () => {
     await rejected({ ...doc, model: '65', series: series65 }, 'troca de modelo');
   });
 
-  it('pela central: cancela a NF-e 55 até 24 horas, reenvia e consulta; o caixa ainda não cancela', async () => {
+  it('pela central: cancela a NF-e 55 até 24 horas, reenvia e consulta', async () => {
     const hoursAgo = (h) => new Date(Date.now() - h * 3_600_000).toISOString();
     const authorized = async (at) => {
       const doc = nfe(await newSale(), { authorized_at: at, emitted_at: at });
@@ -291,9 +291,12 @@ describe('NF-e 55 do caixa na central', () => {
     await expect(context(pending, 'cancel')).rejects.toSatisfy(hasCode('FA787'));
     await expect(context(recent, 'resend')).rejects.toSatisfy(hasCode('FA787'));
     expect((await context(pending, 'resend'))[0]).toMatchObject({ model: '55', status: 'pending' });
-    // O caixa continua sem cancelar a NF-e (próxima etapa).
-    await expect(asTerminal(a.terminal1, 'SELECT * FROM app.terminal_cancel_context($1, $2)', [recent.id, a.admin.id]))
-      .rejects.toSatisfy(hasCode('FA780'));
+    // O caixa também: no prazo da NF-e, com os códigos dela.
+    const byTerminal = (doc) => asTerminal(a.terminal1, 'SELECT * FROM app.terminal_cancel_context($1, $2)', [doc.id, a.admin.id]);
+    expect((await byTerminal(recent))[0]).toMatchObject({ id: recent.id, model: '55', emission_type: 1 });
+    expect((await byTerminal(svc))[0]).toMatchObject({ model: '55', emission_type: 6 });
+    await expect(byTerminal(await authorized(hoursAgo(25)))).rejects.toSatisfy(hasCode('FA786'));
+    await expect(byTerminal(pending)).rejects.toSatisfy(hasCode('FA787'));
     // Outro grupo continua sem ver a nota.
     await expect(asUser(b.admin, "SELECT * FROM app.fiscal_action_context($1, 'consult')", [recent.id])).rejects.toSatisfy(hasCode('FA006'));
   });
@@ -330,6 +333,32 @@ describe('NF-e 55 do caixa na central', () => {
     expect(await saleGone(saleId)).toBe(false);
     expect((await ownerPool.query('SELECT status, cancel_note FROM fiscal_document WHERE id = $1', [doc.id])).rows[0])
       .toMatchObject({ status: 'canceled', cancel_note: expect.stringContaining('FA786') });
+  });
+
+  it('pelo caixa: o registro desfaz a venda no prazo de 24 horas (com folga); depois, a venda fica e vira aviso', async () => {
+    const event = () => JSON.stringify({
+      reason: 'Cliente pediu outra nota com outro CNPJ', protocol: '135260000000890', status_code: '135',
+      xml: `<procEventoNFe versao="1.00">${'e'.repeat(200)}</procEventoNFe>`, registered_at: new Date().toISOString(),
+    });
+    const authorized = async (minutesAgo) => {
+      const at = new Date(Date.now() - minutesAgo * 60_000).toISOString();
+      const saleId = await newSale();
+      const doc = nfe(saleId, { authorized_at: at, emitted_at: at });
+      expect(await push(a.terminal1, 'nfce', doc)).toMatchObject({ status: 'applied' });
+      return { doc, saleId };
+    };
+    const register = (doc) => asTerminal(a.terminal1, 'SELECT app.terminal_cancel_register($1, $2, $3::jsonb) AS r', [doc.id, a.admin.id, event()])
+      .then((r) => r[0].r);
+    const saleGone = async (id) => (await ownerPool.query('SELECT deleted_at FROM sale WHERE id = $1', [id])).rows[0].deleted_at !== null;
+    for (const minutes of [23 * 60, 24 * 60 + 2]) {
+      const { doc, saleId } = await authorized(minutes);
+      expect(await register(doc), String(minutes)).toMatchObject({ cash_refund: expect.any(String) });
+      expect(await saleGone(saleId)).toBe(true);
+    }
+    const { doc, saleId } = await authorized(24 * 60 + 10);
+    expect(await register(doc)).toEqual({ sale_kept: 'FA786' });
+    expect(await saleGone(saleId)).toBe(false);
+    expect(await register(doc)).toEqual({ already: true });
   });
 
   it('o reenvio automático da central não pega a NF-e 55 (fica com o caixa)', async () => {
