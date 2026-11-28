@@ -82,7 +82,7 @@ export class PbmService {
         })])).rows[0].r,
       );
       this.logger.pino.info({ context: 'PbmService', programId, authorizationId: registered.id, items: quote.items.length }, 'PBM autorizado');
-      return { ...registered, items: quote.items };
+      return { ...registered, externalId: quote.externalId, items: quote.items };
     } catch (error) {
       // O programa autorizou, mas o registro falhou: desfaz lá para não deixar benefício solto.
       await connector.undo(call, quote.externalId, 'Falha ao registrar na central').catch((cause: unknown) =>

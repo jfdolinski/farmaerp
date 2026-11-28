@@ -17,6 +17,7 @@ import 'credit.dart';
 import 'credit_dialogs.dart';
 import 'focus_kit.dart';
 import 'money.dart';
+import 'pbm_dialog.dart';
 import 'pos_controller.dart';
 import 'controlled_dialog.dart';
 import 'display_settings.dart';
@@ -667,6 +668,11 @@ class _SaleViewState extends State<_SaleView> {
         const SingleActivator(LogicalKeyboardKey.f11): () {
           if (!controller.quoteMode) _dialog(() => showCreditReceiptDialog(context, controller));
         },
+        const SingleActivator(LogicalKeyboardKey.f12): () {
+          if (!controller.quoteMode && !controller.paying && !controller.cart.isEmpty && controller.pbmAuthorize != null) {
+            _dialog(() => showPbmDialog(context, controller));
+          }
+        },
       },
       child: OverlayPortal(
         controller: _lock,
@@ -1036,6 +1042,28 @@ class _TotalsPanel extends StatelessWidget {
                 label: const Text('Receber crediário (F11)'),
               ),
             if (cart.quoteCode != null) Text('Orçamento ${cart.quoteCode}', key: const Key('cart-quote')),
+            // PBM: aplicar (com itens na venda) ou o que está aplicado, com a economia e como tirar.
+            if (!controller.quoteMode && controller.pbmAuthorize != null && cart.pbm == null && !cart.isEmpty)
+              OutlinedButton.icon(
+                key: const Key('pbm-open'),
+                onPressed: controller.busy ? null : () => dialog(() => showPbmDialog(context, controller)),
+                icon: const Icon(Icons.local_pharmacy_outlined),
+                label: const Text('PBM (F12)'),
+              ),
+            if (cart.pbm != null)
+              ListTile(
+                key: const Key('pbm-applied'),
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.local_pharmacy),
+                title: Text('PBM ${cart.pbm!.programName}'),
+                subtitle: Text('Economia de ${formatCents(cart.pbmBenefitCents)} · beneficiário ${cart.pbm!.beneficiaryMasked}'),
+                trailing: IconButton(
+                  key: const Key('pbm-remove'),
+                  tooltip: 'TIRAR O PBM',
+                  icon: const Icon(Icons.close),
+                  onPressed: controller.busy || cart.pbm!.confirmedSaleId != null ? null : controller.removePbm,
+                ),
+              ),
             const SizedBox(height: 8),
             if (controller.linesNeedingStockRelease.isNotEmpty)
               OutlinedButton.icon(

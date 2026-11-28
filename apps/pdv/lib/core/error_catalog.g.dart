@@ -1096,6 +1096,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Use outro nome ou altere o programa que já existe.',
     retryable: false,
   ),
+  'FA800': ErrorCatalogEntry(
+    code: 'FA800',
+    message: 'Este item está com o preço do PBM e não aceita outro desconto.',
+    action: 'Tire o PBM da venda se quiser dar outro desconto no item.',
+    retryable: false,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',
