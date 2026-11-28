@@ -27,7 +27,8 @@ interface TenantRow {
 
 const dateText = (value: string) => new Date(value).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
 const rootText = (root: string) => `${root.slice(0, 2)}.${root.slice(2, 5)}.${root.slice(5, 8)}`;
-const formatCnpj = (value: string) => value.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
+/** CNPJ com a pontuação; o alfanumérico tem letras nas 12 primeiras posições. */
+const formatCnpj = (value: string) => value.replace(/^([0-9A-Z]{2})([0-9A-Z]{3})([0-9A-Z]{3})([0-9A-Z]{4})(\d{2})$/, "$1.$2.$3/$4-$5");
 
 type SearchParams = Promise<{ aba?: string | string[]; cliente?: string | string[] }>;
 

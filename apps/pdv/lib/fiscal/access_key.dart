@@ -7,12 +7,16 @@ const ufCodes = <String, String>{
   'RJ': '33', 'SP': '35', 'PR': '41', 'SC': '42', 'RS': '43', 'MS': '50', 'MT': '51', 'GO': '52', 'DF': '53',
 };
 
-/// Dígito verificador da chave (módulo 11, pesos 2 a 9 da direita para a esquerda).
+/// Dígito verificador da chave (módulo 11, pesos 2 a 9 da direita para a esquerda). Cada caractere
+/// vale o código ASCII menos 48: o dígito vale ele mesmo e a letra do CNPJ alfanumérico, de 17 (A) em
+/// diante (NT Conjunta DFe 2025.001, item 5). Igual a app.is_valid_access_key na central.
 int accessKeyDigit(String first43) {
   var sum = 0;
   var weight = 2;
   for (var i = first43.length - 1; i >= 0; i -= 1) {
-    sum += int.parse(first43[i]) * weight;
+    final value = first43.codeUnitAt(i) - 48;
+    if (value < 0 || value > 42) throw ArgumentError('Caractere inválido na chave.');
+    sum += value * weight;
     weight = weight == 9 ? 2 : weight + 1;
   }
   final rest = sum % 11;
@@ -28,7 +32,8 @@ String randomNumericCode(int number, [Random? random]) {
   }
 }
 
-/// Chave de acesso de 44 dígitos: cUF, AAMM, CNPJ, modelo, série, número, tpEmis, cNF e DV.
+/// Chave de acesso de 44 posições: cUF, AAMM, CNPJ (com letras, se alfanumérico), modelo, série,
+/// número, tpEmis, cNF e DV.
 String accessKey({
   required String uf,
   required DateTime emittedAt,

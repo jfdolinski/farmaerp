@@ -131,6 +131,12 @@ class NfeDocument {
 
 String _digits(String? value) => (value ?? '').replaceAll(RegExp(r'\D'), '');
 
+/// CNPJ sem a pontuação, em maiúsculas: o alfanumérico mantém as letras.
+String _cnpj(String? value) => (value ?? '').replaceAll(RegExp(r'[^0-9A-Za-z]'), '').toUpperCase();
+
+/// Chave de acesso: o CNPJ (posições 7 a 18) pode ter letras (NT Conjunta DFe 2025.001).
+final _accessKeyFormat = RegExp(r'^\d{6}[0-9A-Z]{12}\d{26}$');
+
 /// Monta a NF-e modelo 55 (leiaute 4.00) e assina. Mesmo motor da NFC-e para itens e impostos.
 NfeDocument buildNfe(NfeInput input, SigningCredential credential) {
   final issuer = input.issuer;
@@ -150,9 +156,9 @@ NfeDocument buildNfe(NfeInput input, SigningCredential credential) {
   if (input.purpose != 1 && input.purpose != 4) throw FiscalException('FA726', 'Finalidade ${input.purpose} não atendida.');
   if (input.purpose == 4 && input.references.isEmpty) throw const FiscalException('FA726', 'Devolução sem a nota referenciada.');
   for (final reference in input.references) {
-    if (!RegExp(r'^\d{44}$').hasMatch(reference)) throw FiscalException('FA726', 'Chave referenciada inválida: $reference.');
+    if (!_accessKeyFormat.hasMatch(reference)) throw FiscalException('FA726', 'Chave referenciada inválida: $reference.');
   }
-  final cnpj = _digits(recipient.cnpj);
+  final cnpj = _cnpj(recipient.cnpj);
   final cpf = _digits(recipient.cpf);
   if ((cnpj.length == 14) == (cpf.length == 11)) throw const FiscalException('FA726', 'Destinatário precisa de CNPJ ou CPF (só um).');
   if (recipient.name.trim().isEmpty) throw const FiscalException('FA726', 'Destinatário sem nome.');

@@ -58,6 +58,7 @@ export function fileSize(value: number | string): string {
 }
 
 /** CNPJ com pontos, barra e traço. */
-export const formatCnpj = (value: string) => value.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
+/** CNPJ com a pontuação; o alfanumérico tem letras nas 12 primeiras posições. */
+export const formatCnpj = (value: string) => value.replace(/^([0-9A-Z]{2})([0-9A-Z]{3})([0-9A-Z]{3})([0-9A-Z]{4})(\d{2})$/, "$1.$2.$3/$4-$5");
 
 export const count = (value: number | undefined) => (value ?? 0).toLocaleString("pt-BR");
