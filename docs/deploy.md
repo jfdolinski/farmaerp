@@ -275,7 +275,7 @@ O Catálogo do FarmaERP é uma cópia do serviço catalogo-produtos. Cada filial
 1. No serviço `api`, em **Ambiente**, inclua `CATALOG_URL` com o endereço do Catálogo, sem barra no fim (por exemplo `https://catalogo.b6nhiy.easypanel.host`), e implante a API.
 2. No Catálogo, em **Empresas**, cadastre cada filial (pelo CNPJ dela) e gere a chave de acesso. Ela aparece uma vez só: copie na hora.
 3. Na retaguarda, em **Fiscal**, aba **Catálogo**, cole a chave de cada filial (quem cuida do certificado da filial). A chave é conferida no Catálogo antes de ser salva e fica cifrada com a `FISCAL_ENCRYPTION_KEY`; a tela mostra só o começo dela.
-4. A primeira verificação começa até 1 hora depois (ou na hora, pelo botão **Atualizar agora** em `/plataforma`, aba **Catálogo**, que também mostra as filiais sem chave).
+4. Ao salvar a chave, a cópia começa na hora (depois vêm as imagens e a tributação); daí em diante, de hora em hora. O botão **Atualizar agora** em `/plataforma`, aba **Catálogo**, faz o mesmo a qualquer momento, e a aba mostra as filiais sem chave.
 
 Sem `CATALOG_URL`, a ligação fica desligada e as telas avisam. Cada chamada com a chave conta na cobrança da filial no Catálogo: a verificação horária só baixa de novo quando o catálogo mudou (ETag), e as imagens (que não pedem chave) vêm só dos itens vinculados a algum produto. Trocar a `FISCAL_ENCRYPTION_KEY` obriga a cadastrar as chaves de novo. `CATALOG_WORKER=off` desliga só a rotina horária.
 
