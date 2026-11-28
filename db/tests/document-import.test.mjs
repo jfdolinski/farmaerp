@@ -27,6 +27,18 @@ function gtin() {
   return `${base}${(10 - (total % 10)) % 10}`;
 }
 const key = () => Array.from({ length: 44 }, () => randomInt(10)).join('');
+/** Chave com o CNPJ alfanumérico do exemplo da Receita (12ABC34501DE35) e o dígito por ASCII − 48. */
+function alfaKey() {
+  const first43 = `352611${'12ABC34501DE35'}65001${String(randomInt(1, 1e9)).padStart(9, '0')}1${String(randomInt(1e7, 1e8))}`;
+  let total = 0;
+  let weight = 2;
+  for (let i = first43.length - 1; i >= 0; i -= 1) {
+    total += (first43.charCodeAt(i) - 48) * weight;
+    weight = weight === 9 ? 2 : weight + 1;
+  }
+  const rest = total % 11;
+  return `${first43}${rest < 2 ? 0 : 11 - rest}`;
+}
 
 async function run(setup, sql, params = []) {
   const client = await appPool.connect();
@@ -233,5 +245,19 @@ describe('NFC-e importada', () => {
     expect((await ownerPool.query("SELECT count(*)::int AS n FROM sngpc_movement m JOIN stock_movement s ON s.id = m.stock_movement_id WHERE s.movement_type = 'import'")).rows[0].n).toBe(0);
     expect(await asUser(b.admin, 'SELECT id FROM v_imported_sale WHERE access_key = $1', [first.access_key])).toEqual([]);
     await expect(asUser(a.admin, 'SELECT xml FROM v_imported_sale LIMIT 1')).rejects.toThrow();
+  });
+});
+
+describe('CNPJ alfanumérico na chave (NT Conjunta DFe 2025.001)', () => {
+  it('a nota entra e a chave fica gravada; letra fora do CNPJ não; a falha guarda a chave para o relatório', async () => {
+    const alfa = note({ access_key: alfaKey() });
+    expect(await importNote(alfa)).toMatchObject({ result: 'imported', code: null });
+    expect((await ownerPool.query('SELECT count(*)::int AS n FROM imported_sale WHERE access_key = $1', [alfa.access_key])).rows[0].n).toBe(1);
+    const misplaced = `A${alfaKey().slice(1)}`;
+    expect(await importNote(note({ access_key: misplaced }))).toMatchObject({ result: 'failed', code: 'FA743' });
+    // A falha com chave com letras no lugar certo guarda a chave para o relatório.
+    const failedAlfa = alfaKey();
+    expect(await importNote(note({ access_key: failedAlfa, total: 'muito' }))).toMatchObject({ result: 'failed', code: 'FA743' });
+    expect((await ownerPool.query('SELECT count(*)::int AS n FROM document_import_note WHERE access_key = $1', [failedAlfa])).rows[0].n).toBe(1);
   });
 });

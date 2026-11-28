@@ -443,6 +443,10 @@ class _CustomerDialogState extends State<_CustomerDialog> {
         // CNPJ digitado na busca: o cadastro já abre como pessoa jurídica.
         _company = true;
         _cnpj.text = digits;
+      } else if (isValidCnpj(typed) && RegExp(r'^[0-9A-Za-z.\-/\s]+$').hasMatch(typed)) {
+        // CNPJ alfanumérico digitado na busca: também abre como pessoa jurídica.
+        _company = true;
+        _cnpj.text = typed.replaceAll(RegExp(r'[^0-9A-Za-z]'), '').toUpperCase();
       } else if (typed.isNotEmpty && digits.isEmpty) {
         _newName.text = typed;
       }
