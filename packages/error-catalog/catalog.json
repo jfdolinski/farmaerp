@@ -618,7 +618,9 @@
       "catalog_tax_fetch_item_hash_check",
       "catalog_tax_fetch_status_check",
       "catalog_tax_fetch_source_icms_check",
-      "catalog_tax_fetch_message_check"
+      "catalog_tax_fetch_message_check",
+      "catalog_product_brand_check",
+      "catalog_product_department_check"
     ]
   },
   "FA228": {

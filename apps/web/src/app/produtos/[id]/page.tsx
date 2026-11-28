@@ -48,6 +48,8 @@ interface ProductDetail extends ProductValues {
   images?: ProductImage[];
   active_ingredient: string | null;
   catalog_manufacturer: string | null;
+  catalog_brand: string | null;
+  catalog_department: string | null;
   ms_registration: string | null;
   controlled_class: string | null;
   ncm: string | null;
@@ -225,7 +227,9 @@ async function ProductContent({ params, searchParams }: { params: Params; search
                   <p className={styles.hint}>
                     {[
                       product.active_ingredient,
-                      product.catalog_manufacturer,
+                      product.catalog_manufacturer && `Fabricante ${product.catalog_manufacturer}`,
+                      product.catalog_brand && `Marca ${product.catalog_brand}`,
+                      product.catalog_department && `Departamento ${product.catalog_department}`,
                       product.ms_registration && `MS ${product.ms_registration}`,
                       product.ncm && `NCM ${product.ncm}`,
                       product.cest && `CEST ${product.cest}`,

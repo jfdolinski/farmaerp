@@ -96,7 +96,7 @@ describe('cópia do Catálogo externo contra o banco real', () => {
     base = `http://127.0.0.1:${(catalog.address() as AddressInfo).port}`;
     items = [
       {
-        id: run + 1, name: `Dorflex C/10 Comp ${run}`, brand: 'Sanofi', manufacturer: '', anvisa_registry: '1030000850011', med_controlled: '',
+        id: run + 1, name: `Dorflex C/10 Comp ${run}`, brand: 'Dorflex', manufacturer: 'Sanofi', category: 'Medicamento', anvisa_registry: '1030000850011', med_controlled: '',
         ncm: '30049099', cest: '1300100', tax_origin: '0', actives: [{ name: 'dipirona', concentration: '300 mg' }], barcodes: [{ code: codes.dorflex }],
         images: [{ url: `${base}/files/dorflex.png` }], pending: false, active: true,
       },
@@ -168,7 +168,7 @@ describe('cópia do Catálogo externo contra o banco real', () => {
     expect(copies[1].etag).toBe(etag());
     const byCode = (await admin('get', `/admin/catalog?q=${codes.dorflex}`).expect(200)).body as Json[];
     expect(byCode).toHaveLength(1);
-    expect(byCode[0]).toMatchObject({ name: `Dorflex C/10 Comp ${run}`, manufacturer: 'Sanofi', active_ingredient: 'dipirona 300 mg', ncm: '30049099', pending: false });
+    expect(byCode[0]).toMatchObject({ name: `Dorflex C/10 Comp ${run}`, manufacturer: 'Sanofi', brand: 'Dorflex', department: 'Medicamento', active_ingredient: 'dipirona 300 mg', ncm: '30049099', pending: false });
     expect(((await admin('get', `/admin/catalog?q=rivotril ${run}`).expect(200)).body as Json[])[0]).toMatchObject({ controlled_class: 'B1', manufacturer: 'Roche' });
 
     expect(await service.sync('schedule')).toBe('unchanged');
@@ -243,6 +243,10 @@ describe('cópia do Catálogo externo contra o banco real', () => {
     expect(await service.syncImages()).toBe(0);
     linkedProduct = ((await admin('post', '/admin/products').send({ displayName: `Dorflex vinculado ${run}`, barcode: gtin(), catalogProductId: dorflex.id }).expect(201)).body as Json).id as string;
     expect(await service.syncImages()).toBe(1);
+    // O cadastro do produto mostra o fabricante, a marca e o departamento do Catálogo.
+    expect((await admin('get', `/admin/products/${linkedProduct}`).expect(200)).body).toMatchObject({
+      catalog_manufacturer: 'Sanofi', catalog_brand: 'Dorflex', catalog_department: 'Medicamento',
+    });
     expect(requests.some((r) => r.path === '/files/dorflex.png' && r.key === undefined)).toBe(true);
     const again = ((await admin('get', `/admin/catalog?q=${codes.dorflex}`).expect(200)).body as Json[])[0];
     expect(again.main_image_id).toEqual(expect.any(String));

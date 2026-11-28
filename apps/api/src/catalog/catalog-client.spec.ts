@@ -21,7 +21,7 @@ describe('configuração do Catálogo', () => {
 
 describe('item do Catálogo', () => {
   const item = {
-    id: 4622, name: ' Dorflex C/10 Comp ', brand: 'Sanofi', manufacturer: '', anvisa_registry: '1.0300.0085', med_controlled: 'Antimicrobiano',
+    id: 4622, name: ' Dorflex C/10 Comp ', brand: 'Sanofi', manufacturer: '', category: 'Medicamento', anvisa_registry: '1.0300.0085', med_controlled: 'Antimicrobiano',
     ncm: '30049099', cest: '', actives: [{ name: 'dipirona', concentration: '300 mg' }, { name: 'orfenadrina', concentration: '' }, {}],
     barcodes: [{ code: '7891058002916' }, { code: '7891058002916' }, '7891058002923', { code: '' }],
     images: [
@@ -35,7 +35,8 @@ describe('item do Catálogo', () => {
   it('vira o item daqui: chave, marca como fabricante, princípios ativos juntos, códigos sem repetir, até 5 imagens do próprio Catálogo', () => {
     const mapped = mapItem(item, BASE);
     expect(mapped).toMatchObject({
-      sourceKey: 'catalogo:4622', name: 'Dorflex C/10 Comp', manufacturer: 'Sanofi', activeIngredient: 'dipirona 300 mg + orfenadrina',
+      sourceKey: 'catalogo:4622', name: 'Dorflex C/10 Comp', manufacturer: null, brand: 'Sanofi', department: 'Medicamento',
+      activeIngredient: 'dipirona 300 mg + orfenadrina',
       msRegistration: '1.0300.0085', controlledClass: 'Antimicrobiano', ncm: '30049099', cest: null, origin: '0',
       barcodes: ['7891058002916', '7891058002923'], pending: false,
       images: [`${BASE}/files/a.webp`, `${BASE}/files/c.webp`, `${BASE}/files/d.webp`, `${BASE}/files/e.webp`, `${BASE}/files/f.webp`],
@@ -51,9 +52,13 @@ describe('item do Catálogo', () => {
     expect(mapItem({ ...item, images: [] }, BASE)?.hash).not.toBe(hash);
   });
 
-  it('fabricante vence a marca; princípio ativo como texto; sem id ou nome é ignorado', () => {
-    expect(mapItem({ id: '7', name: 'X', manufacturer: 'EMS', brand: 'Marca', actives: ['clonazepam 2'] }, BASE))
-      .toMatchObject({ sourceKey: 'catalogo:7', manufacturer: 'EMS', activeIngredient: 'clonazepam 2', barcodes: [], images: [], pending: false });
+  it('fabricante e marca separados; departamento vem de category; princípio ativo como texto; sem id ou nome é ignorado', () => {
+    expect(mapItem({ id: '7', name: 'X', manufacturer: 'EMS', brand: 'Marca', category: ' Perfumaria ', actives: ['clonazepam 2'] }, BASE))
+      .toMatchObject({
+        sourceKey: 'catalogo:7', manufacturer: 'EMS', brand: 'Marca', department: 'Perfumaria', activeIngredient: 'clonazepam 2',
+        barcodes: [], images: [], pending: false,
+      });
+    expect(mapItem({ id: '8', name: 'Y' }, BASE)).toMatchObject({ manufacturer: null, brand: null, department: null });
     expect(mapItem({ name: 'Sem id' }, BASE)).toBeNull();
     expect(mapItem({ id: 'abc', name: 'Id ruim' }, BASE)).toBeNull();
     expect(mapItem({ id: 1, name: '  ' }, BASE)).toBeNull();

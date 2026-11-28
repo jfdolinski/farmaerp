@@ -34,6 +34,7 @@ export interface ExternalItem {
   pending?: unknown;
   active?: unknown;
   tax_origin?: unknown;
+  category?: unknown;
 }
 
 /** Item no formato que o banco grava (app.catalog_sync_apply). */
@@ -41,6 +42,10 @@ export interface MappedItem {
   sourceKey: string;
   name: string;
   manufacturer: string | null;
+  /** Marca do produto (o Catálogo guarda à parte do fabricante). */
+  brand: string | null;
+  /** Departamento: o Catálogo manda como "category". */
+  department: string | null;
   activeIngredient: string | null;
   msRegistration: string | null;
   controlledClass: string | null;
@@ -91,7 +96,9 @@ export function mapItem(item: ExternalItem, baseUrl: string): MappedItem | null 
   const mapped = {
     sourceKey: `catalogo:${id}`,
     name,
-    manufacturer: text(item.manufacturer) ?? text(item.brand),
+    manufacturer: text(item.manufacturer),
+    brand: text(item.brand),
+    department: text(item.category),
     activeIngredient: actives.length ? actives.join(' + ') : null,
     msRegistration: text(item.anvisa_registry),
     controlledClass: text(item.med_controlled),

@@ -183,6 +183,7 @@ export class ProductsController {
                 p.commission_group_id, p.pricing_group_id, p.price_family_id, p.uses_pmc,
                 p.online_sale_blocked, p.fraction_quantity, p.unit,
                 cp.name AS catalog_name, cp.active_ingredient, m.name AS catalog_manufacturer,
+                cp.brand AS catalog_brand, cp.department AS catalog_department,
                 cp.ms_registration, cp.controlled_class, cp.ncm, cp.cest
            FROM v_product p
            LEFT JOIN v_catalog_product cp ON cp.id = p.catalog_product_id
