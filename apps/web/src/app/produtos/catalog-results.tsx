@@ -7,6 +7,8 @@ export interface CatalogRow {
   name: string;
   active_ingredient: string | null;
   manufacturer: string | null;
+  brand?: string | null;
+  department?: string | null;
   ms_registration: string | null;
   controlled_class: string | null;
   ncm: string | null;
@@ -52,6 +54,7 @@ export function CatalogResults({
               <td>
                 {item.name}
                 {item.active_ingredient && <small>{item.active_ingredient}</small>}
+                {item.department && <small className={styles.hint}>Departamento: {item.department}</small>}
                 {item.pending && (
                   <small className={styles.warning}>Pendente no Catálogo: o cadastro ainda está sendo completado lá.</small>
                 )}
@@ -59,7 +62,10 @@ export function CatalogResults({
                   <small className={styles.warning}>{controlledLabel(item.controlled_class)}</small>
                 )}
               </td>
-              <td>{item.manufacturer ?? "Não informado"}</td>
+              <td>
+                {item.manufacturer ?? "Não informado"}
+                {item.brand && item.brand !== item.manufacturer && <small className={styles.hint}>Marca: {item.brand}</small>}
+              </td>
               <td>{item.barcodes.join(", ")}</td>
               <td>
                 {item.product_id ? (

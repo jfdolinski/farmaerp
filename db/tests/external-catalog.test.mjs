@@ -149,6 +149,20 @@ describe('rotina do Catálogo', () => {
     expect((await row(k)).controlled_class).toBe('B1');
   });
 
+  it('marca e departamento ficam em campos próprios, a busca acha pela marca e devolve os dois', async () => {
+    const k = key();
+    const code = gtin();
+    const brand = `Marca Teste ${randomInt(1e9)}`;
+    await apply([{ sourceKey: k, name: 'Produto com marca', manufacturer: 'Fabricante Teste', brand: `  ${brand} `, department: ' Perfumaria ', barcodes: [code], hash: hash() }]);
+    expect(await row(k)).toMatchObject({ manufacturer: 'Fabricante Teste', brand, department: 'Perfumaria' });
+    const found = await asUser(a.admin, 'SELECT name, manufacturer, brand, department FROM app.search_catalog($1)', [brand]);
+    expect(found).toEqual([{ name: 'Produto com marca', manufacturer: 'Fabricante Teste', brand, department: 'Perfumaria' }]);
+    // Sem marca e sem departamento lá, ficam vazios aqui.
+    await apply([{ sourceKey: k, name: 'Produto com marca', barcodes: [code], hash: hash() }]);
+    expect(await row(k)).toMatchObject({ brand: null, department: null });
+    expect(await asUser(a.admin, 'SELECT id FROM app.search_catalog($1)', [brand])).toEqual([]);
+  });
+
   it('o código que passou para outro item sai do antigo; item recusado não para os outros', async () => {
     const [old, moved] = [key(), key()];
     const code = gtin();
