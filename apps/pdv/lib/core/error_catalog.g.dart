@@ -1054,6 +1054,48 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Confira o motivo informado pela Sefaz e corrija o texto, se for o caso.',
     retryable: false,
   ),
+  'FA793': ErrorCatalogEntry(
+    code: 'FA793',
+    message: 'Este programa de benefício não está ativo nesta loja.',
+    action: 'Peça ao gerente para ativar o programa na retaguarda (PBM), ou siga a venda sem o PBM.',
+    retryable: false,
+  ),
+  'FA794': ErrorCatalogEntry(
+    code: 'FA794',
+    message: 'O beneficiário não tem direito a este programa.',
+    action: 'Confira o CPF ou o cartão com o cliente. Sem direito, a venda segue pelo preço normal.',
+    retryable: false,
+  ),
+  'FA795': ErrorCatalogEntry(
+    code: 'FA795',
+    message: 'Esta autorização do PBM não está mais válida.',
+    action: 'Consulte o programa de novo para esta venda.',
+    retryable: false,
+  ),
+  'FA796': ErrorCatalogEntry(
+    code: 'FA796',
+    message: 'Nenhum item desta venda faz parte do programa.',
+    action: 'A venda segue pelo preço normal.',
+    retryable: false,
+  ),
+  'FA797': ErrorCatalogEntry(
+    code: 'FA797',
+    message: 'O programa de benefício não respondeu.',
+    action: 'Tente de novo em alguns minutos ou siga a venda sem o PBM, pelo preço normal.',
+    retryable: true,
+  ),
+  'FA798': ErrorCatalogEntry(
+    code: 'FA798',
+    message: 'Os dados do programa de benefício são inválidos.',
+    action: 'Confira o nome, o percentual e os valores informados.',
+    retryable: false,
+  ),
+  'FA799': ErrorCatalogEntry(
+    code: 'FA799',
+    message: 'Já existe um programa de benefício com este nome.',
+    action: 'Use outro nome ou altere o programa que já existe.',
+    retryable: false,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',

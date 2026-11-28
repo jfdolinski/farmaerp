@@ -19,6 +19,7 @@ function menu(user: CurrentUser): NavGroup[] {
         sales && { href: "/orcamentos", label: "Orçamentos" },
         sales && { href: "/devolucoes", label: "Devoluções" },
         sales && { href: "/vendas-importadas", label: "Vendas importadas" },
+        any("pbm.manage", "sales.view") && { href: "/pbm", label: "PBM" },
       ],
     },
     {
