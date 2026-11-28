@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:farmaerp_pdv/fiscal/correction_pdf.dart';
 import 'package:farmaerp_pdv/fiscal/danfe_a4.dart';
 import 'package:farmaerp_pdv/fiscal/nfce.dart';
 import 'package:farmaerp_pdv/fiscal/xml_signer.dart';
@@ -234,6 +235,25 @@ void main() {
     // Para conferir o visual: DANFE_OUT=caminho.pdf grava um exemplo.
     final out = Platform.environment['DANFE_OUT'];
     if (out != null) File(out).writeAsBytesSync(await buildDanfeA4(proc));
+  });
+
+  test('carta de correção: PDF com o evento registrado e os dados da nota; texto longo cabe', () async {
+    int pages(Uint8List pdf) => RegExp(r'/Type\s*/Page[^s]').allMatches(latin1.decode(pdf)).length;
+    final nfe = buildNfe(devolution(), testCredential());
+    String event(String text) => '<?xml version="1.0" encoding="UTF-8"?><procEventoNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00">'
+        '<evento versao="1.00"><infEvento Id="ID110110${nfe.accessKey}01"><cOrgao>35</cOrgao><tpAmb>2</tpAmb><CNPJ>11222333000181</CNPJ>'
+        '<chNFe>${nfe.accessKey}</chNFe><dhEvento>2026-11-28T10:00:00-03:00</dhEvento><tpEvento>110110</tpEvento><nSeqEvento>1</nSeqEvento>'
+        '<verEvento>1.00</verEvento><detEvento versao="1.00"><descEvento>Carta de Correcao</descEvento><xCorrecao>$text</xCorrecao>'
+        '<xCondUso>A Carta de Correcao e disciplinada pelo paragrafo 1o-A do art. 7o do Convenio S/N</xCondUso></detEvento></infEvento></evento>'
+        '<retEvento versao="1.00"><infEvento><tpAmb>2</tpAmb><cStat>135</cStat><xMotivo>Evento registrado e vinculado a NF-e</xMotivo>'
+        '<nProt>135260000000901</nProt><dhRegEvento>2026-11-28T10:00:02-03:00</dhRegEvento></infEvento></retEvento></procEventoNFe>';
+    final pdf = await buildCorrectionPdf(event('Endereço do destinatário: Rua das Acácias, 200 &amp; fundos'), nfe.xml);
+    expect(latin1.decode(pdf.sublist(0, 5)), '%PDF-');
+    expect(pages(pdf), 1);
+    expect(pages(await buildCorrectionPdf(event('x' * 1000), nfe.xml)), 1);
+    // Para conferir o visual: CCE_OUT=caminho.pdf grava um exemplo.
+    final out = Platform.environment['CCE_OUT'];
+    if (out != null) File(out).writeAsBytesSync(pdf);
   });
 
   test('o que não dá para montar vira código do catálogo', () {

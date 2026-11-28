@@ -3,11 +3,13 @@
 // Expõe em globalThis.farmaerpFiscal:
 //   buildNfe(inputJson, keyPem, certPem) -> JSON {accessKey, xml, totalCents} ou {error: {code, detail}}
 //   buildDanfe(xml) -> Promise<string> (PDF em base64)
+//   buildCorrectionPdf(eventXml, nfeXml) -> Promise<string> (PDF da carta de correção em base64)
 //   svcEmissionType(uf) -> 6 (SVC-AN), 7 (SVC-RS) ou null
 import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
+import 'package:farmaerp_pdv/fiscal/correction_pdf.dart';
 import 'package:farmaerp_pdv/fiscal/danfe_a4.dart';
 import 'package:farmaerp_pdv/fiscal/nfce.dart';
 import 'package:farmaerp_pdv/fiscal/xml_signer.dart';
@@ -109,10 +111,14 @@ String _buildNfe(String inputJson, String keyPem, String certPem) {
 JSPromise<JSString> _buildDanfe(String xml) =>
     buildDanfeA4(xml).then((bytes) => base64Encode(bytes).toJS).toJS;
 
+JSPromise<JSString> _buildCorrectionPdf(String eventXml, String nfeXml) =>
+    buildCorrectionPdf(eventXml, nfeXml).then((bytes) => base64Encode(bytes).toJS).toJS;
+
 void main() {
   final api = JSObject();
   api['buildNfe'] = ((JSString input, JSString key, JSString cert) => _buildNfe(input.toDart, key.toDart, cert.toDart).toJS).toJS;
   api['buildDanfe'] = ((JSString xml) => _buildDanfe(xml.toDart)).toJS;
+  api['buildCorrectionPdf'] = ((JSString event, JSString nfe) => _buildCorrectionPdf(event.toDart, nfe.toDart)).toJS;
   api['svcEmissionType'] = ((JSString uf) => svcEmissionType(uf.toDart)?.toJS).toJS;
   globalContext['farmaerpFiscal'] = api;
 }

@@ -206,6 +206,53 @@ describe('NF-e de devolução emitida pela central', () => {
     expect(codeOf(await admin('get', `/central-nfe/${second.id}/xml?kind=cancel`).expect(404))).toBe('FA006');
   });
 
+  it('carta de correção da NF-e da devolução: evento 110110 assinado, sequência, lista, XML e PDF; quem não emite não manda', async () => {
+    const { returnId } = await returned();
+    const emitted = (await admin('post', `/purchase-returns/${returnId}/nfe`).expect(200)).body as Json;
+    const text = 'Endereço de entrega: Rua das Acácias, 200';
+    // Texto fora do leiaute e quem não emite: recusados antes da Sefaz.
+    const before = paths.length;
+    expect(codeOf(await admin('post', `/nfe-corrections/central/${emitted.id}`).send({ text: 'Curto demais.' }).expect(422))).toBe('FA790');
+    expect(codeOf(await admin('post', `/nfe-corrections/central/${emitted.id}`).send({ text: 'Com emoji 😀 e mais de quinze' }).expect(422))).toBe('FA790');
+    expect(codeOf(await admin('post', `/nfe-corrections/outra/${emitted.id}`).send({ text }).expect(422))).toBe('FA005');
+    expect([403, 404]).toContain((await admin('post', `/nfe-corrections/central/${emitted.id}`, OPERATOR).send({ text })).status);
+    expect(paths.length).toBe(before);
+
+    // Quebras de linha e espaços repetidos viram um espaço só.
+    const first = (await admin('post', `/nfe-corrections/central/${emitted.id}`).send({ text: 'Endereço de entrega:\n  Rua das Acácias,   200 ' }).expect(200)).body as Json;
+    expect(first).toMatchObject({ id: expect.any(String), sequence: 1, status: '135', sefaz: '135 Evento registrado' });
+    expect(paths.at(-1)).toBe('/event');
+    const event = received.at(-1)!;
+    expect(event).toMatch(/<infEvento Id="ID110110\d{44}01"><cOrgao>35<\/cOrgao>/);
+    expect(event).toContain('<tpEvento>110110</tpEvento><nSeqEvento>1</nSeqEvento><verEvento>1.00</verEvento>');
+    expect(event).toContain(`<descEvento>Carta de Correcao</descEvento><xCorrecao>${text}</xCorrecao><xCondUso>A Carta de Correcao e disciplinada`);
+    expect(event).toContain('<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">');
+    const second = (await admin('post', `/nfe-corrections/central/${emitted.id}`).send({ text: `${text}, fundos` }).expect(200)).body as Json;
+    expect(second).toMatchObject({ sequence: 2 });
+    expect(received.at(-1)!).toMatch(/Id="ID110110\d{44}02"/);
+
+    const list = (await admin('get', `/nfe-corrections/central/${emitted.id}`).expect(200)).body as Json;
+    expect(list).toMatchObject({ kind: 'central', note_kind: 'supplier_return', status: 'authorized', count: 2, can_send: true });
+    expect((list.corrections as Json[]).map((c) => [c.sequence, c.correction])).toEqual([[2, `${text}, fundos`], [1, text]]);
+    const xml = await admin('get', `/nfe-corrections/file/${first.id}/xml`).expect(200);
+    expect(xml.headers['content-disposition']).toMatch(/CCe-\d{44}-1\.xml/);
+    expect(xml.text).toContain('<procEventoNFe');
+    expect(xml.text).toContain('<nProt>135260000000904</nProt>');
+    const pdf = await admin('get', `/nfe-corrections/file/${first.id}/pdf`).buffer(true).parse((res, done) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk: Buffer) => chunks.push(chunk));
+      res.on('end', () => done(null, Buffer.concat(chunks)));
+    }).expect(200);
+    expect(pdf.headers['content-type']).toContain('application/pdf');
+    expect((pdf.body as Buffer).subarray(0, 5).toString()).toBe('%PDF-');
+    expect([403, 404]).toContain((await admin('get', `/nfe-corrections/file/${first.id}/xml`, OPERATOR)).status);
+
+    // Cancelada: a lista fica, carta nova não.
+    await admin('post', `/central-nfe/${emitted.id}/cancel`).send({ reason: 'Valores da devolução errados' }).expect(200);
+    expect((await admin('get', `/nfe-corrections/central/${emitted.id}`).expect(200)).body).toMatchObject({ status: 'canceled', can_send: false, count: 2 });
+    expect(codeOf(await admin('post', `/nfe-corrections/central/${emitted.id}`).send({ text }).expect(409))).toBe('FA787');
+  });
+
   it('sem resposta da Sefaz fica pendente e a próxima tentativa transmite o mesmo XML; recusada pode ser emitida de novo', async () => {
     const { returnId } = await returned();
     plan.push('down');

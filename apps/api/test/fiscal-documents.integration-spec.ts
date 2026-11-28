@@ -147,7 +147,7 @@ describe('notas fiscais pela central contra o banco real', () => {
             + (eventStatus === '573'
               // Evento repetido: a Sefaz não devolve protocolo.
               ? '<cStat>573</cStat><xMotivo>Rejeicao: Duplicidade de evento</xMotivo></infEvento></retEvento></retEnvEvento>'
-              : `<cStat>${eventStatus}</cStat><xMotivo>${eventStatus === '135' ? 'Evento registrado' : 'Prazo de cancelamento superior ao previsto'}</xMotivo><nProt>135260000000888</nProt><dhRegEvento>2026-11-26T10:10:05-03:00</dhRegEvento></infEvento></retEvento></retEnvEvento>`));
+              : `<cStat>${eventStatus}</cStat><xMotivo>${['135', '136'].includes(eventStatus) ? 'Evento registrado' : 'Prazo de cancelamento superior ao previsto'}</xMotivo><nProt>135260000000888</nProt><dhRegEvento>2026-11-26T10:10:05-03:00</dhRegEvento></infEvento></retEvento></retEnvEvento>`));
         } else if (path.endsWith('/voiding')) {
           answer = soap(`<retInutNFe versao="4.00"><infInut><tpAmb>2</tpAmb><cStat>${voidingStatus}</cStat><xMotivo>${voidingStatus === '102' ? 'Inutilizacao homologada' : 'Numero ja inutilizado'}</xMotivo>`
             + '<nProt>135260000000999</nProt><dhRecbto>2026-11-26T11:00:00-03:00</dhRecbto></infInut></retInutNFe>');
@@ -438,6 +438,77 @@ describe('notas fiscais pela central contra o banco real', () => {
     const note = await saleWithNote({});
     expect(codeOf(await admin('get', `/fiscal-documents/${note.id}/danfe`).expect(404))).toBe('FA006');
     expect((await admin('get', `/fiscal-documents/${note.id}/xml`).expect(200)).headers['content-disposition']).toContain('NFCe-');
+  });
+
+  it('carta de correção da NF-e de venda (55): serviço de evento da NF-e; 136 vale; 573 usa a carta que a Sefaz guardou; recusa com o motivo', async () => {
+    const saleId = uuidV7();
+    const number = base + numberOffset++;
+    expect((await push([{ kind: 'sale', payload: {
+      id: saleId, number, cash_session_id: sessionId, operator_id: OPERATOR_ID, customer_id: DEMO_CUSTOMER, sold_at: new Date().toISOString(), fiscal_model: '55',
+      items: [{ id: uuidV7(), line: 1, product_id: DIPIRONA, quantity: 1, unit_price: 12.9, discount: 0, total: 12.9 }],
+      payments: [{ id: uuidV7(), method: 'cash', amount: 12.9, change: 0 }], subtotal: 12.9, discount_total: 0, total: 12.9,
+    } }]).expect(200)).body.results[0]).toMatchObject({ status: 'applied' });
+    const nfe = saleNfe({ series: series55, number });
+    const id = uuidV7();
+    expect((await push([{ kind: 'nfce', payload: {
+      id, model: '55', sale_id: saleId, series: series55, number, access_key: nfe.key, environment: 2, emission_type: 1, status: 'authorized',
+      protocol: '135260000000126', status_code: '100', reason: 'Autorizado o uso da NF-e', xml: nfe.xml,
+      emitted_at: new Date().toISOString(), authorized_at: new Date().toISOString(),
+    } }]).expect(200)).body.results[0]).toMatchObject({ status: 'applied' });
+    const send = (text: string) => admin('post', `/nfe-corrections/sale/${id}`).send({ text });
+    try {
+      eventStatus = '136';
+      expect((await send('Inscrição estadual do destinatário: 110042490114').expect(200)).body).toMatchObject({ sequence: 1, status: '136' });
+      expect(received.at(-1)).toMatchObject({ path: '/nfe/event', clientCertificate: true });
+      expect(received.at(-1)!.body).toContain(`<infEvento Id="ID110110${nfe.key}01">`);
+      // Nota emitida na SVC: a carta vai à Sefaz da UF (a SVC não recebe CC-e).
+      const svcSale = uuidV7();
+      const svcNumber = base + numberOffset++;
+      expect((await push([{ kind: 'sale', payload: {
+        id: svcSale, number: svcNumber, cash_session_id: sessionId, operator_id: OPERATOR_ID, customer_id: DEMO_CUSTOMER, sold_at: new Date().toISOString(),
+        fiscal_model: '55', items: [{ id: uuidV7(), line: 1, product_id: DIPIRONA, quantity: 1, unit_price: 12.9, discount: 0, total: 12.9 }],
+        payments: [{ id: uuidV7(), method: 'cash', amount: 12.9, change: 0 }], subtotal: 12.9, discount_total: 0, total: 12.9,
+      } }]).expect(200)).body.results[0]).toMatchObject({ status: 'applied' });
+      const svcNfe = saleNfe({ series: series55, number: svcNumber });
+      const svcId = uuidV7();
+      expect((await push([{ kind: 'nfce', payload: {
+        id: svcId, model: '55', sale_id: svcSale, series: series55, number: svcNumber, access_key: svcNfe.key, environment: 2, emission_type: 6,
+        status: 'authorized', protocol: '135260000000127', status_code: '100', reason: 'Autorizado o uso da NF-e', xml: svcNfe.xml,
+        emitted_at: new Date().toISOString(), authorized_at: new Date().toISOString(),
+      } }]).expect(200)).body.results[0]).toMatchObject({ status: 'applied' });
+      await admin('post', `/nfe-corrections/sale/${svcId}`).send({ text: 'Inscrição estadual do destinatário: 110042490114' }).expect(200);
+      expect(received.at(-1)).toMatchObject({ path: '/nfe/event' });
+      expect(received.at(-1)!.body).toContain(`<chNFe>${svcNfe.key}</chNFe>`);
+
+      // 573: a Sefaz já tinha a sequência 2 (outro envio); a consulta traz a carta dela, que fica registrada, e avisa.
+      eventStatus = '573';
+      const other = 'Texto da outra carta, mandada ao mesmo tempo';
+      onStatus.set(nfe.key, `<retConsSitNFe versao="4.00"><cStat>100</cStat><xMotivo>Autorizado</xMotivo>${prot(nfe.key, '100', '135260000000126')}`
+        + `<procEventoNFe versao="1.00"><evento versao="1.00"><infEvento Id="ID110110${nfe.key}02"><chNFe>${nfe.key}</chNFe><tpEvento>110110</tpEvento>`
+        + `<nSeqEvento>2</nSeqEvento><detEvento versao="1.00"><xCorrecao>${other}</xCorrecao></detEvento></infEvento></evento>`
+        + '<retEvento versao="1.00"><infEvento><cStat>135</cStat><xMotivo>Evento registrado</xMotivo><nProt>135260000000777</nProt>'
+        + '<dhRegEvento>2026-11-28T10:00:02-03:00</dhRegEvento></infEvento></retEvento></procEventoNFe></retConsSitNFe>');
+      expect(codeOf(await send('Minha carta, com mais de quinze letras').expect(409))).toBe('FA791');
+      expect(received.at(-1)).toMatchObject({ path: '/nfe/status' });
+      const list = (await admin('get', `/nfe-corrections/sale/${id}`).expect(200)).body as Json;
+      expect((list.corrections as Json[]).map((c) => [c.sequence, c.correction, c.protocol])).toEqual([
+        [2, other, '135260000000777'], [1, 'Inscrição estadual do destinatário: 110042490114', '135260000000888'],
+      ]);
+      // A mesma situação com o nosso texto: registra normalmente.
+      onStatus.set(nfe.key, (onStatus.get(nfe.key) ?? '').replace('ID110110' + nfe.key + '02', 'ID110110' + nfe.key + '03')
+        .replace('<nSeqEvento>2</nSeqEvento>', '<nSeqEvento>3</nSeqEvento>').replace(other, 'Nossa carta, que tinha chegado lá').replace('135260000000777', '135260000000778'));
+      expect((await send('Nossa carta, que tinha chegado lá').expect(200)).body).toMatchObject({ sequence: 3 });
+      // 573 sem a carta na consulta: recusa, nada grava.
+      expect(codeOf(await send('Mais uma carta com texto válido').expect(422))).toBe('FA792');
+      // Recusa da Sefaz: código da carta, com o motivo.
+      eventStatus = '501';
+      const refused = (await send('Mais uma carta com texto válido').expect(422)).body as Json;
+      expect(refused).toMatchObject({ code: 'FA792', detail: expect.stringContaining('501') });
+      expect((await admin('get', `/nfe-corrections/sale/${id}`).expect(200)).body).toMatchObject({ count: 3 });
+    } finally {
+      eventStatus = '135';
+      onStatus.delete(nfe.key);
+    }
   });
 
   it('o caixa cancela a NF-e de venda (55) com o supervisor: o evento vai ao serviço da NF-e e a venda é desfeita', async () => {

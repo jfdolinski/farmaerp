@@ -38,7 +38,8 @@ export function TransferNfeCell({ transfer, reversed }: { transfer: TransferInfo
             Autorizada · nº {nfe.number} série {nfe.series}
           </span>
           <span>
-            <a href={`/nfe-central/${nfe.id}/danfe`}>DANFE</a> · <a href={`/nfe-central/${nfe.id}/xml`}>XML</a>
+            <a href={`/nfe-central/${nfe.id}/danfe`}>DANFE</a> · <a href={`/nfe-central/${nfe.id}/xml`}>XML</a> ·{" "}
+            <a href={`/nfe-correcao/central/${nfe.id}?voltar=${encodeURIComponent("/estoque?aba=movimentacoes")}`}>Carta de correção</a>
           </span>
         </>
       )}
@@ -57,7 +58,8 @@ export function TransferNfeCell({ transfer, reversed }: { transfer: TransferInfo
             {nfe.cancel_reason && <small className={styles.hint}> · {nfe.cancel_reason}</small>}
           </span>
           <span>
-            <a href={`/nfe-central/${nfe.id}/xml`}>XML</a> · <a href={`/nfe-central/${nfe.id}/cancelamento`}>XML do cancelamento</a>
+            <a href={`/nfe-central/${nfe.id}/xml`}>XML</a> · <a href={`/nfe-central/${nfe.id}/cancelamento`}>XML do cancelamento</a> ·{" "}
+            <a href={`/nfe-correcao/central/${nfe.id}?voltar=${encodeURIComponent("/estoque?aba=movimentacoes")}`}>Cartas de correção</a>
           </span>
         </>
       )}

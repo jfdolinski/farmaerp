@@ -387,3 +387,43 @@ describe('NF-e 55 do caixa na central', () => {
     }
   });
 });
+
+describe('carta de correção da NF-e de venda (CC-e)', () => {
+  const TEXT = 'Inscrição estadual do destinatário: 110042490114';
+  const event = (sequence, protocol) => JSON.stringify({
+    sequence, correction: TEXT, protocol, status_code: '135', xml: '<procEventoNFe>' + 's'.repeat(200) + '</procEventoNFe>',
+    registered_at: new Date().toISOString(),
+  });
+  const context = (user, id, text = TEXT) => asUser(user, "SELECT * FROM app.nfe_correction_context('sale', $1, $2)", [id, text]);
+
+  it('só a NF-e 55 autorizada da venda, por quem emite NF-e; a tela e os arquivos para quem vê a venda', async () => {
+    const doc = nfe(await newSale());
+    expect(await push(a.terminal1, 'nfce', doc)).toMatchObject({ status: 'applied' });
+    expect((await context(a.admin, doc.id))[0]).toMatchObject({ id: doc.id, model: '55', sequence: 1, access_key: doc.access_key });
+    const svc = nfe(await newSale(), { emission_type: 6 });
+    await push(a.terminal1, 'nfce', svc);
+    expect((await context(a.admin, svc.id))[0]).toMatchObject({ emission_type: 6 });
+    // NFC-e e NF-e pendente não têm carta.
+    const nfce = { ...nfe(await newSale({ model: '65', customerId: null }), { series: series65 }), model: '65' };
+    await push(a.terminal1, 'nfce', nfce);
+    await expect(context(a.admin, nfce.id)).rejects.toSatisfy(hasCode('FA787'));
+    const pending = nfe(await newSale(), { status: 'pending', protocol: null, authorized_at: null, status_code: null, reason: null });
+    await push(a.terminal1, 'nfce', pending);
+    await expect(context(a.admin, pending.id)).rejects.toSatisfy(hasCode('FA787'));
+    await expect(context(b.admin, doc.id)).rejects.toSatisfy(hasCode('FA006'));
+    await expect(context(operator, doc.id)).rejects.toSatisfy(hasCode('FA006'));
+
+    const id = (await asUser(a.admin, "SELECT app.nfe_correction_register('sale', $1, $2::jsonb) AS id", [doc.id, event(1, '135260000000881')]))[0].id;
+    expect((await context(a.admin, doc.id))[0].sequence).toBe(2);
+    const screen = (await asUser(a.admin, "SELECT app.nfe_corrections('sale', $1) AS x", [doc.id]))[0].x;
+    expect(screen).toMatchObject({ model: '55', status: 'authorized', can_send: true, count: 1, corrections: [{ id, sequence: 1, correction: TEXT }] });
+    expect((await asUser(a.admin, "SELECT app.nfe_corrections('sale', $1) AS x", [nfce.id]))[0].x).toMatchObject({ model: '65', can_send: false });
+    expect(await asUser(a.admin, 'SELECT * FROM app.nfe_correction_file($1)', [id])).toEqual([
+      { access_key: doc.access_key, sequence: 1, xml: expect.stringContaining('procEventoNFe'), nfe_xml: XML },
+    ]);
+    await expect(asUser(b.admin, 'SELECT * FROM app.nfe_correction_file($1)', [id])).rejects.toSatisfy(hasCode('FA006'));
+    // A carta da venda não conta na da central nem o contrário.
+    expect((await ownerPool.query('SELECT fiscal_document_id, central_nfe_id, branch_id FROM nfe_correction WHERE id = $1', [id])).rows[0])
+      .toEqual({ fiscal_document_id: doc.id, central_nfe_id: null, branch_id: a.branch1.id });
+  });
+});

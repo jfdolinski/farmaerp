@@ -117,6 +117,12 @@ function Row({ row, canCancel, canResend }: { row: FiscalRow; canCancel: boolean
                   · <a href={`/notas-fiscais/${row.id}/danfe`}>DANFE (A4)</a>
                 </>
               )}
+              {row.model === "55" && ["authorized", "canceled"].includes(row.status) && (
+                <>
+                  {" "}
+                  · <a href={`/nfe-correcao/sale/${row.id}?voltar=/notas-fiscais`}>Carta de correção</a>
+                </>
+              )}
               {row.status === "canceled" && (
                 <>
                   {" "}
