@@ -44,3 +44,8 @@ export function buildNfe(input, keyPem, certPem) {
 export async function buildDanfe(xml) {
   return Buffer.from(await load().buildDanfe(xml), 'base64');
 }
+
+/** Sefaz Virtual de Contingência da UF: 6 SVC-AN, 7 SVC-RS; null se a UF não estiver na tabela. */
+export function svcEmissionType(uf) {
+  return load().svcEmissionType(uf) ?? null;
+}

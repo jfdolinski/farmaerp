@@ -125,6 +125,37 @@ void main() {
     expect(await schemaErrors(nfe.xml), isEmpty);
   });
 
+  test('contingência SVC: tpEmis na chave e na nota, com a hora e o motivo no lugar certo; válida no schema oficial', () async {
+    NfeInput svc({int emissionType = 6, DateTime? at, String? reason = 'Sefaz da UF sem comunicacao no momento da emissao'}) {
+      final base = sale();
+      return NfeInput(
+        issuer: base.issuer, recipient: base.recipient, items: base.items, payments: base.payments, series: base.series,
+        number: base.number, emittedAt: base.emittedAt, environment: base.environment, numericCode: base.numericCode,
+        appVersion: base.appVersion, operation: base.operation, emissionType: emissionType,
+        contingencyAt: at ?? DateTime.utc(2026, 11, 27, 15, 0, 0), contingencyReason: reason,
+      );
+    }
+
+    final nfe = buildNfe(svc(), testCredential());
+    expect(nfe.accessKey.substring(34, 35), '6');
+    final doc = XmlDocument.parse(nfe.xml);
+    expect(text(doc, 'tpEmis'), '6');
+    expect(text(doc, 'dhCont'), '2026-11-27T12:00:00-03:00');
+    expect(text(doc, 'xJust'), 'Sefaz da UF sem comunicacao no momento da emissao');
+    final ide = doc.findAllElements('ide').single.childElements.map((e) => e.name.local).toList();
+    expect(ide.indexOf('dhCont'), ide.indexOf('verProc') + 1);
+    expect(await schemaErrors(nfe.xml), isEmpty);
+    // A normal continua com 1 e sem os campos da contingência.
+    final normal = XmlDocument.parse(buildNfe(sale(), testCredential()).xml);
+    expect(text(normal, 'tpEmis'), '1');
+    expect(normal.findAllElements('dhCont'), isEmpty);
+
+    // Recusas: SVC de outra região (SP é SVC-AN), forma desconhecida, sem hora ou motivo curto.
+    for (final input in [svc(emissionType: 7), svc(emissionType: 9), svc(reason: 'curto'), svc(reason: null)]) {
+      expect(() => buildNfe(input, testCredential()), throwsA(isA<FiscalException>().having((e) => e.code, 'code', 'FA726')));
+    }
+  });
+
   test('em produção, o nome verdadeiro do destinatário; pessoa física não contribuinte é consumidor final', () async {
     const person = NfeRecipient(
       cpf: '529.982.247-25', name: 'CLIENTE PESSOA FISICA', ieIndicator: 9, street: 'Rua A', number: '1', district: 'Centro',

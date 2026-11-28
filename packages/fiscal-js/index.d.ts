@@ -70,7 +70,16 @@ export interface NfeInput {
   freightMode?: number;
   additionalInfo?: string | null;
   ibsCbs?: boolean;
+  /** tpEmis: 1 normal; 6 SVC-AN, 7 SVC-RS (contingência, com contingencyAt e contingencyReason). */
+  emissionType?: 1 | 6 | 7;
+  /** Hora da entrada em contingência (ISO 8601). */
+  contingencyAt?: string;
+  /** Motivo da contingência (15 a 256 caracteres). */
+  contingencyReason?: string;
 }
+
+/** Sefaz Virtual de Contingência da UF: 6 SVC-AN, 7 SVC-RS; null se a UF não estiver na tabela. */
+export function svcEmissionType(uf: string): 6 | 7 | null;
 
 export type NfeResult =
   | { accessKey: string; xml: string; totalCents: number; error?: undefined }

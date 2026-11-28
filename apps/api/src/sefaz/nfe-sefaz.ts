@@ -18,6 +18,18 @@ const AUTHORIZATION: Record<string, Pair> = {
   SC: svrs,
 };
 
+/** Sefaz Virtual de Contingência (tpEmis 6 SVC-AN, 7 SVC-RS). CONFERIR antes de produção. */
+const SVC: Record<6 | 7, Pair> = {
+  6: ['https://hom.svc.fazenda.gov.br/NFeAutorizacao4/NFeAutorizacao4.asmx', 'https://www.svc.fazenda.gov.br/NFeAutorizacao4/NFeAutorizacao4.asmx'],
+  7: svrs,
+};
+
+/** Endereço da autorização na SVC. Fora da produção, os testes apontam para o servidor falso (SEFAZ_NFE_URL). */
+export function nfeSvcAuthorizationUrl(emissionType: 6 | 7, environment: 1 | 2, env: NodeJS.ProcessEnv = process.env): string {
+  if (environment === 2 && env.SEFAZ_NFE_URL) return `${env.SEFAZ_NFE_URL.replace(/\/$/, '')}/svc-authorization`;
+  return SVC[emissionType][environment === 1 ? 1 : 0];
+}
+
 /**
  * Endereço da autorização da NF-e na UF. Fora da produção, os testes apontam para um servidor falso
  * (SEFAZ_NFE_URL). Null: UF ainda não atendida.

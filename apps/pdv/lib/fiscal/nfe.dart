@@ -61,6 +61,9 @@ class NfeInput {
     this.freightMode = 9,
     this.additionalInfo,
     this.ibsCbs = false,
+    this.emissionType = 1,
+    this.contingencyAt,
+    this.contingencyReason,
   });
 
   final NfceIssuer issuer;
@@ -99,6 +102,22 @@ class NfeInput {
   /// Informações complementares (infCpl).
   final String? additionalInfo;
   final bool ibsCbs;
+
+  /// tpEmis: 1 normal; 6 SVC-AN e 7 SVC-RS (contingência na Sefaz Virtual, com a hora e o motivo).
+  final int emissionType;
+  final DateTime? contingencyAt;
+
+  /// xJust: de 15 a 256 caracteres.
+  final String? contingencyReason;
+}
+
+/// Sefaz Virtual de Contingência da UF: 6 SVC-AN ou 7 SVC-RS (NT 2013.007). Null: UF fora da tabela.
+int? svcEmissionType(String uf) {
+  const rs = {'AM', 'BA', 'CE', 'GO', 'MA', 'MS', 'MT', 'PA', 'PE', 'PI', 'PR'};
+  const an = {'AC', 'AL', 'AP', 'DF', 'ES', 'MG', 'PB', 'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO'};
+  if (rs.contains(uf)) return 7;
+  if (an.contains(uf)) return 6;
+  return null;
 }
 
 /// NF-e montada e assinada.
@@ -118,6 +137,16 @@ NfeDocument buildNfe(NfeInput input, SigningCredential credential) {
   final recipient = input.recipient;
   if (!ufCodes.containsKey(issuer.uf)) throw FiscalException('FA725', 'UF ${issuer.uf} ainda não atendida.');
   if (input.items.isEmpty) throw const FiscalException('FA726', 'Nota sem itens.');
+  if (![1, 6, 7].contains(input.emissionType)) throw FiscalException('FA726', 'Forma de emissão ${input.emissionType} não atendida.');
+  if (input.emissionType != 1) {
+    final reason = (input.contingencyReason ?? '').trim();
+    if (input.contingencyAt == null || reason.length < 15 || reason.length > 256) {
+      throw const FiscalException('FA726', 'Contingência sem a hora ou o motivo (15 a 256 caracteres).');
+    }
+    if (svcEmissionType(issuer.uf) != input.emissionType) {
+      throw FiscalException('FA726', 'SVC ${input.emissionType} não atende a UF ${issuer.uf}.');
+    }
+  }
   if (input.purpose != 1 && input.purpose != 4) throw FiscalException('FA726', 'Finalidade ${input.purpose} não atendida.');
   if (input.purpose == 4 && input.references.isEmpty) throw const FiscalException('FA726', 'Devolução sem a nota referenciada.');
   for (final reference in input.references) {
@@ -152,7 +181,7 @@ NfeDocument buildNfe(NfeInput input, SigningCredential credential) {
     model: 55,
     series: input.series,
     number: input.number,
-    emissionType: 1,
+    emissionType: input.emissionType,
     numericCode: input.numericCode,
   );
   final homologation = input.environment == 2;
@@ -179,7 +208,7 @@ NfeDocument buildNfe(NfeInput input, SigningCredential credential) {
         b.element('cMunFG', nest: issuer.cityCode);
         // DANFE retrato.
         b.element('tpImp', nest: '1');
-        b.element('tpEmis', nest: '1');
+        b.element('tpEmis', nest: '${input.emissionType}');
         b.element('cDV', nest: key.substring(43));
         b.element('tpAmb', nest: '${input.environment}');
         b.element('finNFe', nest: '${input.purpose}');
@@ -187,6 +216,10 @@ NfeDocument buildNfe(NfeInput input, SigningCredential credential) {
         b.element('indPres', nest: '${input.presence}');
         b.element('procEmi', nest: '0');
         b.element('verProc', nest: 'FarmaERP ${input.appVersion}');
+        if (input.emissionType != 1) {
+          b.element('dhCont', nest: brasiliaTime(input.contingencyAt!));
+          b.element('xJust', nest: input.contingencyReason!.trim());
+        }
         for (final reference in input.references) {
           b.element('NFref', nest: () => b.element('refNFe', nest: reference));
         }

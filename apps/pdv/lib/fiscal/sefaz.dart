@@ -45,10 +45,27 @@ const _nfeAuthorization = <String, (String homologation, String production)>{
   ),
 };
 
+/// Sefaz Virtual de Contingência da NF-e 55 (tpEmis 6 SVC-AN, 7 SVC-RS): autorização e consulta.
+///
+/// CONFERIR com o Portal da NF-e antes de produção.
+const _svcAuthorization = <int, (String homologation, String production)>{
+  6: ('https://hom.svc.fazenda.gov.br/NFeAutorizacao4/NFeAutorizacao4.asmx', 'https://www.svc.fazenda.gov.br/NFeAutorizacao4/NFeAutorizacao4.asmx'),
+  7: (
+    'https://nfe-homologacao.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
+    'https://nfe.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx',
+  ),
+};
+const _svcConsult = <int, (String homologation, String production)>{
+  6: ('https://hom.svc.fazenda.gov.br/NFeConsultaProtocolo4/NFeConsultaProtocolo4.asmx', 'https://www.svc.fazenda.gov.br/NFeConsultaProtocolo4/NFeConsultaProtocolo4.asmx'),
+  7: ('https://nfe-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx', 'https://nfe.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx'),
+};
+
 /// Endereço da autorização na UF, no ambiente (1 produção, 2 homologação) e no modelo (65 NFC-e,
-/// 55 NF-e). Null se não atendida.
-Uri? authorizationUrl(String uf, int environment, {String model = '65'}) {
-  final urls = (model == '55' ? _nfeAuthorization : _authorization)[uf];
+/// 55 NF-e). A NF-e em contingência SVC (tpEmis 6 ou 7) vai para a Sefaz Virtual. Null se não atendida.
+Uri? authorizationUrl(String uf, int environment, {String model = '65', int emissionType = 1}) {
+  final urls = model == '55' && (emissionType == 6 || emissionType == 7)
+      ? _svcAuthorization[emissionType]
+      : (model == '55' ? _nfeAuthorization : _authorization)[uf];
   if (urls == null) return null;
   return Uri.parse(environment == 1 ? urls.$2 : urls.$1);
 }
@@ -136,9 +153,11 @@ const _nfeConsult = <String, (String homologation, String production)>{
   'SC': ('https://nfe-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx', 'https://nfe.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx'),
 };
 
-/// Endereço da consulta na UF, no ambiente e no modelo. Null se não atendida.
-Uri? consultUrl(String uf, int environment, {String model = '65'}) {
-  final urls = (model == '55' ? _nfeConsult : _consult)[uf];
+/// Endereço da consulta na UF, no ambiente e no modelo (a NF-e em SVC é consultada na SVC). Null se não atendida.
+Uri? consultUrl(String uf, int environment, {String model = '65', int emissionType = 1}) {
+  final urls = model == '55' && (emissionType == 6 || emissionType == 7)
+      ? _svcConsult[emissionType]
+      : (model == '55' ? _nfeConsult : _consult)[uf];
   if (urls == null) return null;
   return Uri.parse(environment == 1 ? urls.$2 : urls.$1);
 }
@@ -266,7 +285,8 @@ SefazResult parseAuthorization(String response, {required String signedNfe}) {
   if (batch == null) return const SefazUnavailable('Resposta da Sefaz sem o retorno do lote.');
   final batchStatus = _text(batch, 'cStat');
   final batchReason = _first(batch, 'xMotivo')?.innerText.trim() ?? '';
-  if (batchStatus == '108' || batchStatus == '109') return SefazUnavailable('Sefaz: $batchReason');
+  // Serviço parado: a nota não foi recebida para processar (pode ir para a contingência).
+  if (batchStatus == '108' || batchStatus == '109') return SefazUnavailable('Sefaz: $batchReason', sent: false);
   if (batchStatus != '104') return SefazRejected(statusCode: batchStatus, reason: batchReason);
   final protocol = _first(batch, 'infProt');
   final status = _text(protocol, 'cStat');
@@ -309,8 +329,9 @@ class SefazClient {
     required int environment,
     required NfceCredentials credentials,
     String model = '65',
+    int emissionType = 1,
   }) async {
-    final url = authorizationUrl(uf, environment, model: model);
+    final url = authorizationUrl(uf, environment, model: model, emissionType: emissionType);
     if (url == null) return SefazUnavailable('UF $uf sem serviço de autorização configurado.', sent: false);
     final batchId = List.generate(15, (_) => _random.nextInt(10)).join();
     try {
@@ -342,8 +363,9 @@ class SefazClient {
     required int environment,
     required NfceCredentials credentials,
     String model = '65',
+    int emissionType = 1,
   }) async {
-    final url = consultUrl(uf, environment, model: model);
+    final url = consultUrl(uf, environment, model: model, emissionType: emissionType);
     if (url == null) return SefazUnavailable('UF $uf sem serviço de consulta configurado.', sent: false);
     try {
       final response = await _transport.post(url, consultEnvelope(accessKey, environment: environment), credentials: credentials, timeout: timeout);

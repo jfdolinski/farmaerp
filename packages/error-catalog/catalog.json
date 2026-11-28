@@ -1857,7 +1857,8 @@
       "central_nfe_series_branch_key",
       "purchase_return_tax_setting_branch_key",
       "central_nfe_access_key_key",
-      "central_nfe_number_key"
+      "central_nfe_number_key",
+      "central_nfe_emission_type_check"
     ]
   },
   "FA932": {

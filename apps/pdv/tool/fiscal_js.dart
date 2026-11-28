@@ -3,6 +3,7 @@
 // Expõe em globalThis.farmaerpFiscal:
 //   buildNfe(inputJson, keyPem, certPem) -> JSON {accessKey, xml, totalCents} ou {error: {code, detail}}
 //   buildDanfe(xml) -> Promise<string> (PDF em base64)
+//   svcEmissionType(uf) -> 6 (SVC-AN), 7 (SVC-RS) ou null
 import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
@@ -90,6 +91,9 @@ String _buildNfe(String inputJson, String keyPem, String certPem) {
       freightMode: (m['freightMode'] as num? ?? 9).toInt(),
       additionalInfo: m['additionalInfo'] as String?,
       ibsCbs: m['ibsCbs'] as bool? ?? false,
+      emissionType: (m['emissionType'] as num? ?? 1).toInt(),
+      contingencyAt: m['contingencyAt'] == null ? null : DateTime.parse(m['contingencyAt'] as String),
+      contingencyReason: m['contingencyReason'] as String?,
     );
     final credential = SigningCredential.fromPem(privateKeyPem: keyPem, certificatePem: certPem);
     final nfe = buildNfe(input, credential);
@@ -109,5 +113,6 @@ void main() {
   final api = JSObject();
   api['buildNfe'] = ((JSString input, JSString key, JSString cert) => _buildNfe(input.toDart, key.toDart, cert.toDart).toJS).toJS;
   api['buildDanfe'] = ((JSString xml) => _buildDanfe(xml.toDart)).toJS;
+  api['svcEmissionType'] = ((JSString uf) => svcEmissionType(uf.toDart)?.toJS).toJS;
   globalContext['farmaerpFiscal'] = api;
 }

@@ -84,13 +84,13 @@ class NfceRetransmitter {
         // reenviou) ou ter sido cancelada pela retaguarda. Só envia o que a Sefaz não tem.
         final model = nfce.model;
         var result = await sefaz.consult(
-          accessKey: nfce.accessKey, signedNfe: signed, uf: uf, environment: nfce.environment, credentials: opened, model: model,
+          accessKey: nfce.accessKey, signedNfe: signed, uf: uf, environment: nfce.environment, credentials: opened, model: model, emissionType: nfce.isNfe ? nfce.emissionType : 1,
         );
         if (result is SefazNotFound) {
-          result = await sefaz.authorize(signedNfe: signed, uf: uf, environment: nfce.environment, credentials: opened, model: model);
+          result = await sefaz.authorize(signedNfe: signed, uf: uf, environment: nfce.environment, credentials: opened, model: model, emissionType: nfce.isNfe ? nfce.emissionType : 1);
           if (result is SefazDuplicate) {
             result = await sefaz.consult(
-              accessKey: nfce.accessKey, signedNfe: signed, uf: uf, environment: nfce.environment, credentials: opened, model: model,
+              accessKey: nfce.accessKey, signedNfe: signed, uf: uf, environment: nfce.environment, credentials: opened, model: model, emissionType: nfce.isNfe ? nfce.emissionType : 1,
             );
           }
         }
