@@ -36,7 +36,8 @@ describe('NF-e de devolução emitida pela central', () => {
   const sessions = new Map<string, string>();
   const ip = `10.${randomInt(255)}.${randomInt(255)}.${randomInt(255)}`;
   const received: string[] = [];
-  // Próxima resposta da Sefaz falsa: 'down' (erro 500), 'reject' ou autoriza.
+  const paths: string[] = [];
+  // Próxima resposta da Sefaz falsa: 'down' (erro 500), 'stopped' (108, serviço parado), 'reject' ou autoriza.
   const plan: string[] = [];
 
   const admin = (method: 'get' | 'post' | 'patch', path: string, email = ADMIN) =>
@@ -51,7 +52,13 @@ describe('NF-e de devolução emitida pela central', () => {
       req.on('end', () => {
         const body = Buffer.concat(chunks).toString('utf8');
         received.push(body);
+        paths.push(req.url ?? '');
         const next = plan.shift();
+        if (next === 'stopped') {
+          res.writeHead(200, { 'Content-Type': 'application/soap+xml; charset=utf-8' });
+          res.end(soap('<retEnviNFe><cStat>108</cStat><xMotivo>Servico Paralisado Momentaneamente</xMotivo></retEnviNFe>'));
+          return;
+        }
         if (next === 'down') {
           res.writeHead(500);
           res.end();
@@ -170,6 +177,23 @@ describe('NF-e de devolução emitida pela central', () => {
     expect(reissued.status).toBe('authorized');
     expect(reissued.id).not.toBe(rejected.id);
     expect(keyOf(received.at(-1)!)).not.toBe(rejectedKey);
+  });
+
+  it('Sefaz da UF parada: a mesma nota vai para a SVC-AN (tpEmis 6), com outra chave, e sai autorizada', async () => {
+    const { returnId } = await returned();
+    plan.push('stopped');
+    const before = paths.length;
+    const emitted = (await admin('post', `/purchase-returns/${returnId}/nfe`).expect(200)).body as Json;
+    expect(emitted.status).toBe('authorized');
+    expect(paths.slice(before)).toEqual(['/authorization', '/svc-authorization']);
+    const [normal, svc] = received.slice(-2);
+    expect(normal).toContain('<tpEmis>1</tpEmis>');
+    expect(svc).toContain('<tpEmis>6</tpEmis>');
+    expect(svc).toContain('<xJust>Sefaz da UF sem comunicacao no momento da emissao</xJust>');
+    expect(keyOf(svc).substring(34, 35)).toBe('6');
+    expect(keyOf(svc).substring(25, 34)).toBe(keyOf(normal).substring(25, 34));
+    const xml = await admin('get', `/central-nfe/${emitted.id}/xml`).expect(200);
+    expect(xml.text).toContain(`Id="NFe${keyOf(svc)}"`);
   });
 
   it('transferência entre filiais: emite a NF-e da origem, aparece nas movimentações e não emite de novo', async () => {

@@ -61,6 +61,18 @@ void main() {
     expect(authorizationUrl('SP', 2)?.host, 'homologacao.nfce.fazenda.sp.gov.br');
   });
 
+  test('NF-e em contingência SVC: autorização e consulta na Sefaz Virtual (6 SVC-AN, 7 SVC-RS); 108/109 é "não processada"', () {
+    expect(authorizationUrl('SP', 2, model: '55', emissionType: 6).toString(), 'https://hom.svc.fazenda.gov.br/NFeAutorizacao4/NFeAutorizacao4.asmx');
+    expect(authorizationUrl('SP', 1, model: '55', emissionType: 6)?.host, 'www.svc.fazenda.gov.br');
+    expect(consultUrl('SP', 2, model: '55', emissionType: 6).toString(), 'https://hom.svc.fazenda.gov.br/NFeConsultaProtocolo4/NFeConsultaProtocolo4.asmx');
+    expect(authorizationUrl('PR', 2, model: '55', emissionType: 7)?.host, 'nfe-homologacao.svrs.rs.gov.br');
+    expect(consultUrl('PR', 1, model: '55', emissionType: 7)?.host, 'nfe.svrs.rs.gov.br');
+    // A NFC-e não usa SVC: tpEmis 9 continua nos endereços dela.
+    expect(authorizationUrl('SP', 2, emissionType: 9)?.host, 'homologacao.nfce.fazenda.sp.gov.br');
+    final stopped = parseAuthorization(response(batch: '109', batchReason: 'Servico Paralisado sem Previsao'), signedNfe: signedNfe);
+    expect((stopped as SefazUnavailable).sent, isFalse);
+  });
+
   test('sem chegar à Sefaz (sem conexão, TLS, UF sem serviço) é "não enviado"; tempo esgotado depois de enviar pode ter chegado', () async {
     Future<SefazUnavailable> attempt(Object error, {String uf = 'SP'}) async => await SefazClient(transport: FakeTransport(() => throw error))
         .authorize(signedNfe: signedNfe, uf: uf, environment: 2, credentials: credentials, model: '55') as SefazUnavailable;

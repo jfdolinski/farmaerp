@@ -271,6 +271,50 @@ describe('NF-e de devolução emitida pela central', () => {
     });
   });
 
+  it('contingência SVC: a pendente troca a chave e o XML uma vez só; a pendente diz a forma de emissão', async () => {
+    await asUser(a.admin.id, async (client) => {
+      const r = await returned(client);
+      await client.query('SELECT app.update_supplier($1, $2::jsonb)', [r.supplierId, JSON.stringify(supplierAddress)]);
+      const prepared = await prepare(client, r.returnId);
+      const id = await store(client, prepared);
+      expect((await client.query('SELECT emission_type FROM app.return_nfe_pending($1)', [r.returnId])).rows).toEqual([{ emission_type: 1 }]);
+      const svcKey = `3526111122233300018155${String(prepared.series).padStart(3, '0')}${String(prepared.number).padStart(9, '0')}6112233440`;
+      const svcXml = '<NFe>' + 'z'.repeat(200) + '</NFe>';
+      const contingency = (key, xml, type, noteId = id) =>
+        client.query('SELECT app.central_nfe_contingency($1, $2, $3, $4::smallint)', [noteId, key, xml, type]);
+      // Outro grupo não acha a nota; quem não emite NF-e na filial não troca.
+      const as = (user) => client.query("SELECT set_config('app.user_id', $1, true)", [user.id]);
+      await as(b.admin);
+      await expectCode(client, () => contingency(svcKey, svcXml, 6), 'FA006');
+      await as(buyer);
+      await expectCode(client, () => contingency(svcKey, svcXml, 6), 'FA002');
+      await as(a.admin);
+      await contingency(svcKey, svcXml, 6);
+      const { rows: [saved] } = await client.query('SELECT access_key, xml, emission_type, series, number::int AS number FROM central_nfe WHERE id = $1', [id]);
+      expect(saved).toEqual({ access_key: svcKey, xml: svcXml, emission_type: 6, series: prepared.series, number: prepared.number });
+      expect((await client.query('SELECT emission_type, access_key FROM app.return_nfe_pending($1)', [r.returnId])).rows)
+        .toEqual([{ emission_type: 6, access_key: svcKey }]);
+      // Já em SVC: não troca de novo, nem volta para a normal.
+      await expectCode(client, () => contingency(svcKey.replace(/0$/, '1'), svcXml, 7), 'FA772');
+      await expectCode(client, () => contingency(svcKey, svcXml, 1), 'FA772');
+      await expectCode(client, () => contingency(svcKey, svcXml, 9), 'FA772');
+      // Autorizada: não muda.
+      await result(client, id, { kind: 'authorized', protocol: '135260000000778', authorized_at: '2026-11-27T16:00:05Z', xml: '<nfeProc>' + 'y'.repeat(200) + '</nfeProc>', status_code: '100', reason: 'Autorizado' });
+      await expectCode(client, () => contingency(svcKey, svcXml, 7), 'FA772');
+      // Nota normal já autorizada também não vai para a SVC.
+      const other = await returned(client);
+      await client.query('SELECT app.update_supplier($1, $2::jsonb)', [other.supplierId, JSON.stringify(supplierAddress)]);
+      const otherId = await store(client, await prepare(client, other.returnId));
+      await result(client, otherId, { kind: 'authorized', protocol: '135260000000779', authorized_at: '2026-11-27T16:00:05Z', xml: '<nfeProc>' + 'w'.repeat(200) + '</nfeProc>', status_code: '100', reason: 'Autorizado' });
+      await expectCode(client, () => contingency(svcKey.replace(/0$/, '9'), svcXml, 6, otherId), 'FA772');
+      // Nem trocando só a chave (com o mesmo XML).
+      await expectCode(client, () => contingency(svcKey.replace(/0$/, '9'), '<nfeProc>' + 'w'.repeat(200) + '</nfeProc>', 6, otherId), 'FA772');
+    });
+    await asUser(b.admin.id, async (client) => {
+      await expectCode(client, () => client.query('SELECT app.central_nfe_contingency(gen_random_uuid(), $1, $2, 6::smallint)', ['1', '<x/>']), 'FA006');
+    });
+  });
+
   it('só quem tem a permissão de emitir; outro grupo não enxerga', async () => {
     await asUser(a.admin.id, async (client) => {
       const r = await returned(client);

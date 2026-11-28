@@ -255,6 +255,10 @@ describe('NF-e 55 do caixa na central', () => {
     await rejected(nfe(sale55, { series: series65 }), 'série da NFC-e');
     await rejected(nfe(sale55, { model: '57' }), 'modelo desconhecido');
     await rejected(nfe(sale55, { status: 'contingency', emission_type: 9, protocol: null, authorized_at: null }), 'contingência');
+    // A contingência da NF-e é a SVC (6 ou 7), não a offline da NFC-e.
+    expect(await push(a.terminal1, 'nfce', nfe(await newSale(), { emission_type: 6 }))).toMatchObject({ status: 'applied' });
+    expect(await push(a.terminal1, 'nfce', nfe(await newSale(), { emission_type: 7 }))).toMatchObject({ status: 'applied' });
+    await rejected(nfe(await newSale({ model: '65', customerId: null }), { model: '65', series: series65, emission_type: 6 }), 'NFC-e em SVC');
     await rejected(nfe(await newSale({ customerId: null })), 'sem cliente');
 
     // O mesmo id não troca de modelo.

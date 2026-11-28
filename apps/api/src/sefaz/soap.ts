@@ -14,9 +14,16 @@ export interface HttpsResult {
   body: string;
 }
 
+/** Detalhe do FA944 quando a chamada nem chegou ao servidor (sem conexão, TLS ou tempo ao conectar). */
+export const NOT_REACHED = 'not_reached';
+
+/** A falha aconteceu antes de o pedido chegar ao servidor: a Sefaz não recebeu nada. */
+export const notReached = (error: unknown): boolean => error instanceof AppError && error.code === 'FA944' && error.detail === NOT_REACHED;
+
 /**
  * Chamada HTTPS com o certificado A1 da filial no TLS. Falha de rede, tempo esgotado ou resposta
- * grande demais vira FA944; a causa técnica vai só para o log, sem o certificado.
+ * grande demais vira FA944; a causa técnica vai só para o log, sem o certificado. Falha antes de a
+ * conexão TLS ficar pronta leva o detalhe NOT_REACHED (o pedido não saiu).
  */
 export function httpsCall(
   url: string,
@@ -26,10 +33,11 @@ export function httpsCall(
 ): Promise<HttpsResult> {
   return new Promise((resolve, reject) => {
     let settled = false;
+    let connected = false;
     const fail = (reason: string) => {
       if (settled) return;
       settled = true;
-      reject(new AppError('FA944', { cause: new Error(reason) }));
+      reject(new AppError('FA944', { cause: new Error(reason), ...(connected ? {} : { detail: NOT_REACHED }) }));
     };
     const body = options.body === undefined ? undefined : Buffer.from(options.body, 'utf8');
     const req = request(
@@ -63,6 +71,11 @@ export function httpsCall(
         res.on('error', (error) => fail(`resposta: ${error.message}`));
       },
     );
+    req.on('socket', (socket) => {
+      socket.once('secureConnect', () => {
+        connected = true;
+      });
+    });
     req.on('timeout', () => {
       req.destroy();
       fail('tempo esgotado');

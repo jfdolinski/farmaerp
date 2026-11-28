@@ -92,6 +92,9 @@ NfcePayment nfcePayment(Payment payment) => switch (payment.method) {
   PaymentMethod.cashback => NfcePayment(type: '99', cents: payment.amountCents, description: 'Cashback'),
 };
 
+/// Motivo da contingência SVC da NF-e 55 (xJust, 15 a 256 caracteres).
+const nfeContingencyReason = 'Sefaz da UF sem comunicacao no momento da emissao';
+
 /// Motivo da contingência que vai na nota (xJust, 15 a 256 caracteres).
 const contingencyReason = 'Sem comunicacao com a Sefaz no momento da venda';
 
@@ -151,7 +154,7 @@ class NfceEmitter {
     }
 
     late NfceDocument document;
-    final ({int series, int number}) numbering;
+    late final ({int series, int number}) numbering;
     try {
       if (database.fiscal == null) throw const FiscalException('FA724', 'Sem dados fiscais da filial.');
       final next = database.nextNfceNumber();
@@ -243,41 +246,73 @@ class NfceEmitter {
     final recipient = nfeRecipientOf(customer == null ? null : database.customerById(customer.id));
     if (recipient == null) return const NfeOutcome(blockCode: 'FA784');
 
-    final NfeDocument document;
-    final ({int series, int number}) numbering;
+    final uf = (database.fiscal?['branch'] as Map?)?['state'] as String?;
+    late final ({int series, int number}) numbering;
+    late final String numericCode;
+    late final List<NfceItem> items;
+    NfeDocument build(int emissionType) => buildNfe(
+      NfeInput(
+        issuer: NfceIssuer.fromFiscal(database.fiscal!),
+        recipient: recipient,
+        items: items,
+        payments: [for (final payment in cart.payments) nfcePayment(payment)],
+        series: numbering.series,
+        number: numbering.number,
+        emittedAt: now,
+        environment: credentials.environment,
+        numericCode: numericCode,
+        appVersion: appVersion,
+        operation: 'VENDA',
+        emissionType: emissionType,
+        contingencyAt: emissionType == 1 ? null : now,
+        contingencyReason: emissionType == 1 ? null : nfeContingencyReason,
+      ),
+      SigningCredential.fromPem(privateKeyPem: opened.privateKeyPem, certificatePem: opened.certificatePem),
+    );
+    var document = NfeDocument(accessKey: '', xml: '', totalCents: 0);
     try {
-      if (database.fiscal == null) throw const FiscalException('FA724', 'Sem dados fiscais da filial.');
+      if (database.fiscal == null || uf == null) throw const FiscalException('FA724', 'Sem dados fiscais da filial.');
       final next = database.nextFiscalNumber('55');
       if (next == null) throw const FiscalException('FA724', 'Caixa sem série do modelo 55.');
       numbering = next;
-      document = buildNfe(
-        NfeInput(
-          issuer: NfceIssuer.fromFiscal(database.fiscal!),
-          recipient: recipient,
-          items: [for (final line in cart.lines) _item(line, now)],
-          payments: [for (final payment in cart.payments) nfcePayment(payment)],
-          series: next.series,
-          number: next.number,
-          emittedAt: now,
-          environment: credentials.environment,
-          numericCode: randomNumericCode(next.number),
-          appVersion: appVersion,
-          operation: 'VENDA',
-        ),
-        SigningCredential.fromPem(privateKeyPem: opened.privateKeyPem, certificatePem: opened.certificatePem),
-      );
+      numericCode = randomNumericCode(next.number);
+      items = [for (final line in cart.lines) _item(line, now)];
+      document = build(1);
     } on FiscalException catch (error) {
       logger?.warn('NF-e não montada', fields: {'error_code': error.code, 'err': error.detail});
       return NfeOutcome(blockCode: error.code, detail: error.detail);
     }
 
-    final result = await sefaz.authorize(
+    var emissionType = 1;
+    var result = await sefaz.authorize(
       signedNfe: document.xml,
-      uf: (database.fiscal!['branch'] as Map)['state'] as String,
+      uf: uf,
       environment: credentials.environment,
       credentials: opened,
       model: '55',
     );
+    // Sefaz da UF fora (não chegou ou serviço parado): a mesma nota, em contingência na Sefaz Virtual
+    // (SVC), com a hora e o motivo. Se a SVC também não responder, o caixa está sem internet: bloqueia.
+    if (result is SefazUnavailable && !result.sent) {
+      final svc = svcEmissionType(uf);
+      if (svc != null) {
+        logger?.warn('NF-e em contingência SVC', fields: {'number': numbering.number, 'emission_type': svc, 'err': result.reason});
+        try {
+          document = build(svc);
+        } on FiscalException catch (error) {
+          return NfeOutcome(blockCode: error.code, detail: error.detail);
+        }
+        emissionType = svc;
+        result = await sefaz.authorize(
+          signedNfe: document.xml,
+          uf: uf,
+          environment: credentials.environment,
+          credentials: opened,
+          model: '55',
+          emissionType: svc,
+        );
+      }
+    }
     LocalNfce nfe({required String status, String? protocol, String? statusCode, String? reason, String? xml, DateTime? authorizedAt}) => LocalNfce(
       id: const Uuid().v7(),
       saleId: saleId,
@@ -286,7 +321,7 @@ class NfceEmitter {
       number: numbering.number,
       accessKey: document.accessKey,
       environment: credentials.environment,
-      emissionType: 1,
+      emissionType: emissionType,
       status: status,
       protocol: protocol,
       statusCode: statusCode,
@@ -300,7 +335,9 @@ class NfceEmitter {
     // Só o número e a situação no log: nada de dados do cliente.
     switch (result) {
       case SefazAuthorized():
-        logger?.info('NF-e autorizada', fields: {'number': numbering.number, 'series': numbering.series, 'status_code': result.statusCode});
+        logger?.info('NF-e autorizada', fields: {
+          'number': numbering.number, 'series': numbering.series, 'status_code': result.statusCode, 'emission_type': emissionType,
+        });
         return NfeOutcome(
           nfe: nfe(
             status: 'authorized',
@@ -319,7 +356,7 @@ class NfceEmitter {
         return NfeOutcome(blockCode: 'FA781', detail: result.reason);
       case SefazUnavailable() || SefazDuplicate() || SefazCanceled() || SefazNotFound():
         // Enviada e sem resposta (ou a Sefaz já tinha a nota): fica pendente com esta chave e o caixa
-        // consulta depois. A venda segue.
+        // consulta depois (na SVC, se foi para lá). A venda segue.
         logger?.warn('NF-e enviada sem resposta; consultar depois', fields: {'number': numbering.number});
         return NfeOutcome(
           nfe: nfe(status: 'pending', reason: 'Enviada à Sefaz sem resposta; o caixa consulta depois.'),

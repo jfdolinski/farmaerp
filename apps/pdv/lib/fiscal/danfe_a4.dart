@@ -213,6 +213,9 @@ Future<Uint8List> buildDanfeA4(String xml) async {
 
   final notes = [
     if (homologation) 'EMITIDA EM AMBIENTE DE HOMOLOGAÇÃO - SEM VALOR FISCAL.',
+    // Contingência na Sefaz Virtual: a data e o motivo vão no DANFE.
+    if (_t(ide, 'tpEmis') == '6' || _t(ide, 'tpEmis') == '7')
+      'EMITIDA EM CONTINGÊNCIA (${_t(ide, 'tpEmis') == '6' ? 'SVC-AN' : 'SVC-RS'}) em ${_date(_t(ide, 'dhCont'))}. Motivo: ${_t(ide, 'xJust')}.',
     if (protocol == null) 'Sem o protocolo de autorização da Sefaz: este DANFE não acompanha mercadoria.',
     for (final reference in inf.findAllElements('refNFe')) 'Nota referenciada: ${_groups(reference.innerText)}.',
     _t(inf.getElement('infAdic'), 'infCpl'),

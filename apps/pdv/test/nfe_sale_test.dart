@@ -352,6 +352,89 @@ void main() {
     });
   });
 
+  group('contingência SVC', () {
+    const svcHost = 'hom.svc.fazenda.gov.br';
+    const ufHost = 'homologacao.nfe.fazenda.sp.gov.br';
+
+    test('Sefaz da UF sem comunicação: a mesma nota vai para a SVC-AN com tpEmis 6, hora e motivo; autorizada, a venda conclui com DANFE', () async {
+      final transport = RoutingTransport((url, body) {
+        if (url.host == ufHost) throw const SefazNotReached('Sem conexão com a Sefaz: SP fora');
+        return response();
+      });
+      final controller = await pos(transport);
+      await ring(controller, company);
+      await controller.finish();
+      expect(noticeCode(controller), isNull);
+      expect(transport.calls.map((call) => call.$1.host), [ufHost, svcHost]);
+      final svcBody = transport.calls.last.$2;
+      expect(svcBody, contains('<tpEmis>6</tpEmis>'));
+      expect(svcBody, contains('<xJust>Sefaz da UF sem comunicacao no momento da emissao</xJust>'));
+      expect(svcBody, contains('<dhCont>'));
+      final nfe = database.nfceOfSale(outbox('sale').single.payload['id']! as String)!;
+      expect([nfe.status, nfe.emissionType, nfe.number], ['authorized', 6, 1]);
+      // A chave leva o tpEmis 6 (posição 35).
+      expect(nfe.accessKey.substring(34, 35), '6');
+      expect(outbox('nfce').single.payload['emission_type'], 6);
+      expect(danfe.printed, hasLength(1));
+    });
+
+    test('serviço parado na UF (108/109) também vai para a SVC', () async {
+      final transport = RoutingTransport((url, body) => url.host == ufHost ? response(batch: '108', batchReason: 'Servico Paralisado Momentaneamente') : response());
+      final controller = await pos(transport);
+      await ring(controller, company);
+      await controller.finish();
+      expect(transport.calls.map((call) => call.$1.host), [ufHost, svcHost]);
+      expect(database.nfceOfSale(outbox('sale').single.payload['id']! as String)!.emissionType, 6);
+    });
+
+    test('UF e SVC sem comunicação (caixa sem internet): bloqueia, sem gastar o número', () async {
+      final transport = RoutingTransport((url, body) => throw const SefazNotReached('Sem conexão com a Sefaz: sem rede'));
+      final controller = await pos(transport);
+      await ring(controller, company);
+      await controller.finish();
+      expect(noticeCode(controller), 'FA781');
+      expect(transport.calls, hasLength(2));
+      expect(outbox('sale'), isEmpty);
+      expect(database.nextFiscalNumber('55'), (series: 1, number: 1));
+    });
+
+    test('enviada à SVC sem resposta: pendente em contingência; a retransmissão consulta e envia na SVC', () async {
+      final transport = RoutingTransport((url, body) {
+        if (url.host == ufHost) throw const SefazNotReached('SP fora');
+        throw TimeoutException('SVC lenta');
+      });
+      final controller = await pos(transport);
+      await ring(controller, company);
+      await controller.finish();
+      expect(noticeCode(controller), 'FA785');
+      final pending = database.nfceToTransmit().single;
+      expect([pending.status, pending.emissionType], ['pending', 6]);
+
+      final online = RoutingTransport((url, body) => url.path.toLowerCase().contains('consulta') ? consultResponse('217') : response());
+      final retransmitter = NfceRetransmitter(
+        database: database,
+        credentials: credentials,
+        sefaz: SefazClient(transport: online),
+        terminalId: () => _terminalId,
+      );
+      expect(await retransmitter.tick(), 1);
+      expect(online.calls.map((call) => call.$1.host), [svcHost, svcHost]);
+      expect(database.nfceOfSale(pending.saleId)!.status, 'authorized');
+    });
+
+    test('recusada na SVC: bloqueia com o motivo', () async {
+      final transport = RoutingTransport((url, body) {
+        if (url.host == ufHost) throw const SefazNotReached('SP fora');
+        return response(status: '233', reason: 'Rejeicao: IE do destinatario nao cadastrada');
+      });
+      final controller = await pos(transport);
+      await ring(controller, company);
+      await controller.finish();
+      expect(noticeCode(controller), 'FA782');
+      expect(outbox('sale'), isEmpty);
+    });
+  });
+
   test('retransmissão da NF-e pendente: consulta e envia nos endereços da NF-e; autorizada, imprime o DANFE', () async {
     final controller = await pos(FakeTransport(() => throw TimeoutException('sem resposta')));
     await ring(controller, company);

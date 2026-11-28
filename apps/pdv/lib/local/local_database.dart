@@ -614,6 +614,35 @@ const _migrations = <String>[
   DROP TABLE nfce_document;
   ALTER TABLE nfce_document_new RENAME TO nfce_document;
   ''',
+  // Contingência da NF-e 55 na Sefaz Virtual (tpEmis 6 SVC-AN, 7 SVC-RS): a NFC-e continua com 1 e 9.
+  '''
+  CREATE TABLE nfce_document_new (
+    id BLOB PRIMARY KEY CHECK (length(id) = 16),
+    sale_id BLOB NOT NULL UNIQUE CHECK (length(sale_id) = 16),
+    model TEXT NOT NULL DEFAULT '65' CHECK (model IN ('55', '65')),
+    series INTEGER NOT NULL,
+    number INTEGER NOT NULL,
+    access_key TEXT NOT NULL UNIQUE,
+    environment INTEGER NOT NULL CHECK (environment IN (1, 2)),
+    emission_type INTEGER NOT NULL CHECK (emission_type IN (1, 6, 7, 9)),
+    status TEXT NOT NULL CHECK (status IN ('authorized', 'rejected', 'pending', 'contingency', 'canceled')),
+    protocol TEXT,
+    status_code TEXT,
+    reason TEXT,
+    xml TEXT NOT NULL,
+    qr_code TEXT NOT NULL,
+    consult_url TEXT NOT NULL,
+    emitted_at TEXT NOT NULL,
+    authorized_at TEXT,
+    attempts INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL,
+    UNIQUE (model, series, number),
+    CHECK ((model = '65' AND emission_type IN (1, 9)) OR (model = '55' AND emission_type IN (1, 6, 7)))
+  ) STRICT;
+  INSERT INTO nfce_document_new SELECT * FROM nfce_document;
+  DROP TABLE nfce_document;
+  ALTER TABLE nfce_document_new RENAME TO nfce_document;
+  ''',
 ];
 
 /// NFC-e (ou NF-e de venda, modelo 55) do caixa, para guardar, imprimir o DANFE e subir à central.
