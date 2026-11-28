@@ -4029,7 +4029,7 @@
   },
   "FA780": {
     "message": "Esta operação ainda não está disponível para a NF-e de venda.",
-    "action": "Cancelamento, reenvio e consulta da NF-e modelo 55 pela central chegam numa próxima versão. Até lá, use o portal da Sefaz.",
+    "action": "No caixa, o cancelamento da NF-e de venda chega numa próxima versão. Até lá, cancele pela retaguarda, em Notas fiscais.",
     "httpStatus": 422,
     "severity": "warning",
     "retryable": false,
@@ -4073,6 +4073,22 @@
     "httpStatus": 503,
     "severity": "warning",
     "retryable": true,
+    "dbConstraints": []
+  },
+  "FA786": {
+    "message": "O prazo para cancelar esta NF-e já passou.",
+    "action": "O cancelamento da NF-e vale até 24 horas depois da autorização. Para desfazer a venda, faça a devolução.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA787": {
+    "message": "Esta NF-e não está numa situação que permita a operação.",
+    "action": "Consulte a nota na Sefaz e confira a situação.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
     "dbConstraints": []
   }
 }

@@ -20,6 +20,7 @@ import {
   statusEnvelope,
   voidingEnvelope,
 } from '../sefaz/nfce-sefaz.js';
+import { nfeUrl } from '../sefaz/nfe-sefaz.js';
 import { sefazEndpoints, sefazEnvironment } from '../sefaz/sefaz-config.js';
 import { ClientCertificate, postSoap } from '../sefaz/soap.js';
 import { open } from './secret-box.js';
@@ -32,6 +33,9 @@ interface Sealed {
   encrypted_pfx: Buffer | null;
   encrypted_password: Buffer | null;
   state: string | null;
+  /** Modelo da nota ('65' NFC-e, '55' NF-e de venda) e forma de emissão; sem eles, NFC-e normal. */
+  model?: string;
+  emission_type?: number;
 }
 
 export interface DocumentContext extends Sealed {
@@ -65,8 +69,8 @@ export function failureResult(error: unknown): { kind: 'blocked' | 'unavailable'
 }
 
 /**
- * NFC-e na Sefaz da UF pela central: consulta, reenvio (automático e pelo botão), cancelamento e
- * inutilização. O certificado da filial só é aberto na memória, para a chamada.
+ * NFC-e e NF-e de venda na Sefaz da UF pela central: consulta, reenvio (automático e pelo botão),
+ * cancelamento e inutilização (só a NFC-e). O certificado da filial só é aberto na memória, para a chamada.
  */
 @Injectable()
 export class NfceActionsService implements OnApplicationBootstrap, OnModuleDestroy {
@@ -94,16 +98,23 @@ export class NfceActionsService implements OnApplicationBootstrap, OnModuleDestr
     return { pfx: open(row.encrypted_pfx, context), passphrase: open(row.encrypted_password, context).toString('utf8') };
   }
 
-  /** A central só fala com o ambiente da Sefaz que é o dela (a homologação nunca chama a produção). */
-  private url(state: string | null, environment: number, service: NfceService): string {
+  /**
+   * A central só fala com o ambiente da Sefaz que é o dela (a homologação nunca chama a produção).
+   * NF-e de venda: os serviços da NF-e da UF ou, em contingência, os da SVC.
+   */
+  private url(context: Sealed & { environment: number }, service: NfceService): string {
+    const { state, environment } = context;
     if (environment !== sefazEnvironment()) throw new AppError('FA753', { cause: new Error('ambiente da nota diferente do da central') });
-    const url = state ? nfceUrl(state, environment as 1 | 2, service) : null;
-    if (!url) throw new AppError('FA754', { cause: new Error(`UF ${state ?? '?'} sem serviço da NFC-e`) });
+    const nfe = context.model === '55';
+    const url = !state ? null
+      : nfe ? (service === 'voiding' ? null : nfeUrl(state, environment as 1 | 2, service, context.emission_type ?? 1))
+      : nfceUrl(state, environment as 1 | 2, service);
+    if (!url) throw new AppError('FA754', { cause: new Error(`UF ${state ?? '?'} sem serviço da ${nfe ? 'NF-e' : 'NFC-e'}`) });
     return url;
   }
 
   private call(context: Sealed & { environment: number }, service: NfceService, envelope: string, certificate: ClientCertificate) {
-    return postSoap(this.url(context.state, context.environment, service), ACTIONS[service], envelope, certificate, sefazEndpoints().ca);
+    return postSoap(this.url(context, service), ACTIONS[service], envelope, certificate, sefazEndpoints().ca);
   }
 
   /**

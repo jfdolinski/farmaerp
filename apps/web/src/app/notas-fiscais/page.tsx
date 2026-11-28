@@ -105,11 +105,10 @@ function Row({ row, canCancel, canResend }: { row: FiscalRow; canCancel: boolean
         <details>
           <summary>Ações</summary>
           <div className={styles.stack}>
-            {/* A NF-e de venda por enquanto só é baixada: o reenvio e a consulta ficam com o caixa. */}
-            {row.model === "65" && (
-              <DocumentActions id={row.id} canResend={canResend && ["pending", "contingency", "rejected"].includes(row.status)} />
+            <DocumentActions id={row.id} canResend={canResend && ["pending", "contingency", "rejected"].includes(row.status)} />
+            {canCancel && row.status === "authorized" && row.cancelable_until && (
+              <CancelForm id={row.id} until={row.cancelable_until} model={row.model} />
             )}
-            {canCancel && row.status === "authorized" && row.cancelable_until && <CancelForm id={row.id} until={row.cancelable_until} />}
             <p>
               <a href={`/notas-fiscais/${row.id}/xml`}>Baixar o XML</a>
               {row.model === "55" && row.status === "authorized" && (
@@ -191,9 +190,8 @@ async function FiscalContent({ searchParams }: { searchParams: SearchParams }) {
       <h1>Notas fiscais</h1>
       <p className={styles.hint}>
         NFC-e e NF-e de venda emitidas nos caixas. A central consulta a Sefaz e, de hora em hora, reenvia até 30 notas que ficaram paradas
-        (em contingência ou pendentes) há mais da metade do prazo; a recusada vira aviso. O cancelamento vale até 30
-        minutos depois da autorização e desfaz a venda junto. A NF-e de venda (modelo 55), por enquanto, só é
-        listada e baixada aqui (XML e DANFE).{" "}
+        (em contingência ou pendentes) há mais da metade do prazo; a recusada vira aviso. O cancelamento desfaz a venda
+        junto e vale até 30 minutos depois da autorização na NFC-e e até 24 horas na NF-e de venda (modelo 55).{" "}
         {canResend && <Link href="/notas-fiscais/inutilizacao">Inutilizar numeração</Link>}
       </p>
 

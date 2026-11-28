@@ -979,7 +979,7 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
   'FA780': ErrorCatalogEntry(
     code: 'FA780',
     message: 'Esta operação ainda não está disponível para a NF-e de venda.',
-    action: 'Cancelamento, reenvio e consulta da NF-e modelo 55 pela central chegam numa próxima versão. Até lá, use o portal da Sefaz.',
+    action: 'No caixa, o cancelamento da NF-e de venda chega numa próxima versão. Até lá, cancele pela retaguarda, em Notas fiscais.',
     retryable: false,
   ),
   'FA781': ErrorCatalogEntry(
@@ -1011,6 +1011,18 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     message: 'A NF-e foi enviada, mas a Sefaz não respondeu a tempo.',
     action: 'A venda está concluída. O caixa consulta a Sefaz sozinho e imprime o DANFE quando a nota for autorizada.',
     retryable: true,
+  ),
+  'FA786': ErrorCatalogEntry(
+    code: 'FA786',
+    message: 'O prazo para cancelar esta NF-e já passou.',
+    action: 'O cancelamento da NF-e vale até 24 horas depois da autorização. Para desfazer a venda, faça a devolução.',
+    retryable: false,
+  ),
+  'FA787': ErrorCatalogEntry(
+    code: 'FA787',
+    message: 'Esta NF-e não está numa situação que permita a operação.',
+    action: 'Consulte a nota na Sefaz e confira a situação.',
+    retryable: false,
   ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',

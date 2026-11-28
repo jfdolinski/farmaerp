@@ -218,9 +218,10 @@ describe('NF-e 55 do caixa na central', () => {
     );
     expect(Number(used.rows[0].last_used_number)).toBeGreaterThanOrEqual(700);
 
-    // Na retaguarda: a lista, a situação da venda e os arquivos dizem o modelo; NF-e não tem prazo de 30 minutos aqui.
+    // Na retaguarda: a lista, a situação da venda e os arquivos dizem o modelo; a NF-e se cancela até 24 horas.
     const listed = (await asUser(a.admin, 'SELECT * FROM app.list_fiscal_documents()')).find((r) => r.id === doc.id);
-    expect(listed).toMatchObject({ model: '55', series: series55, cancelable_until: null });
+    expect(listed).toMatchObject({ model: '55', series: series55 });
+    expect(listed.cancelable_until.getTime() - new Date(doc.authorized_at).getTime()).toBe(24 * 3_600_000);
     expect((await asUser(a.admin, 'SELECT app.sale_fiscal_document($1) AS d', [saleId]))[0].d).toMatchObject({ model: '55' });
     expect((await asUser(a.admin, 'SELECT app.fiscal_document_files($1) AS f', [doc.id]))[0].f).toMatchObject({ model: '55', xml: XML });
 
@@ -240,7 +241,7 @@ describe('NF-e 55 do caixa na central', () => {
     expect(await push(a.terminal1, 'nfce', doc)).toMatchObject({ status: 'applied' });
     const listed = (await asUser(a.admin, 'SELECT * FROM app.list_fiscal_documents()')).find((r) => r.id === doc.id);
     expect(listed.model).toBe('65');
-    expect(listed.cancelable_until).not.toBeNull();
+    expect(listed.cancelable_until.getTime() - new Date(doc.authorized_at).getTime()).toBe(30 * 60_000);
   });
 
   it('recusa modelo diferente do da venda, série de outro modelo, NF-e sem cliente, contingência e modelo desconhecido', async () => {
@@ -267,18 +268,68 @@ describe('NF-e 55 do caixa na central', () => {
     await rejected({ ...doc, model: '65', series: series65 }, 'troca de modelo');
   });
 
-  it('cancelar, reenviar e consultar a NF-e 55 pela central é recusado com FA780; o caixa também não cancela', async () => {
-    const saleId = await newSale();
-    const doc = nfe(saleId);
-    await push(a.terminal1, 'nfce', doc);
-    for (const action of ['cancel', 'resend', 'consult']) {
-      await expect(asUser(a.admin, 'SELECT * FROM app.fiscal_action_context($1, $2)', [doc.id, action]), action)
-        .rejects.toSatisfy(hasCode('FA780'));
-    }
-    await expect(asTerminal(a.terminal1, 'SELECT * FROM app.terminal_cancel_context($1, $2)', [doc.id, a.admin.id]))
+  it('pela central: cancela a NF-e 55 até 24 horas, reenvia e consulta; o caixa ainda não cancela', async () => {
+    const hoursAgo = (h) => new Date(Date.now() - h * 3_600_000).toISOString();
+    const authorized = async (at) => {
+      const doc = nfe(await newSale(), { authorized_at: at, emitted_at: at });
+      expect(await push(a.terminal1, 'nfce', doc)).toMatchObject({ status: 'applied' });
+      return doc;
+    };
+    const context = (doc, action) => asUser(a.admin, 'SELECT * FROM app.fiscal_action_context($1, $2)', [doc.id, action]);
+    // Dentro das 24 horas: o contexto sai com o modelo e a forma de emissão (o endereço depende deles).
+    const recent = await authorized(hoursAgo(23));
+    expect((await context(recent, 'cancel'))[0]).toMatchObject({ id: recent.id, model: '55', emission_type: 1, access_key: recent.access_key });
+    expect((await context(recent, 'consult'))[0]).toMatchObject({ model: '55' });
+    const svc = nfe(await newSale(), { emission_type: 6 });
+    await push(a.terminal1, 'nfce', svc);
+    expect((await context(svc, 'cancel'))[0]).toMatchObject({ model: '55', emission_type: 6 });
+    // Passou das 24 horas: FA786 (o da NF-e, não o de 30 minutos da NFC-e).
+    await expect(context(await authorized(hoursAgo(25)), 'cancel')).rejects.toSatisfy(hasCode('FA786'));
+    // Situação que não permite: FA787 (o da NF-e).
+    const pending = nfe(await newSale(), { status: 'pending', protocol: null, authorized_at: null, status_code: null, reason: null });
+    await push(a.terminal1, 'nfce', pending);
+    await expect(context(pending, 'cancel')).rejects.toSatisfy(hasCode('FA787'));
+    await expect(context(recent, 'resend')).rejects.toSatisfy(hasCode('FA787'));
+    expect((await context(pending, 'resend'))[0]).toMatchObject({ model: '55', status: 'pending' });
+    // O caixa continua sem cancelar a NF-e (próxima etapa).
+    await expect(asTerminal(a.terminal1, 'SELECT * FROM app.terminal_cancel_context($1, $2)', [recent.id, a.admin.id]))
       .rejects.toSatisfy(hasCode('FA780'));
     // Outro grupo continua sem ver a nota.
-    await expect(asUser(b.admin, "SELECT * FROM app.fiscal_action_context($1, 'consult')", [doc.id])).rejects.toSatisfy(hasCode('FA006'));
+    await expect(asUser(b.admin, "SELECT * FROM app.fiscal_action_context($1, 'consult')", [recent.id])).rejects.toSatisfy(hasCode('FA006'));
+  });
+
+  it('cancelamento registrado desfaz a venda no prazo de 24 horas (com folga de 5 minutos); depois, a venda fica e vira aviso', async () => {
+    const event = () => JSON.stringify({
+      reason: 'Cliente pediu outra nota com outro CNPJ', protocol: '135260000000889', status_code: '135',
+      xml: `<procEventoNFe versao="1.00">${'e'.repeat(200)}</procEventoNFe>`, registered_at: new Date().toISOString(),
+    });
+    const authorized = async (minutesAgo) => {
+      const at = new Date(Date.now() - minutesAgo * 60_000).toISOString();
+      const saleId = await newSale();
+      const doc = nfe(saleId, { authorized_at: at, emitted_at: at });
+      expect(await push(a.terminal1, 'nfce', doc)).toMatchObject({ status: 'applied' });
+      return { doc, saleId };
+    };
+    const register = (doc) => asUser(a.admin, 'SELECT app.fiscal_cancel_register($1, $2::jsonb) AS r', [doc.id, event()]).then((r) => r[0].r);
+    const saleGone = async (id) => (await ownerPool.query('SELECT deleted_at FROM sale WHERE id = $1', [id])).rows[0].deleted_at !== null;
+
+    // 23 horas, e 24 horas e 2 minutos (a resposta da Sefaz chegou na folga): a venda é desfeita.
+    for (const minutes of [23 * 60, 24 * 60 + 2]) {
+      const { doc, saleId } = await authorized(minutes);
+      expect(await register(doc), String(minutes)).toMatchObject({ cash_refund: expect.any(String) });
+      expect(await saleGone(saleId)).toBe(true);
+      expect((await ownerPool.query('SELECT status, cancel_note FROM fiscal_document WHERE id = $1', [doc.id])).rows[0])
+        .toEqual({ status: 'canceled', cancel_note: null });
+      // Cancelada, mesmo dentro das 24 horas, sai da lista sem prazo.
+      const listed = (await asUser(a.admin, "SELECT * FROM app.list_fiscal_documents(p_status => 'canceled')")).find((r) => r.id === doc.id);
+      expect(listed).toMatchObject({ status: 'canceled', cancelable_until: null });
+    }
+    // 24 horas e 10 minutos: nota cancelada, venda mantida com o aviso FA786.
+    const { doc, saleId } = await authorized(24 * 60 + 10);
+    expect(await register(doc)).toEqual({ sale_kept: 'FA786' });
+    expect(await saleGone(saleId)).toBe(false);
+    expect((await ownerPool.query('SELECT status, cancel_note FROM fiscal_document WHERE id = $1', [doc.id])).rows[0])
+      .toMatchObject({ status: 'canceled', cancel_note: expect.stringContaining('FA786') });
   });
 
   it('o reenvio automático da central não pega a NF-e 55 (fica com o caixa)', async () => {

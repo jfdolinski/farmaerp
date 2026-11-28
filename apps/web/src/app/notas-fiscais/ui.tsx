@@ -74,8 +74,10 @@ const CASH_MESSAGES: Record<string, string> = {
     "O turno da venda já fechou e o caixa não tem turno aberto: nada foi registrado no caixa. Devolva o dinheiro e registre a saída à mão.",
 };
 
-/** Cancelamento: motivo de 15 a 255 letras, até o fim do prazo (30 minutos). */
-export function CancelForm({ id, until }: { id: string; until: string }) {
+/** Cancelamento: motivo de 15 a 255 letras, até o fim do prazo (NFC-e 30 minutos, NF-e 24 horas). */
+export function CancelForm({ id, until, model }: { id: string; until: string; model: string }) {
+  const label = model === "55" ? "NF-e" : "NFC-e";
+  const limit = model === "55" ? "24 horas" : "30 minutos";
   const [state, action, pending] = useActionState<FiscalFormState, FormData>(cancelDocument, {});
   const [reason, setReason] = useState("");
   // A hora só vem do navegador (o servidor não calcula o prazo, para a página não mudar ao abrir).
@@ -97,17 +99,17 @@ export function CancelForm({ id, until }: { id: string; until: string }) {
       <div className={styles.stack}>
         {state.result.sale_kept ? (
           <p className={styles.warning}>
-            NFC-e cancelada na Sefaz, mas a venda não foi desfeita ({String(state.result.sale_kept)}): acerte pela devolução.
+            {label} cancelada na Sefaz, mas a venda não foi desfeita ({String(state.result.sale_kept)}): acerte pela devolução.
           </p>
         ) : (
-          <p className={styles.success}>NFC-e cancelada na Sefaz e venda desfeita (estoque de volta, pagamentos estornados).</p>
+          <p className={styles.success}>{label} cancelada na Sefaz e venda desfeita (estoque de volta, pagamentos estornados).</p>
         )}
         {CASH_MESSAGES[cash] && <p className={cash === "no_session" ? styles.warning : styles.hint}>{CASH_MESSAGES[cash]}</p>}
         <p className={styles.hint}>Cartão e PIX: faça o estorno ao cliente na maquininha ou no banco.</p>
       </div>
     );
   }
-  if (expired) return <p className={styles.hint}>O prazo de 30 minutos para cancelar acabou. Para desfazer, use a devolução.</p>;
+  if (expired) return <p className={styles.hint}>O prazo de {limit} para cancelar acabou. Para desfazer, use a devolução.</p>;
   return (
     <form action={action} className={styles.stack}>
       <input type="hidden" name="id" value={id} />
@@ -139,7 +141,7 @@ export function CancelForm({ id, until }: { id: string; until: string }) {
       </label>
       <div className={styles.inline}>
         <button type="submit" disabled={pending || length < 15}>
-          {pending ? "Cancelando..." : "Cancelar a NFC-e e a venda"}
+          {pending ? "Cancelando..." : `Cancelar a ${label} e a venda`}
         </button>
       </div>
       <ErrorNotice error={state.error} />

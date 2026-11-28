@@ -128,6 +128,8 @@ describe('notas fiscais pela central contra o banco real', () => {
     });
     await new Promise<void>((resolve) => sefaz.listen(0, '127.0.0.1', resolve));
     process.env.SEFAZ_NFCE_URL = `https://localhost:${(sefaz.address() as AddressInfo).port}`;
+    // A NF-e 55 fala com os serviços da NF-e: o mesmo servidor falso, noutro caminho.
+    process.env.SEFAZ_NFE_URL = `https://localhost:${(sefaz.address() as AddressInfo).port}/nfe`;
     process.env.SEFAZ_TEST_CA = tls.cert;
     process.env.FISCAL_WORKER = 'off';
 
@@ -168,6 +170,7 @@ describe('notas fiscais pela central contra o banco real', () => {
     await app.close();
     await new Promise((resolve) => sefaz.close(resolve));
     delete process.env.SEFAZ_NFCE_URL;
+    delete process.env.SEFAZ_NFE_URL;
     delete process.env.SEFAZ_TEST_CA;
     delete process.env.FISCAL_WORKER;
   });
@@ -324,7 +327,7 @@ describe('notas fiscais pela central contra o banco real', () => {
     }
   });
 
-  it('NF-e de venda (55) do caixa: lista com o modelo, XML e DANFE A4 para baixar; reenvio, consulta e cancelamento recusados', async () => {
+  it('NF-e de venda (55) do caixa: XML e DANFE A4; consulta e cancelamento nos serviços da NF-e, com a venda desfeita', async () => {
     const saleId = uuidV7();
     const number = base + numberOffset++;
     expect((await push([{ kind: 'sale', payload: {
@@ -341,7 +344,9 @@ describe('notas fiscais pela central contra o banco real', () => {
     } }]).expect(200)).body.results[0]).toMatchObject({ status: 'applied' });
 
     const listed = ((await admin('get', '/fiscal-documents').expect(200)).body as Json[]).find((row) => row.id === id);
-    expect(listed).toMatchObject({ model: '55', series: series55, cancelable_until: null });
+    expect(listed).toMatchObject({ model: '55', series: series55 });
+    // Cancelável por 24 horas (a NFC-e, 30 minutos).
+    expect(new Date(listed!.cancelable_until as string).getTime() - Date.now()).toBeGreaterThan(23 * 3_600_000);
     const xml = await admin('get', `/fiscal-documents/${id}/xml`).expect(200);
     expect(xml.headers['content-disposition']).toContain(`NFe-${nfe.key}.xml`);
     const danfe = await admin('get', `/fiscal-documents/${id}/danfe`).buffer(true).parse((res, done) => {
@@ -352,12 +357,27 @@ describe('notas fiscais pela central contra o banco real', () => {
     expect(danfe.headers['content-type']).toContain('application/pdf');
     expect((danfe.body as Buffer).subarray(0, 5).toString()).toBe('%PDF-');
 
+    // Autorizada não se reenvia (o código da NF-e) e nada vai à Sefaz.
     const before = received.length;
-    expect(codeOf(await admin('post', `/fiscal-documents/${id}/resend`).expect(422))).toBe('FA780');
-    expect(codeOf(await admin('post', `/fiscal-documents/${id}/consult`).expect(422))).toBe('FA780');
-    expect(codeOf(await admin('post', `/fiscal-documents/${id}/cancel`).send({ reason: 'Cliente desistiu da compra' }).expect(422))).toBe('FA780');
-    // Nada foi à Sefaz.
+    expect(codeOf(await admin('post', `/fiscal-documents/${id}/resend`).expect(409))).toBe('FA787');
     expect(received.length).toBe(before);
+    // A consulta vai ao serviço de consulta da NF-e (não ao da NFC-e).
+    await admin('post', `/fiscal-documents/${id}/consult`).expect(200);
+    expect(received.at(-1)).toMatchObject({ path: '/nfe/status', clientCertificate: true });
+    expect(received.at(-1)!.body).toContain(`<chNFe>${nfe.key}</chNFe>`);
+
+    // Cancela no evento da NF-e e desfaz a venda.
+    const canceled = (await admin('post', `/fiscal-documents/${id}/cancel`).send({ reason: 'Cliente pediu nota com outro CNPJ' }).expect(200)).body as Json;
+    expect(canceled).toMatchObject({ cash_refund: 'same_session', sefaz: '135 Evento registrado' });
+    const event = received.at(-1)!;
+    expect(event.path).toBe('/nfe/event');
+    expect(event.body).toContain(`<chNFe>${nfe.key}</chNFe>`);
+    expect(event.body).toContain('<nProt>135260000000124</nProt>');
+    expect(event.body).toContain('<cOrgao>35</cOrgao>');
+    expect(((await admin('get', '/sales').expect(200)).body as Json[]).some((row) => row.id === saleId)).toBe(false);
+    const cancelFile = await admin('get', `/fiscal-documents/${id}/xml?kind=cancel`).expect(200);
+    expect(cancelFile.headers['content-disposition']).toContain(`Cancelamento-NFe-${nfe.key}.xml`);
+    expect(codeOf(await admin('post', `/fiscal-documents/${id}/cancel`).send({ reason: 'Cliente pediu nota com outro CNPJ' }).expect(409))).toBe('FA787');
 
     // A NFC-e não tem DANFE A4 aqui (o cupom sai no caixa).
     const note = await saleWithNote({});
