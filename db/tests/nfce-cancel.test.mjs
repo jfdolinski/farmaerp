@@ -321,6 +321,47 @@ describe('inutilização', () => {
   });
 });
 
+describe('inutilização desativada pela UF (NT 2023.002)', () => {
+  // Numa transação desfeita no fim: a UF da filial muda só aqui.
+  async function withState(state, fn) {
+    const client = await ownerPool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('UPDATE branch SET state = $1 WHERE id = $2', [state, a.branch2.id]);
+      await setUser(client, a.admin.id);
+      return await fn(client);
+    } finally {
+      await client.query('ROLLBACK');
+      client.release();
+    }
+  }
+  const gapsOf = (client) => client.query('SELECT * FROM app.fiscal_number_gaps($1)', [a.branch2.id])
+    .then((r) => r.rows.filter((g) => g.series === series2.series && Number(g.first_number) >= 1000));
+  const context = (client) => client.query('SELECT * FROM app.fiscal_void_context($1, $2, $3, $4)', [a.branch2.id, series2.series, 1001, 1001]);
+
+  it('AC, BA e SP: o buraco aparece só para registro e a inutilização é recusada antes da Sefaz; as outras UFs seguem', async () => {
+    for (const state of ['SP', 'BA', 'AC']) {
+      await withState(state, async (client) => {
+        const gaps = await gapsOf(client);
+        expect(gaps.length, state).toBeGreaterThan(0);
+        expect(gaps.every((g) => g.voiding_available === false), state).toBe(true);
+        await expect(context(client), state).rejects.toSatisfy(hasCode('FA788'));
+      });
+    }
+    for (const state of ['RS', 'PR']) {
+      await withState(state, async (client) => {
+        expect((await gapsOf(client)).every((g) => g.voiding_available === true), state).toBe(true);
+        expect((await context(client)).rows[0], state).toMatchObject({ branch_id: a.branch2.id, state });
+      });
+    }
+    // Sem a permissão continua FA002 (a permissão vem antes da UF).
+    await withState('SP', async (client) => {
+      await setUser(client, operator.id);
+      await expect(context(client)).rejects.toSatisfy(hasCode('FA002'));
+    });
+  });
+});
+
 describe('correções do reenvio e conferência no banco (0068)', () => {
   const stale = (hoursAgo) => ({
     status: 'contingency', emission_type: 9, protocol: null, authorized_at: null, status_code: null, reason: null,

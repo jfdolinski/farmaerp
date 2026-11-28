@@ -7,6 +7,7 @@ import { createServer, Server } from 'node:https';
 import { AddressInfo } from 'node:net';
 import { Writable } from 'node:stream';
 import { TLSSocket } from 'node:tls';
+import pg from 'pg';
 import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { AppModule } from './../src/app.module.js';
@@ -44,6 +45,35 @@ const soap = (inner: string) =>
 const prot = (key: string, status: string, protocol: string) =>
   `<protNFe versao="4.00"><infProt><tpAmb>2</tpAmb><chNFe>${key}</chNFe><dhRecbto>2026-11-26T10:00:01-03:00</dhRecbto>`
   + `<nProt>${protocol}</nProt><cStat>${status}</cStat><xMotivo>Motivo ${status}</xMotivo></infProt></protNFe>`;
+/** Comando na filial Centro (do seed, em SP) pela conexão do migrador. */
+async function onCentro<T>(sql: string, params: unknown[]): Promise<T[]> {
+  const client = new pg.Client({
+    host: process.env.DB_HOST ?? '127.0.0.1',
+    port: Number(process.env.DB_PORT ?? 5432),
+    user: 'farmaerp_migrator',
+    password: process.env.FARMAERP_MIGRATOR_PASSWORD,
+    database: process.env.DB_NAME,
+  });
+  await client.connect();
+  try {
+    return (await client.query(sql, [CENTRO, ...params])).rows as T[];
+  } finally {
+    await client.end();
+  }
+}
+/**
+ * Roda com a filial numa UF que ainda inutiliza (RS) e volta para SP. A inscrição estadual (de SP,
+ * quando outro teste já a preencheu) sai durante a troca e volta no fim.
+ */
+async function inVoidingState(fn: () => Promise<void>) {
+  const [saved] = await onCentro<{ state_registration: string | null }>('SELECT state_registration FROM branch WHERE id = $1', []);
+  await onCentro("UPDATE branch SET state = 'RS', state_registration = NULL WHERE id = $1", []);
+  try {
+    await fn();
+  } finally {
+    await onCentro("UPDATE branch SET state = 'SP', state_registration = $2 WHERE id = $1", [saved.state_registration]);
+  }
+}
 const keyOf = (body: string) => /<chNFe>(\d{44})<\/chNFe>/.exec(body)?.[1] ?? /Id="NFe(\d{44})"/.exec(body)?.[1] ?? '';
 
 describe('notas fiscais pela central contra o banco real', () => {
@@ -230,7 +260,7 @@ describe('notas fiscais pela central contra o banco real', () => {
     expect(file.text).toContain('<nProt>135260000000666</nProt>');
   });
 
-  it('inutiliza o buraco de numeração sugerido', async () => {
+  it('inutiliza o buraco de numeração sugerido (UF que ainda inutiliza)', async () => inVoidingState(async () => {
     const first = base + 500;
     await saleWithNote({}, first);
     await saleWithNote({}, first + 3);
@@ -244,6 +274,29 @@ describe('notas fiscais pela central contra o banco real', () => {
     expect(message.body).toContain(`<serie>${series}</serie><nNFIni>${first + 1}</nNFIni><nNFFin>${first + 2}</nNFFin>`);
     expect(((await admin('get', `/fiscal-documents/voids?branch=${CENTRO}`).expect(200)).body as Json[])[0]).toMatchObject({ protocol: '135260000000999' });
     expect(codeOf(await admin('post', '/fiscal-documents/voids', OPERATOR_EMAIL).send({ branchId: CENTRO, series, first: first + 1, last: first + 1, reason: 'Numeracao pulada no caixa' }).expect(403))).toBe('FA002');
+  }));
+
+  it('SP (como AC e BA) não inutiliza mais: o buraco fica só para registro e o pedido não vai à Sefaz; 998 da Sefaz também avisa', async () => {
+    const first = base + 900;
+    await saleWithNote({}, first);
+    await saleWithNote({}, first + 2);
+    const gap = ((await admin('get', `/fiscal-documents/gaps?branch=${CENTRO}`).expect(200)).body as Json[])
+      .find((row) => row.series === series && Number(row.first_number) === first + 1);
+    expect(gap).toMatchObject({ voiding_available: false });
+    const before = received.length;
+    expect(codeOf(await admin('post', '/fiscal-documents/voids').send({ branchId: CENTRO, series, first: first + 1, last: first + 1, reason: 'Numeracao pulada no caixa' }).expect(422))).toBe('FA788');
+    expect(received.length).toBe(before);
+    // UF que o banco ainda acha que inutiliza, mas a Sefaz responde "Serviço Desativado".
+    await inVoidingState(async () => {
+      voidingStatus = '998';
+      try {
+        const answer = (await admin('post', '/fiscal-documents/voids').send({ branchId: CENTRO, series, first: first + 1, last: first + 1, reason: 'Numeracao pulada no caixa' }).expect(422)).body as Json;
+        expect(answer).toMatchObject({ code: 'FA788' });
+        expect(String(answer.detail)).toMatch(/^Sefaz 998: /);
+      } finally {
+        voidingStatus = '102';
+      }
+    });
   });
 
   it('recusa da Sefaz no cancelamento e na inutilização volta com o código e o motivo', async () => {
@@ -259,11 +312,13 @@ describe('notas fiscais pela central contra o banco real', () => {
     const first = base + 700;
     await saleWithNote({}, first);
     await saleWithNote({}, first + 2);
-    voidingStatus = '563';
-    const voidRefused = (await admin('post', '/fiscal-documents/voids').send({ branchId: CENTRO, series, first: first + 1, last: first + 1, reason: 'Numeracao pulada no caixa' }).expect(422)).body as Json;
-    voidingStatus = '102';
-    expect(voidRefused).toMatchObject({ code: 'FA754' });
-    expect(String(voidRefused.detail)).toMatch(/^Sefaz 563: /);
+    await inVoidingState(async () => {
+      voidingStatus = '563';
+      const voidRefused = (await admin('post', '/fiscal-documents/voids').send({ branchId: CENTRO, series, first: first + 1, last: first + 1, reason: 'Numeracao pulada no caixa' }).expect(422)).body as Json;
+      voidingStatus = '102';
+      expect(voidRefused).toMatchObject({ code: 'FA754' });
+      expect(String(voidRefused.detail)).toMatch(/^Sefaz 563: /);
+    });
   });
 
   it('o caixa pede o cancelamento com o supervisor; repetido responde que já está feito', async () => {

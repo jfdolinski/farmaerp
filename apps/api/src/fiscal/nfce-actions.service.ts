@@ -327,6 +327,10 @@ export class NfceActionsService implements OnApplicationBootstrap, OnModuleDestr
       environment: context.environment as 1 | 2, uf: context.state ?? '', cnpj: context.cnpj, year, series, first, last, reason,
     }, pemFromPfx(certificate.pfx, certificate.passphrase));
     const result = parseVoiding(await this.call(context, 'voiding', envelope, certificate), message);
+    // 998 "Serviço Desativado": a UF deixou de inutilizar (NT 2023.002); o banco ainda não sabia dela.
+    if (result.kind !== 'voided' && result.status === '998') {
+      throw new AppError('FA788', { cause: new Error(`${result.status} ${result.reason}`), detail: `Sefaz ${result.status}: ${result.reason}`.slice(0, 300) });
+    }
     if (result.kind === 'unavailable') throw new AppError('FA944', { cause: new Error(`${result.status} ${result.reason}`) });
     if (result.kind === 'refused') {
       throw new AppError('FA754', { cause: new Error(`${result.status} ${result.reason}`), detail: `Sefaz ${result.status}: ${result.reason}`.slice(0, 300) });

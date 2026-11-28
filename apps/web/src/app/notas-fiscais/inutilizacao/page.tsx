@@ -21,6 +21,8 @@ interface Gap {
   quantity: string;
   rejected: number;
   safe: boolean;
+  /** A Sefaz da UF da filial ainda inutiliza (AC, BA e SP deixaram de inutilizar em 11/11/2026). */
+  voiding_available: boolean;
 }
 
 interface VoidRow {
@@ -64,8 +66,10 @@ async function VoidContent() {
   ]);
   if (!gaps.ok) redirectIfNeeded(gaps.error, "/notas-fiscais/inutilizacao");
   const rows = gaps.ok ? gaps.data : [];
-  const safe = rows.filter((gap) => gap.safe);
-  const unsafe = rows.filter((gap) => !gap.safe);
+  const available = rows.filter((gap) => gap.voiding_available);
+  const safe = available.filter((gap) => gap.safe);
+  const unsafe = available.filter((gap) => !gap.safe);
+  const recordOnly = rows.filter((gap) => !gap.voiding_available);
 
   const gapCard = (gap: Gap) => (
     <section key={`${gap.terminal_id}-${gap.series}-${gap.first_number}`} className={styles.card}>
@@ -77,7 +81,9 @@ async function VoidContent() {
         {gap.quantity} número(s) sem nota válida
         {gap.rejected > 0 && `, ${gap.rejected} de nota rejeitada`}.
       </p>
-      <VoidForm branchId={gap.branch_id} series={gap.series} first={Number(gap.first_number)} last={Number(gap.last_number)} safe={gap.safe} />
+      {gap.voiding_available && (
+        <VoidForm branchId={gap.branch_id} series={gap.series} first={Number(gap.first_number)} last={Number(gap.last_number)} safe={gap.safe} />
+      )}
     </section>
   );
 
@@ -89,8 +95,9 @@ async function VoidContent() {
         <Link href="/notas-fiscais">Voltar às notas fiscais</Link>
       </p>
       <p className={styles.hint}>
-        Números de NFC-e que ficaram sem nota válida (pulados ou de notas rejeitadas) precisam ser inutilizados na Sefaz.
-        Confira cada faixa antes de confirmar: um número inutilizado não pode mais ser usado.
+        Números de NFC-e que ficaram sem nota válida (pulados ou de notas rejeitadas) são inutilizados na Sefaz da UF da
+        filial. Confira cada faixa antes de confirmar: um número inutilizado não pode mais ser usado. Em AC, BA e SP a
+        Sefaz não inutiliza mais (desde 11/11/2026): os números aparecem só para registro.
       </p>
       {!gaps.ok && <ErrorNotice error={gaps.error} />}
       {gaps.ok && rows.length === 0 && (
@@ -112,6 +119,16 @@ async function VoidContent() {
             esperar o caixa sincronizar.
           </p>
           {unsafe.map(gapCard)}
+        </>
+      )}
+      {recordOnly.length > 0 && (
+        <>
+          <h2>Só registro (UF sem inutilização)</h2>
+          <p className={styles.hint}>
+            A Sefaz destas filiais deixou de inutilizar numeração (NT 2023.002). Os números ficam registrados aqui; confirme
+            com o contador se é preciso outra providência.
+          </p>
+          {recordOnly.map(gapCard)}
         </>
       )}
       <section className={styles.card}>

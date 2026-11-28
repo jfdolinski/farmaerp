@@ -1024,6 +1024,12 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Consulte a nota na Sefaz e confira a situação.',
     retryable: false,
   ),
+  'FA788': ErrorCatalogEntry(
+    code: 'FA788',
+    message: 'A Sefaz desta UF não faz mais inutilização de numeração.',
+    action: 'Desde 11/11/2026, AC, BA e SP não inutilizam números (NT 2023.002). O número pulado fica só registrado aqui; confirme com o contador se é preciso outra providência.',
+    retryable: false,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',
