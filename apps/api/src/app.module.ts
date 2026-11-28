@@ -58,6 +58,8 @@ import { TerminalFiscalController } from './terminals/terminal-fiscal.controller
 import { NfceActionsService } from './fiscal/nfce-actions.service.js';
 import { NfeCorrectionController } from './fiscal/nfe-correction.controller.js';
 import { NfeCorrectionService } from './fiscal/nfe-correction.service.js';
+import { PbmAdminController, TerminalPbmController } from './pbm/pbm.controller.js';
+import { PbmService } from './pbm/pbm.service.js';
 import { OfflineRulesController, TerminalStockController } from './terminals/offline-rules.controller.js';
 import { TerminalNfceController } from './terminals/terminal-nfce.controller.js';
 import { HealthProfessionalsController } from './sales/health-professionals.controller.js';
@@ -109,6 +111,8 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     FiscalDocumentsController,
     CentralNfeController,
     NfeCorrectionController,
+    PbmAdminController,
+    TerminalPbmController,
     CatalogSyncController,
     CatalogKeysController,
     TerminalFiscalController,
@@ -144,6 +148,7 @@ import { TerminalGuard } from './terminals/terminal.guard.js';
     CatalogSyncService,
     CentralNfeService,
     NfeCorrectionService,
+    PbmService,
     SessionGuard,
     TerminalGuard,
     { provide: APP_GUARD, useClass: ThrottlerGuard },

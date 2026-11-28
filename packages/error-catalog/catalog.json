@@ -305,7 +305,12 @@
       "catalog_sync_run_id_uuid_v7_check",
       "branch_catalog_key_id_uuid_v7_check",
       "catalog_tax_fetch_id_uuid_v7_check",
-      "nfe_correction_id_uuid_v7_check"
+      "nfe_correction_id_uuid_v7_check",
+      "pbm_program_id_uuid_v7_check",
+      "pbm_program_branch_id_uuid_v7_check",
+      "pbm_test_rule_id_uuid_v7_check",
+      "pbm_authorization_id_uuid_v7_check",
+      "pbm_authorization_item_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -4145,6 +4150,88 @@
       "nfe_correction_status_code_check",
       "nfe_correction_xml_check",
       "nfe_correction_note_check"
+    ]
+  },
+  "FA793": {
+    "message": "Este programa de benefício não está ativo nesta loja.",
+    "action": "Peça ao gerente para ativar o programa na retaguarda (PBM), ou siga a venda sem o PBM.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA794": {
+    "message": "O beneficiário não tem direito a este programa.",
+    "action": "Confira o CPF ou o cartão com o cliente. Sem direito, a venda segue pelo preço normal.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA795": {
+    "message": "Esta autorização do PBM não está mais válida.",
+    "action": "Consulte o programa de novo para esta venda.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA796": {
+    "message": "Nenhum item desta venda faz parte do programa.",
+    "action": "A venda segue pelo preço normal.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA797": {
+    "message": "O programa de benefício não respondeu.",
+    "action": "Tente de novo em alguns minutos ou siga a venda sem o PBM, pelo preço normal.",
+    "httpStatus": 503,
+    "severity": "error",
+    "retryable": true,
+    "dbConstraints": []
+  },
+  "FA798": {
+    "message": "Os dados do programa de benefício são inválidos.",
+    "action": "Confira o nome, o percentual e os valores informados.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "pbm_program_name_check",
+      "pbm_program_connector_check",
+      "pbm_program_branch_credentials_check",
+      "pbm_program_branch_credentials_at_check",
+      "pbm_test_rule_percent_check",
+      "pbm_authorization_beneficiary_check",
+      "pbm_authorization_external_id_check",
+      "pbm_authorization_status_check",
+      "pbm_authorization_list_total_check",
+      "pbm_authorization_pbm_total_check",
+      "pbm_authorization_undo_reason_check",
+      "pbm_authorization_totals_check",
+      "pbm_authorization_expires_check",
+      "pbm_authorization_confirmed_check",
+      "pbm_authorization_undone_check",
+      "pbm_authorization_item_quantity_check",
+      "pbm_authorization_item_list_price_check",
+      "pbm_authorization_item_pbm_price_check",
+      "pbm_authorization_item_price_check",
+      "pbm_program_branch_key",
+      "pbm_test_rule_key",
+      "pbm_authorization_external_key",
+      "pbm_authorization_item_key"
+    ]
+  },
+  "FA799": {
+    "message": "Já existe um programa de benefício com este nome.",
+    "action": "Use outro nome ou altere o programa que já existe.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "pbm_program_name_key"
     ]
   }
 }
