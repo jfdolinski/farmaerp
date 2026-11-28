@@ -1030,6 +1030,30 @@ const Map<String, ErrorCatalogEntry> errorCatalog = {
     action: 'Desde 11/11/2026, AC, BA e SP não inutilizam números (NT 2023.002). O número pulado fica só registrado aqui; confirme com o contador se é preciso outra providência.',
     retryable: false,
   ),
+  'FA789': ErrorCatalogEntry(
+    code: 'FA789',
+    message: 'Esta NF-e já tem 20 cartas de correção, o limite da Sefaz.',
+    action: 'Não é possível enviar outra carta para esta nota. Fale com o contador sobre como acertar o que falta.',
+    retryable: false,
+  ),
+  'FA790': ErrorCatalogEntry(
+    code: 'FA790',
+    message: 'O texto da correção precisa ter de 15 a 1000 caracteres, numa linha só e sem símbolos especiais.',
+    action: 'Escreva a correção em uma linha, sem emojis nem aspas curvas, e confira o tamanho.',
+    retryable: false,
+  ),
+  'FA791': ErrorCatalogEntry(
+    code: 'FA791',
+    message: 'Outra carta de correção foi registrada nesta NF-e ao mesmo tempo.',
+    action: 'Atualize a página e confira a última carta. Se faltar alguma correção, envie uma carta nova com todas elas.',
+    retryable: false,
+  ),
+  'FA792': ErrorCatalogEntry(
+    code: 'FA792',
+    message: 'A Sefaz não aceitou a carta de correção.',
+    action: 'Confira o motivo informado pela Sefaz e corrija o texto, se for o caso.',
+    retryable: false,
+  ),
   'FA801': ErrorCatalogEntry(
     code: 'FA801',
     message: 'A quantidade é maior que o saldo disponível.',

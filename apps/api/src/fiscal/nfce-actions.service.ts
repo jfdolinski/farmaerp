@@ -10,6 +10,8 @@ import {
   ACTIONS,
   authorizationEnvelope,
   cancellationEnvelope,
+  correctionEnvelope,
+  correctionFromStatus,
   nfceUrl,
   NfceService,
   parseAuthorization,
@@ -57,6 +59,17 @@ export interface DocumentContext extends EventContext {
 
 /** Cancelamento registrado na Sefaz (o evento com o protocolo dele). */
 export interface CancelResult {
+  protocol: string;
+  status: string;
+  xml: string;
+  registeredAt: string;
+  sefaz: string;
+}
+
+/** Carta de correção registrada na Sefaz (o texto é o que a Sefaz guardou com aquela sequência). */
+export interface CorrectionResult {
+  sequence: number;
+  text: string;
   protocol: string;
   status: string;
   xml: string;
@@ -312,6 +325,42 @@ export class NfceActionsService implements OnApplicationBootstrap, OnModuleDestr
       cause: new Error(`${result.status} ${result.reason}; consulta ${status.status} ${status.reason}`),
       detail: `Sefaz ${result.status}: ${result.reason}`.slice(0, 300),
     });
+  }
+
+  /**
+   * Envia a carta de correção (evento 110110) da NF-e 55. 573 (já existe evento com essa sequência,
+   * por exemplo quando a resposta não voltou a tempo) consulta a chave e usa a carta que a Sefaz
+   * guardou com essa sequência, com o texto dela.
+   */
+  async sendCorrection(context: EventContext, sequence: number, text: string): Promise<CorrectionResult> {
+    const certificate = this.certificate(context);
+    const { envelope, event } = correctionEnvelope({
+      environment: context.environment as 1 | 2, uf: context.state ?? '', cnpj: context.cnpj, accessKey: context.access_key,
+      sequence, text, at: brasiliaNow(),
+    }, pemFromPfx(certificate.pfx, certificate.passphrase));
+    const result = parseEvent(await this.call(context, 'event', envelope, certificate), event);
+    if (result.kind === 'unavailable') throw new AppError('FA944', { cause: new Error(`${result.status} ${result.reason}`) });
+    if (result.kind === 'refused') {
+      throw new AppError('FA792', { cause: new Error(`${result.status} ${result.reason}`), detail: `Sefaz ${result.status}: ${result.reason}`.slice(0, 300) });
+    }
+    const sefaz = `${result.status} ${result.reason}`;
+    if (result.kind === 'registered') {
+      return {
+        sequence, text, protocol: result.protocol, status: result.status, xml: result.procXml,
+        registeredAt: result.registeredAt || new Date().toISOString(), sefaz,
+      };
+    }
+    const answer = await this.call(context, 'status', statusEnvelope(context.access_key, context.environment as 1 | 2), certificate);
+    const status = parseStatus(answer);
+    if (status.kind === 'unavailable') throw new AppError('FA944', { cause: new Error(`${status.status} ${status.reason}`) });
+    const found = correctionFromStatus(answer, sequence);
+    if (!found) {
+      throw new AppError('FA792', {
+        cause: new Error(`${result.status} ${result.reason}; consulta ${status.status} ${status.reason}`),
+        detail: `Sefaz ${result.status}: ${result.reason}`.slice(0, 300),
+      });
+    }
+    return { sequence, text: found.text, protocol: found.protocol, status: found.status, xml: found.xml, registeredAt: found.registeredAt || new Date().toISOString(), sefaz };
   }
 
   /** Inutiliza a faixa na Sefaz e registra. */

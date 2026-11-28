@@ -445,3 +445,128 @@ describe('NF-e de devolução emitida pela central', () => {
     }
   });
 });
+
+describe('carta de correção da NF-e da central (CC-e)', () => {
+  let stockOnly;
+  beforeAll(async () => {
+    const { rows: [role] } = await ownerPool.query(`INSERT INTO role (economic_group_id, name) VALUES ($1, 'Só estoque CC-e') RETURNING *`, [a.group.id]);
+    await ownerPool.query("INSERT INTO role_permission (role_id, permission_id) SELECT $1, id FROM permission WHERE code = 'stock.view'", [role.id]);
+    stockOnly = (await ownerPool.query('INSERT INTO user_account (economic_group_id, name) VALUES ($1, $2) RETURNING *', [a.group.id, 'Só estoque'])).rows[0];
+    await ownerPool.query('INSERT INTO user_branch (user_id, branch_id) VALUES ($1, $2)', [stockOnly.id, a.branch1.id]);
+    await ownerPool.query('INSERT INTO user_role (user_id, role_id, branch_id) VALUES ($1, $2, $3)', [stockOnly.id, role.id, a.branch1.id]);
+  });
+  const TEXT = 'Endereço de entrega: Rua das Acácias, 200';
+  const event = (sequence, protocol, correction = TEXT) => ({
+    sequence, correction, protocol, status_code: '135', xml: '<procEventoNFe>' + 'k'.repeat(200) + '</procEventoNFe>',
+    registered_at: new Date().toISOString(),
+  });
+  const nfeXml = '<nfeProc>' + 'n'.repeat(200) + '</nfeProc>';
+  async function authorizedNote(client, protocol) {
+    const r = await returned(client);
+    await client.query('SELECT app.update_supplier($1, $2::jsonb)', [r.supplierId, JSON.stringify(supplierAddress)]);
+    const id = await store(client, await prepare(client, r.returnId));
+    return { id, authorize: () => result(client, id, { kind: 'authorized', protocol, authorized_at: new Date().toISOString(), xml: nfeXml, status_code: '100', reason: 'Autorizado' }) };
+  }
+  const calls = (client, id) => ({
+    context: (text = TEXT) => client.query("SELECT * FROM app.nfe_correction_context('central', $1, $2)", [id, text]).then((x) => x.rows),
+    register: (value) => client.query("SELECT app.nfe_correction_register('central', $1, $2::jsonb) AS id", [id, JSON.stringify(value)]).then((x) => x.rows[0].id),
+    screen: () => client.query("SELECT app.nfe_corrections('central', $1) AS x", [id]).then((x) => x.rows[0].x),
+    file: (correctionId) => client.query('SELECT * FROM app.nfe_correction_file($1)', [correctionId]).then((x) => x.rows),
+  });
+
+  it('só a autorizada, com o texto que a Sefaz aceita; a sequência anda, o repetido devolve a mesma e o limite é 20', async () => {
+    await asUser(a.admin.id, async (client) => {
+      const note = await authorizedNote(client, '135260000000990');
+      const { context, register, screen, file } = calls(client, note.id);
+      // Pendente: não manda carta (nem registra), mas a tela abre.
+      await expectCode(client, () => context(), 'FA787');
+      await expectCode(client, () => register(event(1, '135260000000989')), 'FA787');
+      expect(await screen()).toMatchObject({ status: 'pending', can_send: false, count: 0, corrections: [], note_kind: 'supplier_return' });
+      await note.authorize();
+      expect(await context()).toEqual([expect.objectContaining({ id: note.id, model: '55', sequence: 1, emission_type: 1, status: 'authorized' })]);
+      // Texto: de 15 a 1000, numa linha, sem espaço nas pontas, sem símbolo fora do leiaute.
+      await expectCode(client, () => context('Curto demais.'), 'FA790');
+      await expectCode(client, () => context('x'.repeat(1001)), 'FA790');
+      await expectCode(client, () => context('Primeira linha\nsegunda linha'), 'FA790');
+      await expectCode(client, () => context(' Começa com espaço na frente'), 'FA790');
+      await expectCode(client, () => context('Com emoji no meio 😀 do texto'), 'FA790');
+      await expectCode(client, () => context(null), 'FA790');
+      expect(await context('x'.repeat(1000))).toHaveLength(1);
+      expect(await context('Ação: troca do CFOP é proibida; Ç ã ü º ª')).toHaveLength(1);
+
+      const first = await register(event(1, '135260000000991'));
+      // Pedido repetido (a mesma resposta da Sefaz): a mesma carta.
+      expect(await register(event(1, '135260000000991'))).toBe(first);
+      // A mesma sequência com outro protocolo: outra carta foi junto.
+      await expectCode(client, () => register(event(1, '135260000000992', 'Outro texto com mais de quinze')), 'FA791');
+      expect((await context())[0].sequence).toBe(2);
+      // O que não é registro da Sefaz não grava.
+      await expectCode(client, () => register(event(2, '135260000000993', 'Linha\nquebrada com mais de quinze')), 'FA790');
+      await expectCode(client, () => register({ ...event(2, '135260000000993'), status_code: '573' }), 'FA792');
+      await expectCode(client, () => register({ ...event(2, '13526') }), 'FA792');
+      expect(await screen()).toMatchObject({
+        count: 1, can_send: true, status: 'authorized', access_key: expect.any(String),
+        corrections: [{ id: first, sequence: 1, correction: TEXT, protocol: '135260000000991', status_code: '135', requested_by: a.admin.name }],
+      });
+      expect(await file(first)).toEqual([{ access_key: expect.any(String), sequence: 1, xml: expect.stringContaining('procEventoNFe'), nfe_xml: nfeXml }]);
+      // Quem vê a devolução e não emite NF-e: a tela diz que não pode mandar.
+      await as(client, manager);
+      expect(await screen()).toMatchObject({ count: 1, can_send: false });
+      // Quem só vê o estoque não vê a nota da devolução (a da transferência, sim).
+      await as(client, stockOnly);
+      await expectCode(client, () => screen(), 'FA006');
+      await as(client, a.admin);
+
+      // 136 (registrada, ainda não vinculada) também vale; até 20 cartas, a última primeiro.
+      await register({ ...event(2, '135260000001002'), status_code: '136' });
+      for (let s = 3; s <= 20; s += 1) await register(event(s, String(135260000001000 + s)));
+      await expectCode(client, () => context(), 'FA789');
+      const full = await screen();
+      expect(full).toMatchObject({ count: 20, can_send: false });
+      expect(full.corrections.map((c) => c.sequence)).toEqual(Array.from({ length: 20 }, (_, i) => 20 - i));
+      await expectCode(client, () => register(event(21, '135260000001021')), 'FA792');
+
+      // Quem vê a devolução e não emite NF-e: vê as cartas, não manda.
+      await as(client, manager);
+      await expectCode(client, () => context(), 'FA002');
+      await expectCode(client, () => register(event(21, '135260000001021')), 'FA002');
+      expect(await screen()).toMatchObject({ count: 20, can_send: false });
+      // Outro grupo não acha nada.
+      await as(client, b.admin);
+      await expectCode(client, () => screen(), 'FA006');
+      await expectCode(client, () => context(), 'FA006');
+      await expectCode(client, () => file(first), 'FA006');
+      await expectCode(client, () => client.query("SELECT app.nfe_corrections('outra', $1)", [note.id]), 'FA005');
+    });
+  });
+
+  it('cancelada: não manda carta nova, mas a que a Sefaz registrou no caminho fica registrada', async () => {
+    await asUser(a.admin.id, async (client) => {
+      const note = await authorizedNote(client, '135260000000994');
+      await note.authorize();
+      const { context, register, screen } = calls(client, note.id);
+      expect((await context())[0].sequence).toBe(1);
+      await client.query('SELECT app.central_nfe_cancel_register($1, $2::jsonb)', [note.id, JSON.stringify({
+        reason: 'Valores da devolução errados', protocol: '135260000000995', status_code: '135',
+        xml: '<procEventoNFe>' + 'e'.repeat(200) + '</procEventoNFe>', registered_at: new Date().toISOString(),
+      })]);
+      await expectCode(client, () => context(), 'FA787');
+      const id = await register(event(1, '135260000000996'));
+      expect(await screen()).toMatchObject({ status: 'canceled', can_send: false, count: 1, corrections: [{ id }] });
+    });
+  });
+
+  it('registrada, a carta não muda', async () => {
+    await asOwner(async (client) => {
+      await as(client, a.admin);
+      const note = await authorizedNote(client, '135260000000997');
+      await note.authorize();
+      const id = await calls(client, note.id).register(event(1, '135260000000998'));
+      for (const sql of ["correction = 'Outro texto com mais de quinze'", "protocol = '135260000000999'", 'sequence = 2', "status_code = '136'", "xml = repeat('z', 150)"]) {
+        await client.query('SAVEPOINT s');
+        await expect(client.query(`UPDATE nfe_correction SET ${sql} WHERE id = $1`, [id])).rejects.toThrow();
+        await client.query('ROLLBACK TO s');
+      }
+    });
+  });
+});

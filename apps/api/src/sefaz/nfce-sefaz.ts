@@ -113,6 +113,9 @@ const text = (node: Node | undefined, name: string): string => {
   if (value && typeof value === 'object' && typeof (value as Node)['#text'] === 'string') return ((value as Node)['#text'] as string).trim();
   return '';
 };
+/** O parser não troca as entidades (processEntities desligado): volta o texto como foi escrito. */
+const unescapeXml = (value: string) =>
+  value.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
 const escapeXml = (value: string) =>
   value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 
@@ -283,6 +286,69 @@ export function cancellationEnvelope(request: CancellationRequest, pem: { key: s
   };
 }
 
+// ----- Carta de correção (evento 110110, só NF-e 55) -----
+
+/** Condição de uso fixa do leiaute (sem acentos, como a Sefaz confere). */
+export const CORRECTION_CONDITIONS =
+  'A Carta de Correcao e disciplinada pelo paragrafo 1o-A do art. 7o do Convenio S/N, de 15 de dezembro de 1970 e pode ser utilizada '
+  + 'para regularizacao de erro ocorrido na emissao de documento fiscal, desde que o erro nao esteja relacionado com: I - as variaveis '
+  + 'que determinam o valor do imposto tais como: base de calculo, aliquota, diferenca de preco, quantidade, valor da operacao ou da '
+  + 'prestacao; II - a correcao de dados cadastrais que implique mudanca do remetente ou do destinatario; III - a data de emissao ou de saida.';
+
+export interface CorrectionRequest {
+  environment: 1 | 2;
+  uf: string;
+  cnpj: string;
+  accessKey: string;
+  /** nSeqEvento: 1 a 20. */
+  sequence: number;
+  /** xCorrecao: 15 a 1000 caracteres, numa linha (o banco confere). */
+  text: string;
+  /** dhEvento com fuso (Brasília). */
+  at: string;
+}
+
+export function correctionEnvelope(request: CorrectionRequest, pem: { key: string; cert: string }): { envelope: string; event: string } {
+  const id = `ID110110${request.accessKey}${String(request.sequence).padStart(2, '0')}`;
+  const event =
+    `<evento xmlns="${NFE_NS}" versao="1.00"><infEvento Id="${id}"><cOrgao>${UF_CODES[request.uf] ?? ''}</cOrgao>`
+    + `<tpAmb>${request.environment}</tpAmb><CNPJ>${escapeXml(request.cnpj)}</CNPJ><chNFe>${escapeXml(request.accessKey)}</chNFe>`
+    + `<dhEvento>${request.at}</dhEvento><tpEvento>110110</tpEvento><nSeqEvento>${request.sequence}</nSeqEvento><verEvento>1.00</verEvento>`
+    + `<detEvento versao="1.00"><descEvento>Carta de Correcao</descEvento><xCorrecao>${escapeXml(request.text)}</xCorrecao>`
+    + `<xCondUso>${CORRECTION_CONDITIONS}</xCondUso></detEvento></infEvento></evento>`;
+  const signed = sign(event, 'infEvento', pem);
+  const lot = String(Date.now()).slice(-15);
+  return {
+    event: signed,
+    envelope: envelope('NFeRecepcaoEvento4', `<envEvento xmlns="${NFE_NS}" versao="1.00"><idLote>${lot}</idLote>${signed}</envEvento>`),
+  };
+}
+
+/** Carta registrada que a consulta pela chave devolve (um procEventoNFe por evento). */
+export interface RegisteredCorrection {
+  protocol: string;
+  status: string;
+  registeredAt: string;
+  text: string;
+  xml: string;
+}
+
+/** Acha na consulta pela chave a carta com a sequência pedida, já com o protocolo; null se não houver. */
+export function correctionFromStatus(xml: string, sequence: number): RegisteredCorrection | null {
+  for (const part of cutAll(xml, 'procEventoNFe')) {
+    const sent = find(find(parse(part), 'evento'), 'infEvento');
+    if (text(sent, 'tpEvento') !== '110110' || Number(text(sent, 'nSeqEvento')) !== sequence) continue;
+    const info = find(find(parse(part), 'retEvento'), 'infEvento');
+    const status = text(info, 'cStat');
+    if (!PROTOCOL.test(text(info, 'nProt')) || !['135', '136'].includes(status)) continue;
+    return {
+      protocol: text(info, 'nProt'), status, registeredAt: text(info, 'dhRegEvento'), text: unescapeXml(text(find(sent, 'detEvento'), 'xCorrecao')),
+      xml: `<?xml version="1.0" encoding="UTF-8"?>${part}`,
+    };
+  }
+  return null;
+}
+
 export type EventResult =
   | { kind: 'registered'; status: string; reason: string; protocol: string; registeredAt: string; procXml: string }
   | { kind: 'refused'; status: string; reason: string }
@@ -291,7 +357,7 @@ export type EventResult =
   | { kind: 'unavailable'; status: string; reason: string };
 
 /**
- * 135 registrado; 155 registrado fora do prazo. 573 é o evento repetido (um pedido anterior
+ * 135 registrado; 136 registrado sem vínculo à nota (carta de correção); 155 registrado fora do prazo. 573 é o evento repetido (um pedido anterior
  * chegou, mesmo sem resposta): a Sefaz não devolve o protocolo aqui, então vai para consulta.
  * O resto recusa.
  */
@@ -305,7 +371,7 @@ export function parseEvent(xml: string, signedEvent: string): EventResult {
   const status = text(info, 'cStat');
   const reason = text(info, 'xMotivo');
   if (status === '573') return { kind: 'duplicate', status, reason };
-  if (!['135', '155'].includes(status)) return { kind: 'refused', status, reason };
+  if (!['135', '136', '155'].includes(status)) return { kind: 'refused', status, reason };
   if (!PROTOCOL.test(text(info, 'nProt'))) return { kind: 'duplicate', status, reason };
   const retEvento = cut(xml, 'retEvento') ?? '';
   return {

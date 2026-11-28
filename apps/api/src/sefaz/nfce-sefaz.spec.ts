@@ -7,6 +7,9 @@ import { pemFromPfx } from './dfe.js';
 import {
   authorizationEnvelope,
   cancellationEnvelope,
+  CORRECTION_CONDITIONS,
+  correctionEnvelope,
+  correctionFromStatus,
   nfceUrl,
   parseAuthorization,
   parseEvent,
@@ -156,6 +159,46 @@ describe('cancelamento', () => {
     expect(parseEvent(answer('501'), event)).toMatchObject({ kind: 'refused', status: '501', reason: 'Motivo 501' });
     expect(parseEvent(soap('<retEnvEvento><cStat>108</cStat><xMotivo>Parado</xMotivo></retEnvEvento>'), event)).toMatchObject({ kind: 'unavailable' });
     expect(parseEvent(soap('<retEnvEvento><cStat>489</cStat><xMotivo>CNPJ invalido</xMotivo></retEnvEvento>'), event)).toMatchObject({ kind: 'refused', status: '489' });
+  });
+});
+
+describe('carta de correção', () => {
+  const pem = pemFromPfx(buildPfx(), 'senha-do-teste');
+  const KEY55 = '35261111222333000181550010000000421000000019';
+  const request = {
+    environment: 2 as const, uf: 'SP', cnpj: '11222333000181', accessKey: KEY55, sequence: 3,
+    text: 'Endereço: Rua <A> & "B"', at: '2026-11-28T10:10:00-03:00',
+  };
+
+  it('evento 110110 assinado: Id com a sequência em dois dígitos, texto escapado e a condição de uso do leiaute', () => {
+    const { envelope, event } = correctionEnvelope(request, pem);
+    expect(event).toContain(`<infEvento Id="ID110110${KEY55}03"><cOrgao>35</cOrgao><tpAmb>2</tpAmb><CNPJ>11222333000181</CNPJ><chNFe>${KEY55}</chNFe><dhEvento>2026-11-28T10:10:00-03:00</dhEvento><tpEvento>110110</tpEvento><nSeqEvento>3</nSeqEvento><verEvento>1.00</verEvento><detEvento versao="1.00"><descEvento>Carta de Correcao</descEvento><xCorrecao>Endereço: Rua &lt;A&gt; &amp; "B"</xCorrecao><xCondUso>${CORRECTION_CONDITIONS}</xCondUso></detEvento></infEvento>`);
+    expect(CORRECTION_CONDITIONS).toMatch(/^A Carta de Correcao e disciplinada pelo paragrafo 1o-A do art\. 7o do Convenio S\/N, de 15 de dezembro de 1970 .* III - a data de emissao ou de saida\.$/);
+    expect(CORRECTION_CONDITIONS).not.toMatch(/[^\x20-\x7e]/);
+    expect(envelope).toContain('wsdl/NFeRecepcaoEvento4');
+    expect(verify(envelope, 'evento', pem.cert)).toBe(true);
+    expect(correctionEnvelope({ ...request, sequence: 12 }, pem).event).toContain(`Id="ID110110${KEY55}12"`);
+  });
+
+  it('136 (registrada sem vínculo) registra como a 135', () => {
+    const { event } = correctionEnvelope(request, pem);
+    const answer = soap('<retEnvEvento versao="1.00"><cStat>128</cStat><xMotivo>Lote</xMotivo><retEvento versao="1.00"><infEvento><cStat>136</cStat>'
+      + '<xMotivo>Evento registrado, mas nao vinculado a NF-e</xMotivo><nProt>135260000000888</nProt><dhRegEvento>2026-11-28T10:10:05-03:00</dhRegEvento></infEvento></retEvento></retEnvEvento>');
+    expect(parseEvent(answer, event)).toMatchObject({ kind: 'registered', status: '136', protocol: '135260000000888' });
+  });
+
+  it('na consulta pela chave, acha a carta registrada com a sequência pedida (com o texto) e ignora as outras', () => {
+    const proc = (type: string, sequence: number, status: string, protocol: string, text: string) =>
+      `<procEventoNFe versao="1.00"><evento versao="1.00"><infEvento Id="ID${type}${KEY55}0${sequence}"><tpEvento>${type}</tpEvento>`
+      + `<nSeqEvento>${sequence}</nSeqEvento><detEvento versao="1.00"><xCorrecao>${text}</xCorrecao></detEvento></infEvento></evento>`
+      + `<retEvento versao="1.00"><infEvento><cStat>${status}</cStat><xMotivo>Registrado</xMotivo><nProt>${protocol}</nProt>`
+      + '<dhRegEvento>2026-11-28T10:00:02-03:00</dhRegEvento></infEvento></retEvento></procEventoNFe>';
+    const answer = soap(`<retConsSitNFe versao="4.00"><cStat>100</cStat>${prot('100')}${proc('110111', 2, '135', '135260000000700', '')}`
+      + `${proc('110110', 1, '135', '135260000000701', 'Primeira')}${proc('110110', 2, '573', '', 'Recusada')}${proc('110110', 2, '136', '135260000000702', 'Rua &amp; fundos')}</retConsSitNFe>`);
+    expect(correctionFromStatus(answer, 2)).toMatchObject({ protocol: '135260000000702', status: '136', text: 'Rua & fundos', registeredAt: '2026-11-28T10:00:02-03:00' });
+    expect(correctionFromStatus(answer, 2)!.xml).toMatch(/^<\?xml version="1.0" encoding="UTF-8"\?><procEventoNFe/);
+    expect(correctionFromStatus(answer, 1)).toMatchObject({ protocol: '135260000000701', text: 'Primeira' });
+    expect(correctionFromStatus(answer, 3)).toBeNull();
   });
 });
 

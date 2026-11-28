@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { buildDanfe, buildNfe } from '../index.js';
+import { buildCorrectionPdf, buildDanfe, buildNfe } from '../index.js';
 
 // Certificado e chave só de teste (autoassinado, sem dados de ninguém), os mesmos do PDV.
 const fixtures = new URL('../../../apps/pdv/test/fixtures/fiscal/', import.meta.url);
@@ -52,6 +52,18 @@ describe('motor fiscal em JavaScript (o mesmo do PDV)', () => {
     const pdf = await buildDanfe(buildNfe(devolution, key, cert).xml);
     expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
     expect(pdf.length).toBeGreaterThan(3000);
+  });
+
+  it('gera o PDF da carta de correção com o evento e a nota', async () => {
+    const nfe = buildNfe(devolution, key, cert);
+    const event = '<procEventoNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"><evento versao="1.00"><infEvento Id="ID110110'
+      + nfe.accessKey + '01"><tpAmb>2</tpAmb><CNPJ>11222333000181</CNPJ><chNFe>' + nfe.accessKey + '</chNFe><dhEvento>2026-11-28T10:00:00-03:00</dhEvento>'
+      + '<tpEvento>110110</tpEvento><nSeqEvento>1</nSeqEvento><detEvento versao="1.00"><xCorrecao>Endereço de entrega: Rua das Acácias, 200</xCorrecao>'
+      + '<xCondUso>Condições</xCondUso></detEvento></infEvento></evento><retEvento versao="1.00"><infEvento><cStat>135</cStat>'
+      + '<xMotivo>Evento registrado</xMotivo><nProt>135260000000901</nProt><dhRegEvento>2026-11-28T10:00:02-03:00</dhRegEvento></infEvento></retEvento></procEventoNFe>';
+    const pdf = await buildCorrectionPdf(event, nfe.xml);
+    expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+    expect(pdf.length).toBeGreaterThan(2000);
   });
 
   it('roda isolado: não deixa nada nos globais da API', () => {

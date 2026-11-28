@@ -310,6 +310,8 @@ describe('NF-e de transferência entre filiais', () => {
     }
     await asUser(viewer, async (c) => {
       expect((await c.query('SELECT status FROM app.central_nfe_xml($1)', [nfe])).rows).toEqual([{ status: 'pending' }]);
+      // E vê as cartas de correção dela.
+      expect((await c.query("SELECT app.nfe_corrections('central', $1) AS x", [nfe])).rows[0].x).toMatchObject({ note_kind: 'transfer', can_send: false });
     });
   });
 });

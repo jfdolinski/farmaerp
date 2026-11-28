@@ -87,3 +87,5 @@ export type NfeResult =
 
 export function buildNfe(input: NfeInput, keyPem: string, certPem: string): NfeResult;
 export function buildDanfe(xml: string): Promise<Buffer>;
+/** PDF da carta de correção: o XML do evento registrado (procEventoNFe) e o XML da nota corrigida. */
+export function buildCorrectionPdf(eventXml: string, nfeXml: string): Promise<Buffer>;

@@ -108,7 +108,8 @@ function ReturnNfeCell({
             {nfe.authorized_at && <small className={styles.hint}> em {dateTimeText(nfe.authorized_at)}</small>}
           </span>
           <span>
-            <a href={`/nfe-central/${nfe.id}/danfe`}>DANFE</a> · <a href={`/nfe-central/${nfe.id}/xml`}>XML</a>
+            <a href={`/nfe-central/${nfe.id}/danfe`}>DANFE</a> · <a href={`/nfe-central/${nfe.id}/xml`}>XML</a> ·{" "}
+            <a href={`/nfe-correcao/central/${nfe.id}?voltar=${encodeURIComponent(`/notas/${invoiceId}?aba=devolucoes`)}`}>Carta de correção</a>
           </span>
         </>
       )}
@@ -129,7 +130,8 @@ function ReturnNfeCell({
             {nfe.cancel_reason && <small className={styles.hint}> · {nfe.cancel_reason}</small>}
           </span>
           <span>
-            <a href={`/nfe-central/${nfe.id}/xml`}>XML</a> · <a href={`/nfe-central/${nfe.id}/cancelamento`}>XML do cancelamento</a>
+            <a href={`/nfe-central/${nfe.id}/xml`}>XML</a> · <a href={`/nfe-central/${nfe.id}/cancelamento`}>XML do cancelamento</a> ·{" "}
+            <a href={`/nfe-correcao/central/${nfe.id}?voltar=${encodeURIComponent(`/notas/${invoiceId}?aba=devolucoes`)}`}>Cartas de correção</a>
           </span>
         </>
       )}

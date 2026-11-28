@@ -304,7 +304,8 @@
       "login_image_id_uuid_v7_check",
       "catalog_sync_run_id_uuid_v7_check",
       "branch_catalog_key_id_uuid_v7_check",
-      "catalog_tax_fetch_id_uuid_v7_check"
+      "catalog_tax_fetch_id_uuid_v7_check",
+      "nfe_correction_id_uuid_v7_check"
     ]
   },
   "FA107": {
@@ -4102,5 +4103,48 @@
     "severity": "warning",
     "retryable": false,
     "dbConstraints": []
+  },
+  "FA789": {
+    "message": "Esta NF-e já tem 20 cartas de correção, o limite da Sefaz.",
+    "action": "Não é possível enviar outra carta para esta nota. Fale com o contador sobre como acertar o que falta.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
+  },
+  "FA790": {
+    "message": "O texto da correção precisa ter de 15 a 1000 caracteres, numa linha só e sem símbolos especiais.",
+    "action": "Escreva a correção em uma linha, sem emojis nem aspas curvas, e confira o tamanho.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "nfe_correction_text_check"
+    ]
+  },
+  "FA791": {
+    "message": "Outra carta de correção foi registrada nesta NF-e ao mesmo tempo.",
+    "action": "Atualize a página e confira a última carta. Se faltar alguma correção, envie uma carta nova com todas elas.",
+    "httpStatus": 409,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "nfe_correction_sale_sequence_key",
+      "nfe_correction_central_sequence_key"
+    ]
+  },
+  "FA792": {
+    "message": "A Sefaz não aceitou a carta de correção.",
+    "action": "Confira o motivo informado pela Sefaz e corrija o texto, se for o caso.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": [
+      "nfe_correction_sequence_check",
+      "nfe_correction_protocol_check",
+      "nfe_correction_status_code_check",
+      "nfe_correction_xml_check",
+      "nfe_correction_note_check"
+    ]
   }
 }
