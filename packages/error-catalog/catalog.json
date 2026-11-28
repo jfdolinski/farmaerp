@@ -2224,7 +2224,8 @@
       "pdv_cart_discard_items_count_check",
       "pdv_cart_discard_total_check",
       "pdv_cart_discard_alert_check",
-      "pdv_cart_discard_self_check"
+      "pdv_cart_discard_self_check",
+      "sale_item_pbm_discount_check"
     ]
   },
   "FA963": {
@@ -4233,5 +4234,13 @@
     "dbConstraints": [
       "pbm_program_name_key"
     ]
+  },
+  "FA800": {
+    "message": "Este item está com o preço do PBM e não aceita outro desconto.",
+    "action": "Tire o PBM da venda se quiser dar outro desconto no item.",
+    "httpStatus": 422,
+    "severity": "warning",
+    "retryable": false,
+    "dbConstraints": []
   }
 }

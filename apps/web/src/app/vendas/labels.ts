@@ -47,6 +47,7 @@ export const ALERT_LABELS: Record<string, string> = {
   credit_release: "Crediário acima do limite do operador, sem liberação válida",
   cashback_use: "Cashback usado sem reserva válida ou acima do máximo",
   agreement_limit: "Convênio acima do limite do cliente",
+  pbm: "Desconto do PBM que não confere com a autorização do programa",
 };
 
 export const brl = (value: number | string | null) =>
@@ -89,6 +90,21 @@ export function alertText(kind: string, detail: Record<string, unknown>): string
     }
     case "return_permission":
       return `${label}: ${detail.return_code}${detail.late ? ", fora do prazo da loja e sem a liberação de outra pessoa" : ", sem a permissão nem a liberação de quem tem"}.`;
+    case "pbm": {
+      const problems: Record<string, string> = {
+        not_found: "a autorização não existe",
+        other_terminal: "a autorização é de outro caixa",
+        status_authorized: "a autorização não foi confirmada",
+        status_undone: "a autorização foi desfeita",
+        status_expired: "a autorização expirou",
+        other_sale: "a autorização foi confirmada com outra venda",
+        product: "o produto não está na autorização",
+        quantity: "a quantidade é diferente da autorizada",
+        price: "o preço é diferente do autorizado",
+        discount: "o desconto é diferente do programa",
+      };
+      return `${label}: ${problems[detail.problem as string] ?? detail.problem} (${brl(detail.discount as number)}).`;
+    }
     case "auto_discount":
       return `${label}: o PDV deu ${brl(detail.pdv_discount as number)}, as regras davam ${brl(detail.expected_discount as number)}.`;
     case "return_credit": {

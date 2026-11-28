@@ -25,6 +25,42 @@ enum PaymentMethod {
   final String label;
 }
 
+/// PBM no item: a quantidade e o preço que o programa autorizou, e o preço por unidade que o cliente
+/// paga. O desconto do programa vale sozinho no item (sem os automáticos nem o manual).
+class PbmLine {
+  const PbmLine({required this.quantityMilli, required this.listPriceCents, required this.pbmPriceCents});
+
+  final int quantityMilli;
+  final int listPriceCents;
+  final int pbmPriceCents;
+
+  /// Desconto do programa no item, na mesma conta da central: quantidade × (preço − preço do programa).
+  int get discountCents => ((listPriceCents - pbmPriceCents) * quantityMilli / 1000).round();
+}
+
+/// CPF ou cartão do beneficiário mascarado: só os 3 últimos à mostra.
+String maskPbmDocument(String document) =>
+    document.length <= 3 ? document : '${'*' * (document.length - 3)}${document.substring(document.length - 3)}';
+
+/// PBM da venda: a autorização do programa (uma por venda) e o beneficiário mascarado.
+class PbmSale {
+  PbmSale({
+    required this.authorizationId,
+    required this.programName,
+    required this.beneficiaryMasked,
+    this.externalId,
+  });
+
+  final String authorizationId;
+  final String programName;
+  final String beneficiaryMasked;
+  final String? externalId;
+
+  /// Venda com que o programa já confirmou: a mesma venda usa o mesmo id se a gravação precisar
+  /// de outra tentativa (a NF-e recusada, por exemplo).
+  String? confirmedSaleId;
+}
+
 class CartLine {
   CartLine({required this.product, required this.quantityMilli, required this.unitPriceCents});
 
@@ -41,8 +77,13 @@ class CartLine {
   int autoDiscountCents = 0;
   List<AppliedDiscount> autoApplied = const [];
 
-  /// Desconto do item: automáticos mais o manual, nunca acima do item.
+  /// PBM do item: o preço do programa substitui os outros descontos.
+  PbmLine? pbm;
+
+  /// Desconto do item: o do PBM, ou os automáticos mais o manual; nunca acima do item.
   int get discountCents {
+    final program = pbm;
+    if (program != null) return program.discountCents > grossCents ? grossCents : program.discountCents;
     final sum = autoDiscountCents + manualDiscountCents;
     return sum > grossCents ? grossCents : sum;
   }
@@ -82,6 +123,7 @@ class CartLine {
 
   /// Avisos do item, para a tela.
   List<String> get warnings => [
+    if (pbm != null) 'PBM: ${formatCents(pbm!.pbmPriceCents)} por unidade (economia de ${formatCents(pbm!.discountCents)})',
     for (final applied in autoApplied) '${applied.name}: -${formatCents(applied.amountCents)}',
     if (product.status == 'on_order') 'Produto por encomenda',
     if (product.status == 'blocked') 'Produto bloqueado para compra: vende só o que há em estoque',
@@ -196,6 +238,12 @@ class Cart {
   /// Documento fiscal da venda: 65 NFC-e (cupom) ou 55 NF-e (DANFE A4, cliente PJ).
   String fiscalModel = '65';
 
+  /// PBM aplicado na venda (a autorização do programa).
+  PbmSale? pbm;
+
+  /// Economia do PBM na venda.
+  int get pbmBenefitCents => lines.fold(0, (sum, line) => sum + (line.pbm == null ? 0 : line.discountCents));
+
   /// Quanto deste produto já está na venda.
   int quantityOf(String productId) =>
       lines.where((line) => line.product.id == productId).fold(0, (sum, line) => sum + line.quantityMilli);
@@ -242,7 +290,7 @@ class Cart {
         ? quantityMilli
         : (quantityMilli * product.barcodeFractionMilli! / 1000).round();
     for (final line in lines) {
-      if (merge && controlled == null && line.controlled == null && line.product.id == product.id && line.manualDiscountCents == 0 &&
+      if (merge && controlled == null && line.controlled == null && line.pbm == null && line.product.id == product.id && line.manualDiscountCents == 0 &&
           line.zeroStockRelease == null && !line.needsStockRelease && line.quoteId == null) {
         line.quantityMilli += quantity;
         return line;
@@ -261,6 +309,7 @@ class Cart {
     quoteId = null;
     quoteCode = null;
     fiscalModel = '65';
+    pbm = null;
   }
 }
 
@@ -281,6 +330,7 @@ SaleDraft buildSale({
   required int number,
   required int terminalNumber,
   required DateTime now,
+  String? saleId,
 }) {
   if (cart.isEmpty) throw const PosException('FA975');
   // Controlado sem receita nem liberação não sai do caixa.
@@ -304,8 +354,12 @@ SaleDraft buildSale({
       'quantity': quantity(line.quantityMilli),
       'unit_price': money(line.unitPriceCents),
       'discount': money(line.discountCents),
-      'auto_discount': money(line.autoDiscountCents),
-      'discount_rules': line.autoApplied.isEmpty
+      // No item do PBM, os automáticos não valem (o desconto é do programa).
+      'auto_discount': money(line.pbm == null ? line.autoDiscountCents : 0),
+      'pbm': line.pbm == null || cart.pbm == null
+          ? null
+          : {'authorization_id': cart.pbm!.authorizationId, 'discount': money(line.discountCents)},
+      'discount_rules': line.pbm != null || line.autoApplied.isEmpty
           ? null
           : [for (final applied in line.autoApplied) {'rule_id': applied.ruleId, 'amount': money(applied.amountCents)}],
       'total': money(line.totalCents),
@@ -367,7 +421,7 @@ SaleDraft buildSale({
     code: '$terminalNumber-${number.toString().padLeft(6, '0')}',
     itemRows: rows,
     payload: {
-      'id': uuid.v7(),
+      'id': saleId ?? uuid.v7(),
       'number': number,
       'cash_session_id': session.id,
       'operator_id': operator.id,

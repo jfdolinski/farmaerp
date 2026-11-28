@@ -419,3 +419,159 @@ describe('retaguarda', () => {
     await expect(ownerPool.query('UPDATE sale_payment SET amount = 1 WHERE sale_id = $1', [payload.id])).rejects.toSatisfy(hasCode('FA104'));
   });
 });
+
+describe('venda com PBM', () => {
+  /** Transação do terminal, confirmada (como a API faz nas chamadas do caixa). */
+  async function asTerminal(terminal, fn) {
+    const client = await appPool.connect();
+    try {
+      await client.query('BEGIN');
+      await setTerminal(client, terminal.id);
+      const result = await fn(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+  let program;
+  beforeAll(async () => {
+    program = await committed(a.admin, async (client) => {
+      const id = (await client.query('SELECT app.save_pbm_program($1::jsonb) AS id', [JSON.stringify({ name: `PBM venda ${tag()}` })])).rows[0].id;
+      await client.query('SELECT app.set_pbm_program_branch($1, $2, true)', [id, a.branch1.id]);
+      return id;
+    });
+  });
+  /** Autorização do programa para o produto (preço 100, programa 60), confirmada com a venda se pedido. */
+  const authorize = (product, quantity, { saleId = null, terminal = a.terminal1 } = {}) => asTerminal(terminal, async (client) => {
+    const { rows: [{ r }] } = await client.query('SELECT app.terminal_pbm_register($1, $2::jsonb) AS r', [program, JSON.stringify({
+      beneficiary: '52998224725', external_id: `V${tag()}`,
+      items: [{ product_id: product.id, quantity, list_price: 100, pbm_price: 60 }],
+    })]);
+    if (saleId) await client.query('SELECT app.terminal_pbm_confirm($1, $2)', [r.id, saleId]);
+    return r.id;
+  });
+  /** Venda com o item do PBM: o desconto do programa no item, fora dos automáticos. */
+  const pbmSale = (product, quantity, authorizationId, discount = money(quantity * 40)) => {
+    const payload = sale([{ product, quantity, price: 100, discount }]);
+    payload.items[0].pbm = { authorization_id: authorizationId, discount };
+    return payload;
+  };
+  const itemOf = async (saleId) => (await ownerPool.query('SELECT pbm_authorization_id, pbm_discount FROM sale_item WHERE sale_id = $1', [saleId])).rows[0];
+
+  it('o desconto do programa não é desconto manual: sem alerta de limite, e o item fica com a autorização', async () => {
+    const product = await newProduct({}, 100);
+    await adjust(product, 10);
+    const payload = sale([{ product, quantity: 2, price: 100 }]);
+    const id = await authorize(product, 2, { saleId: payload.id });
+    const withPbm = pbmSale(product, 2, id);
+    withPbm.id = payload.id;
+    withPbm.number = payload.number;
+    expect((await push(a.terminal1, [['sale', withPbm]]))[0]).toMatchObject({ status: 'applied', code: null });
+    expect(await alertsOf(withPbm.id)).toEqual([]);
+    expect(await itemOf(withPbm.id)).toEqual({ pbm_authorization_id: id, pbm_discount: '80.00' });
+    // A conferência deixa de avisar que a venda não chegou.
+    const report = await readAs(a.admin, async (client) => (await client.query('SELECT app.pbm_authorizations(NULL, NULL, NULL) AS x')).rows[0].x);
+    expect(report.find((row) => row.id === id)).toMatchObject({ missing_sale: false, sale_number: withPbm.number });
+    // Desconto manual por cima do PBM continua conferido pelo limite.
+    const extra = pbmSale(product, 1, await authorize(product, 1));
+    extra.items[0].discount = 45;
+    extra.items[0].total = 55;
+    Object.assign(extra, { discount_total: 45, total: 55, payments: [{ id: uuidV7(), method: 'cash', amount: 55 }] });
+    await push(a.terminal1, [['sale', extra]]);
+    expect((await alertsOf(extra.id)).map((alert) => alert.kind).sort()).toEqual(['discount_above_limit', 'pbm']);
+  });
+
+  it('o que não confere com a autorização vira alerta, e a venda vale', async () => {
+    const product = await newProduct({}, 100);
+    await adjust(product, 20);
+    const check = async (payload, problem) => {
+      expect((await push(a.terminal1, [['sale', payload]]))[0]).toMatchObject({ status: 'applied' });
+      const alerts = (await alertsOf(payload.id)).filter((alert) => alert.kind === 'pbm');
+      expect(alerts.map((alert) => alert.detail.problem), problem).toEqual([problem]);
+    };
+    // Não confirmada.
+    await check(pbmSale(product, 1, await authorize(product, 1)), 'status_authorized');
+    // Confirmada com outra venda.
+    await check(pbmSale(product, 1, await authorize(product, 1, { saleId: uuidV7() })), 'other_sale');
+    // Quantidade diferente da autorizada.
+    {
+      const payload = sale([{ product, quantity: 2, price: 100 }]);
+      const id = await authorize(product, 1, { saleId: payload.id });
+      await check(Object.assign(pbmSale(product, 2, id), { id: payload.id, number: payload.number }), 'quantity');
+    }
+    // Desconto diferente do programa.
+    {
+      const payload = sale([{ product, quantity: 1, price: 100 }]);
+      const id = await authorize(product, 1, { saleId: payload.id });
+      await check(Object.assign(pbmSale(product, 1, id, 50), { id: payload.id, number: payload.number }), 'discount');
+    }
+    // Outro produto.
+    {
+      const other = await newProduct({}, 100);
+      await adjust(other, 5);
+      const payload = sale([{ product: other, quantity: 1, price: 100 }]);
+      const id = await authorize(product, 1, { saleId: payload.id });
+      await check(Object.assign(pbmSale(other, 1, id), { id: payload.id, number: payload.number }), 'product');
+    }
+    // Autorização de outro terminal.
+    {
+      const payload = sale([{ product, quantity: 1, price: 100 }]);
+      await committed(a.admin, (client) => client.query('SELECT app.set_pbm_program_branch($1, $2, true)', [program, a.branch2.id]));
+      const id = await authorize(product, 1, { saleId: payload.id, terminal: a.terminal2 });
+      await check(Object.assign(pbmSale(product, 1, id), { id: payload.id, number: payload.number }), 'other_terminal');
+    }
+    // Autorização de outro grupo: não vincula, como se não existisse.
+    {
+      const foreignProduct = (await ownerPool.query('SELECT id FROM product WHERE economic_group_id = $1 LIMIT 1', [b.group.id])).rows[0];
+      const foreign = await (async () => {
+        const client = await appPool.connect();
+        try {
+          await client.query('BEGIN');
+          await setUser(client, b.admin.id);
+          let productId = foreignProduct?.id;
+          if (!productId) {
+            productId = (await client.query('SELECT app.create_product($1::jsonb) AS id', [JSON.stringify({ displayName: `Produto B ${tag()}`, barcode: gtin() })])).rows[0].id;
+          }
+          const id = (await client.query('SELECT app.save_pbm_program($1::jsonb) AS id', [JSON.stringify({ name: `PBM B ${tag()}` })])).rows[0].id;
+          await client.query('SELECT app.set_pbm_program_branch($1, $2, true)', [id, b.branch1.id]);
+          await client.query("SELECT set_config('app.user_id', '', true)");
+          await setTerminal(client, b.terminal1.id);
+          const { rows: [{ r }] } = await client.query('SELECT app.terminal_pbm_register($1, $2::jsonb) AS r', [id, JSON.stringify({
+            beneficiary: '52998224725', external_id: `B${tag()}`, items: [{ product_id: productId, quantity: 1, list_price: 100, pbm_price: 60 }],
+          })]);
+          await client.query('COMMIT');
+          return r.id;
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        } finally {
+          client.release();
+        }
+      })();
+      const payload = pbmSale(product, 1, foreign);
+      await check(payload, 'not_found');
+      expect(await itemOf(payload.id)).toEqual({ pbm_authorization_id: null, pbm_discount: '40.00' });
+    }
+    // Autorização que não existe: o item fica sem o vínculo.
+    const unknown = pbmSale(product, 1, uuidV7());
+    await check(unknown, 'not_found');
+    expect(await itemOf(unknown.id)).toEqual({ pbm_authorization_id: null, pbm_discount: '40.00' });
+  });
+
+  it('PBM fora do formato ou maior que o desconto do item é recusado', async () => {
+    const product = await newProduct({}, 100);
+    const base = () => pbmSale(product, 1, uuidV7());
+    const cases = [
+      ['sem autorização', (s) => ({ ...s, items: [{ ...s.items[0], pbm: { discount: 40 } }] })],
+      ['desconto com três casas', (s) => ({ ...s, items: [{ ...s.items[0], pbm: { ...s.items[0].pbm, discount: 39.999 } }] })],
+      ['maior que o desconto do item', (s) => ({ ...s, items: [{ ...s.items[0], pbm: { ...s.items[0].pbm, discount: 41 } }] })],
+      ['não é objeto', (s) => ({ ...s, items: [{ ...s.items[0], pbm: 'x' }] })],
+    ];
+    const results = await push(a.terminal1, cases.map(([, change]) => ['sale', change(base())]));
+    expect(results.map((r, index) => [cases[index][0], r.status, r.code])).toEqual(cases.map(([label]) => [label, 'conflict', 'FA962']));
+  });
+});

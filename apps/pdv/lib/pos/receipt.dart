@@ -63,6 +63,7 @@ List<ReceiptLine> buildReceipt({
   int cashbackEarnedCents = 0,
   int cashbackWaitingDays = 0,
   LocalNfce? nfce,
+  ({String programName, String beneficiary, String? externalId, int benefitCents})? pbm,
 }) {
   final branch = (fiscal?['branch'] as Map?) ?? const {};
   final company = (fiscal?['company'] as Map?) ?? const {};
@@ -142,6 +143,14 @@ List<ReceiptLine> buildReceipt({
     ],
     if (cart.changeCents > 0) ReceiptLine(_twoColumns('Troco', formatCents(cart.changeCents))),
     const ReceiptLine(''),
+    // Comprovante do PBM: o programa, a autorização e a economia.
+    if (pbm != null) ...[
+      ReceiptLine('PBM ${pbm.programName}', bold: true),
+      ReceiptLine(_twoColumns('Economia do programa', formatCents(pbm.benefitCents))),
+      if (pbm.externalId != null) ReceiptLine('  Autorização ${pbm.externalId}'),
+      ReceiptLine('  Beneficiário ${pbm.beneficiary}'),
+      const ReceiptLine(''),
+    ],
     if (cashbackEarnedCents > 0) ...[
       ReceiptLine(_twoColumns('Cashback ganho', formatCents(cashbackEarnedCents)), bold: true),
       if (cashbackWaitingDays > 0) ReceiptLine('  Pode ser usado daqui a $cashbackWaitingDays dias.'),

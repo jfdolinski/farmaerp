@@ -84,6 +84,10 @@ class PosController extends ChangeNotifier {
     this.cashbackBalance,
     this.cashbackReserve,
     this.cashbackRelease,
+    this.pbmPrograms,
+    this.pbmAuthorize,
+    this.pbmConfirm,
+    this.pbmUndo,
     this.cancelNfce,
     this.danfePrinter,
     this.syncNow,
@@ -115,6 +119,13 @@ class PosController extends ChangeNotifier {
   final Future<Map<String, dynamic>> Function(String customerId)? cashbackBalance;
   final Future<Map<String, dynamic>> Function(String customerId, double amount, double saleTotal)? cashbackReserve;
   final Future<void> Function(String reservationId)? cashbackRelease;
+
+  /// PBM pela central (só com internet): programas da loja, autorização, confirmação e desfazer.
+  final Future<List<Map<String, dynamic>>> Function()? pbmPrograms;
+  final Future<Map<String, dynamic>> Function(String programId, String beneficiary, List<Map<String, Object?>> items)? pbmAuthorize;
+  final Future<void> Function(String authorizationId, String saleId)? pbmConfirm;
+  final Future<void> Function(String authorizationId, String reason)? pbmUndo;
+
   /// Pede à central o cancelamento da NFC-e (id da nota, motivo, supervisor). Com internet.
   final Future<Map<String, dynamic>> Function(String documentId, String reason, String supervisorId)? cancelNfce;
 
@@ -384,6 +395,7 @@ class PosController extends ChangeNotifier {
     _payAfterControlled = false;
     pendingZeroStock = null;
     _releaseCashback(cart.payments.where((payment) => payment.method == PaymentMethod.cashback));
+    _undoPbm('Operador saiu do caixa');
     saleCashback = null;
     cart.clear();
     paying = false;
@@ -595,8 +607,8 @@ class PosController extends ChangeNotifier {
     final result = calculateDiscounts(database.discountRules, _discountLines, _discountContext());
     for (var index = 0; index < cart.lines.length; index += 1) {
       final line = cart.lines[index];
-      line.autoDiscountCents = result[index].totalCents;
-      line.autoApplied = result[index].applied;
+      line.autoDiscountCents = line.pbm == null ? result[index].totalCents : 0;
+      line.autoApplied = line.pbm == null ? result[index].applied : const [];
     }
   }
 
@@ -638,6 +650,7 @@ class PosController extends ChangeNotifier {
       final rate = line.discountRate;
       if (rate != null) line.manualDiscountCents = math.min(line.grossCents, (line.grossCents * rate).round());
     }
+    _checkPbm();
     applyAutoDiscounts();
     if (cart.totalCents != before && cart.payments.isNotEmpty) {
       _clearPayments();
@@ -1230,6 +1243,147 @@ class PosController extends ChangeNotifier {
     }
   }
 
+  // ---- PBM ----
+
+  /// Programas de benefício ligados na loja. Sem internet: FA797 (a venda segue pelo preço normal).
+  Future<List<Map<String, dynamic>>?> loadPbmPrograms() async {
+    final lookup = pbmPrograms;
+    if (lookup == null) {
+      _fail('FA797');
+      return null;
+    }
+    try {
+      return await lookup();
+    } on ApiException catch (error) {
+      _fail(_offline(error.code) ? 'FA797' : error.code);
+      return null;
+    }
+  }
+
+  static bool _offline(String code) => const {'FA001', 'FA008', 'FA009'}.contains(code);
+
+  /// Consulta o programa com os itens da venda e aplica o preço dele nos itens aceitos. Um PBM por
+  /// venda: aplicar de novo desfaz o anterior. O desconto do programa substitui os outros no item.
+  Future<bool> applyPbm({required String programId, required String programName, required String beneficiary}) async {
+    final authorize = pbmAuthorize;
+    if (busy || quoteMode) return false;
+    if (authorize == null) {
+      _fail('FA797');
+      return false;
+    }
+    if (cart.isEmpty) {
+      _fail('FA796');
+      return false;
+    }
+    final document = beneficiary.replaceAll(RegExp(r'[^0-9A-Za-z]'), '').toUpperCase();
+    if (document.length < 4 || document.length > 30) {
+      _fail('FA005');
+      return false;
+    }
+    _undoPbm('PBM consultado de novo');
+    // Um item por produto: o primeiro da venda (o programa responde por produto).
+    final byProduct = <String, CartLine>{};
+    for (final line in cart.lines) {
+      byProduct.putIfAbsent(line.product.id, () => line);
+    }
+    busy = true;
+    notice = null;
+    info = null;
+    notifyListeners();
+    try {
+      final result = await authorize(programId, document, [
+        for (final line in byProduct.values)
+          {'productId': line.product.id, 'quantity': line.quantityMilli / 1000, 'unitPrice': line.unitPriceCents / 100},
+      ]);
+      int cents(Object? value) => (((value as num?) ?? 0) * 100).round();
+      for (final item in ((result['items'] as List?) ?? const []).cast<Map<String, dynamic>>()) {
+        final line = byProduct[item['productId']];
+        if (line == null) continue;
+        line.pbm = PbmLine(
+          quantityMilli: (((item['quantity'] as num?) ?? 0) * 1000).round(),
+          listPriceCents: cents(item['listPrice']),
+          pbmPriceCents: cents(item['pbmPrice']),
+        );
+        line.setDiscount(0);
+        line.release = null;
+      }
+      cart.pbm = PbmSale(
+        authorizationId: '${result['id']}',
+        programName: programName,
+        beneficiaryMasked: maskPbmDocument(document),
+        externalId: result['externalId'] as String?,
+      );
+      busy = false;
+      reprice();
+      info = 'PBM $programName aplicado: economia de ${formatCents(cart.pbmBenefitCents)}.';
+      logger?.info('PBM aplicado', fields: {'items': cart.lines.where((line) => line.pbm != null).length});
+      return true;
+    } on ApiException catch (error) {
+      notice = ErrorDisplay.fromCode(_offline(error.code) ? 'FA797' : error.code, traceId: error.traceId);
+      return false;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  /// Tira o PBM da venda (desfaz no programa); os itens voltam ao preço normal.
+  void removePbm() {
+    if (cart.pbm == null) return;
+    _undoPbm('PBM retirado pelo operador');
+    reprice();
+    info = 'PBM retirado: os itens voltaram ao preço normal.';
+    notifyListeners();
+  }
+
+  /// Desfaz a autorização no programa (sem esperar; sem internet, ela expira na central) e tira o
+  /// preço do programa dos itens.
+  void _undoPbm(String reason) {
+    final current = cart.pbm;
+    if (current == null) return;
+    cart.pbm = null;
+    for (final line in cart.lines) {
+      line.pbm = null;
+    }
+    final undo = pbmUndo;
+    if (undo == null || current.confirmedSaleId != null) return;
+    unawaited(undo(current.authorizationId, reason).catchError((Object error) {
+      logger?.warn('Autorização do PBM não desfeita', fields: {'error': '$error'});
+    }));
+  }
+
+  /// O PBM vale para os itens como foram autorizados: item do programa retirado, com outra
+  /// quantidade ou com outro preço desfaz o PBM da venda.
+  void _checkPbm() {
+    if (cart.pbm == null) return;
+    final changed = cart.lines.every((line) => line.pbm == null) ||
+        cart.lines.any((line) =>
+            line.pbm != null && (line.pbm!.quantityMilli != line.quantityMilli || line.pbm!.listPriceCents != line.unitPriceCents));
+    if (!changed) return;
+    _undoPbm('Itens do PBM alterados');
+    info = 'O PBM foi desfeito porque os itens do programa mudaram. Aplique de novo, se for o caso.';
+  }
+
+  /// Confirma o PBM com a venda antes de gravar. Sem internet ou com recusa, a venda continua aberta.
+  Future<bool> _confirmPbm(String saleId) async {
+    final current = cart.pbm;
+    final confirm = pbmConfirm;
+    if (current == null) return true;
+    if (current.confirmedSaleId == saleId) return true;
+    if (confirm == null) {
+      notice = ErrorDisplay.fromCode('FA797');
+      return false;
+    }
+    try {
+      await confirm(current.authorizationId, saleId);
+      current.confirmedSaleId = saleId;
+      return true;
+    } on ApiException catch (error) {
+      notice = ErrorDisplay.fromCode(_offline(error.code) ? 'FA797' : error.code, traceId: error.traceId);
+      return false;
+    }
+  }
+
   // ---- Cashback ----
 
   /// Cashback do cliente da venda, buscado na central (só com internet). Vazio: sem cliente, ainda
@@ -1660,6 +1814,11 @@ class PosController extends ChangeNotifier {
   DiscountNeed applyDiscount(CartLine line, int discountCents) {
     final current = actor;
     if (current == null) return DiscountNeed.none;
+    // O item do PBM fica com o preço do programa: outro desconto só tirando o PBM.
+    if (line.pbm != null) {
+      _fail('FA800');
+      return DiscountNeed.none;
+    }
     try {
       final need = checkDiscount(line: line, discountCents: discountCents, operator: current, now: _clock());
       if (need == DiscountNeed.none) {
@@ -1979,8 +2138,10 @@ class PosController extends ChangeNotifier {
         number: database.nextSaleNumber,
         terminalNumber: terminalNumber() ?? 0,
         now: now,
+        saleId: cart.pbm?.confirmedSaleId,
       );
       final saleId = draft.payload['id']! as String;
+      if (!await _confirmPbm(saleId)) return;
       final LocalNfce? document;
       String? noticeCode;
       if (cart.fiscalModel == '55') {
@@ -2015,6 +2176,8 @@ class PosController extends ChangeNotifier {
         cart: cart,
         terminalNumber: terminalNumber() ?? 0,
         cashbackEarnedCents: cashbackEarnEstimateCents,
+        pbm: cart.pbm == null ? null : (programName: cart.pbm!.programName, beneficiary: cart.pbm!.beneficiaryMasked,
+            externalId: cart.pbm!.externalId, benefitCents: cart.pbmBenefitCents),
         cashbackWaitingDays: saleCashback?.waitingDays ?? 0,
         nfce: document,
       );
@@ -2164,6 +2327,7 @@ class PosController extends ChangeNotifier {
     _payAfterControlled = false;
     pendingZeroStock = null;
     _releaseCashback(cart.payments.where((payment) => payment.method == PaymentMethod.cashback));
+    _undoPbm('Venda cancelada no caixa');
     saleCashback = null;
     cart.clear();
     _applyFixedSeller();

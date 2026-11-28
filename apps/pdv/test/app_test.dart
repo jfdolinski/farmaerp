@@ -225,6 +225,60 @@ class FakeApi implements TerminalApi {
     released.add(reservationId);
   }
 
+  /// PBM: programas da loja, percentual por produto e o que foi pedido; [pbmFailure] simula a falta
+  /// de internet; [pbmConfirmFailure], a falha só na confirmação.
+  List<Map<String, dynamic>> pbmProgramList = const [];
+  final pbmPercent = <String, int>{};
+  Object? pbmFailure;
+  Object? pbmConfirmFailure;
+  final pbmRequests = <Map<String, Object?>>[];
+  final pbmConfirmed = <String, String>{};
+  final pbmUndone = <String>[];
+
+  @override
+  Future<List<Map<String, dynamic>>> pbmPrograms({required String accessToken}) async {
+    if (pbmFailure != null) throw pbmFailure!;
+    return pbmProgramList;
+  }
+
+  @override
+  Future<Map<String, dynamic>> pbmAuthorize({
+    required String accessToken,
+    required String programId,
+    required String beneficiary,
+    required List<Map<String, Object?>> items,
+  }) async {
+    if (pbmFailure != null) throw pbmFailure!;
+    pbmRequests.add({'programId': programId, 'beneficiary': beneficiary, 'items': items});
+    if (beneficiary.endsWith('0')) throw const ApiException('FA794');
+    final accepted = [
+      for (final item in items)
+        if (pbmPercent.containsKey(item['productId']))
+          {
+            'productId': item['productId'],
+            'quantity': item['quantity'],
+            'listPrice': item['unitPrice'],
+            'pbmPrice': (((item['unitPrice']! as num) * (100 - pbmPercent[item['productId']]!)).round()) / 100,
+          },
+    ];
+    if (accepted.isEmpty) throw const ApiException('FA796');
+    final id = '019a0000-0000-7000-8000-0000000${(800 + pbmRequests.length).toString().padLeft(5, '0')}';
+    return {'id': id, 'externalId': 'TESTE-${pbmRequests.length}', 'items': accepted};
+  }
+
+  @override
+  Future<void> pbmConfirm({required String accessToken, required String authorizationId, required String saleId}) async {
+    if (pbmFailure != null) throw pbmFailure!;
+    if (pbmConfirmFailure != null) throw pbmConfirmFailure!;
+    pbmConfirmed[authorizationId] = saleId;
+  }
+
+  @override
+  Future<void> pbmUndo({required String accessToken, required String authorizationId, required String reason}) async {
+    if (pbmFailure != null) throw pbmFailure!;
+    pbmUndone.add(authorizationId);
+  }
+
   /// Orçamentos da loja: lista e busca; [quoteResponse] por chave, ou exceção.
   List<Map<String, dynamic>> openQuoteList = const [];
   final quoteResponse = <String, Object>{};

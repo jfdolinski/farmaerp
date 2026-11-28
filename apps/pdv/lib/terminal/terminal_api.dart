@@ -133,6 +133,23 @@ abstract class TerminalApi {
   /// Orçamentos abertos e válidos da loja (com internet).
   Future<List<Map<String, dynamic>>> openQuotes({required String accessToken});
 
+  /// PBM: programas de benefício ligados na loja (com internet).
+  Future<List<Map<String, dynamic>>> pbmPrograms({required String accessToken});
+
+  /// PBM: consulta o programa e registra a autorização dos itens aceitos (com o preço de cada um).
+  Future<Map<String, dynamic>> pbmAuthorize({
+    required String accessToken,
+    required String programId,
+    required String beneficiary,
+    required List<Map<String, Object?>> items,
+  });
+
+  /// PBM: confirma a autorização com a venda (depois do pagamento).
+  Future<void> pbmConfirm({required String accessToken, required String authorizationId, required String saleId});
+
+  /// PBM: desfaz a autorização da venda que não aconteceu.
+  Future<void> pbmUndo({required String accessToken, required String authorizationId, required String reason});
+
   /// Orçamento pela plaquinha ou pelo código do cupom (com internet).
   Future<Map<String, dynamic>> quote({required String accessToken, required String key});
 
@@ -423,6 +440,39 @@ class HttpTerminalApi implements TerminalApi {
   @override
   Future<void> cashbackRelease({required String accessToken, required String reservationId}) async {
     await _request('/terminals/cashback/release', accessToken: accessToken, body: {'reservationId': reservationId});
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> pbmPrograms({required String accessToken}) async {
+    final json = await _request('/terminals/pbm/programs', accessToken: accessToken);
+    if (json is! List) throw const ApiException('FA000');
+    return json.cast<Map<String, dynamic>>();
+  }
+
+  @override
+  Future<Map<String, dynamic>> pbmAuthorize({
+    required String accessToken,
+    required String programId,
+    required String beneficiary,
+    required List<Map<String, Object?>> items,
+  }) async {
+    final json = await _request(
+      '/terminals/pbm/authorize',
+      accessToken: accessToken,
+      body: {'programId': programId, 'beneficiary': beneficiary, 'items': items},
+    );
+    if (json is! Map<String, dynamic>) throw const ApiException('FA000');
+    return json;
+  }
+
+  @override
+  Future<void> pbmConfirm({required String accessToken, required String authorizationId, required String saleId}) async {
+    await _request('/terminals/pbm/${Uri.encodeComponent(authorizationId)}/confirm', accessToken: accessToken, body: {'saleId': saleId});
+  }
+
+  @override
+  Future<void> pbmUndo({required String accessToken, required String authorizationId, required String reason}) async {
+    await _request('/terminals/pbm/${Uri.encodeComponent(authorizationId)}/undo', accessToken: accessToken, body: {'reason': reason});
   }
 
   @override

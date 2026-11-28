@@ -232,6 +232,17 @@ Future<void> main() async {
     ),
     cashbackRelease: (reservationId) async => api.cashbackRelease(accessToken: await controller.accessToken(), reservationId: reservationId),
     findQuote: (key) async => api.quote(accessToken: await controller.accessToken(), key: key),
+    pbmPrograms: () async => api.pbmPrograms(accessToken: await controller.accessToken()),
+    pbmAuthorize: (programId, beneficiary, items) async => api.pbmAuthorize(
+      accessToken: await controller.accessToken(),
+      programId: programId,
+      beneficiary: beneficiary,
+      items: items,
+    ),
+    pbmConfirm: (authorizationId, saleId) async =>
+        api.pbmConfirm(accessToken: await controller.accessToken(), authorizationId: authorizationId, saleId: saleId),
+    pbmUndo: (authorizationId, reason) async =>
+        api.pbmUndo(accessToken: await controller.accessToken(), authorizationId: authorizationId, reason: reason),
     logger: logger,
   );
   posRef = pos;
